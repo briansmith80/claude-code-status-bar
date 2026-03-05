@@ -20,7 +20,13 @@ The status bar appears automatically.
 
 ### Manual install
 
-1. Download `statusline-command.sh` to `~/.claude/`
+1. Download `statusline-command.sh` and `VERSION` to `~/.claude/`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/statusline-command.sh -o ~/.claude/statusline-command.sh
+curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/VERSION -o ~/.claude/.statusline-version
+```
+
 2. Make it executable: `chmod +x ~/.claude/statusline-command.sh`
 3. Add to `~/.claude/settings.json`:
 
@@ -73,7 +79,7 @@ bash ~/.claude/statusline-command.sh --check-update
 # Latest:  1.1.0
 #
 # Update available! Run:
-#   curl -fsSL https://raw.githubusercontent.com/.../install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
 ```
 
 ## CLI Flags
