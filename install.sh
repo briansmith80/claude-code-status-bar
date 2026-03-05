@@ -82,40 +82,40 @@ EOF
     return
   fi
 
-  # Merge using Python (available on macOS, Linux, and Windows with Git Bash)
-  if command -v python3 > /dev/null 2>&1; then
-    python3 - "$file" "$cmd" <<'PYEOF'
+  # Merge into existing settings.json — try node first (Claude Code requires it),
+  # then python3/python, then fall back to manual instructions.
+  if command -v node > /dev/null 2>&1; then
+    node -e "
+      const fs = require('fs');
+      const data = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+      data.statusLine = { type: 'command', command: process.argv[2] };
+      fs.writeFileSync(process.argv[1], JSON.stringify(data, null, 2) + '\n');
+    " "$file" "$cmd"
+    echo "  Updated settings: ${file}"
+  elif command -v python3 > /dev/null 2>&1; then
+    python3 -c "
 import json, sys
 path, cmd = sys.argv[1], sys.argv[2]
-with open(path) as f:
-    data = json.load(f)
+with open(path) as f: data = json.load(f)
 data['statusLine'] = {'type': 'command', 'command': cmd}
-with open(path, 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-PYEOF
+with open(path, 'w') as f: json.dump(data, f, indent=2); f.write('\n')
+" "$file" "$cmd"
     echo "  Updated settings: ${file}"
   elif command -v python > /dev/null 2>&1; then
-    python - "$file" "$cmd" <<'PYEOF'
+    python -c "
 import json, sys
 path, cmd = sys.argv[1], sys.argv[2]
-with open(path) as f:
-    data = json.load(f)
+with open(path) as f: data = json.load(f)
 data['statusLine'] = {'type': 'command', 'command': cmd}
-with open(path, 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-PYEOF
+with open(path, 'w') as f: json.dump(data, f, indent=2); f.write('\n')
+" "$file" "$cmd"
     echo "  Updated settings: ${file}"
   else
     echo ""
-    echo "  Python not found — add this to ${file} manually:"
-    echo '  {'
-    echo '    "statusLine": {'
-    echo '      "type": "command",'
-    echo "      \"command\": \"${cmd}\""
-    echo '    }'
-    echo '  }'
+    echo "  Could not update settings automatically."
+    echo "  Add this to ${file} manually:"
+    echo ""
+    echo "    \"statusLine\": { \"type\": \"command\", \"command\": \"${cmd}\" }"
   fi
 }
 
