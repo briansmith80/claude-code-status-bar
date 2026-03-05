@@ -131,6 +131,8 @@ show_cost_rate=true
 auto_hide=true
 use_icons=true
 context_warn_threshold=80
+enable_truncation=false
+max_width=""
 colour_theme="default"
 
 # Load user overrides (if any)
@@ -243,6 +245,17 @@ sanitize() {
   echo "$val"
 }
 
+# Strip ANSI escapes for width measurement (used by truncation)
+strip_ansi() {
+  printf '%b' "$1" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g'
+}
+
+visible_width() {
+  local stripped
+  stripped=$(strip_ansi "$1")
+  echo ${#stripped}
+}
+
 # ── Extract Fields ────────────────────────────────────────────
 
 # Working directory: prefer workspace.current_dir, fall back to top-level cwd
@@ -347,31 +360,39 @@ build_progress_bar() {
 }
 
 # ── Build Output Segments ─────────────────────────────────────
-# Each segment is conditionally built based on config toggles.
-# Segments that are disabled produce empty strings and are skipped.
+# Each segment is built into parallel arrays for optional truncation.
+# seg_vals[N] = segment content, seg_pris[N] = priority (1=highest).
+# Directory+Branch are combined into one segment (priority 1).
 
-output=""
+seg_idx=0
 
-# Directory
+# Helper: add a segment with given priority
+add_seg() {
+  seg_vals[$seg_idx]="$1"
+  seg_pris[$seg_idx]="$2"
+  seg_idx=$((seg_idx + 1))
+}
+
+# Directory + Branch (combined, priority 1)
+dir_branch=""
 if [ "$show_directory" = "true" ]; then
-  output+="${CLR_DIR}${short_cwd}${CLR_RESET}"
+  dir_branch+="${CLR_DIR}${short_cwd}${CLR_RESET}"
 fi
-
-# Branch
 if [ "$show_branch" = "true" ] && [ -n "$branch" ]; then
   branch_icon=""
   [ "$use_icons" = "true" ] && branch_icon="⌥ "
-  output+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
+  dir_branch+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
 fi
+[ -n "$dir_branch" ] && add_seg "$dir_branch" 1
 
-# Model
+# Model (priority 3)
 if [ "$show_model" = "true" ]; then
   model_icon=""
   [ "$use_icons" = "true" ] && model_icon="⚙ "
-  output+="  ${CLR_MODEL}${model_icon}${model:-?}${CLR_RESET}"
+  add_seg "${CLR_MODEL}${model_icon}${model:-?}${CLR_RESET}" 3
 fi
 
-# Context bar
+# Context bar (priority 2)
 if [ "$show_context_bar" = "true" ]; then
   pct="${used:-0}"
   pct_int="${pct%%.*}"
@@ -380,30 +401,30 @@ if [ "$show_context_bar" = "true" ]; then
   if [ "$pct_int" -ge "${context_warn_threshold:-80}" ] 2>/dev/null; then
     [ "$use_icons" = "true" ] && warn_prefix="⚠ "
   fi
-  output+="  ${warn_prefix}${progress_bar} ${pct_int}%"
+  add_seg "${warn_prefix}${progress_bar} ${pct_int}%" 2
 fi
 
-# Lines changed — green for additions, red for removals
+# Lines changed (priority 5)
 if [ "$show_lines_changed" = "true" ]; then
   added="${lines_added:-0}"
   removed="${lines_removed:-0}"
   added_int="${added%%.*}"
   removed_int="${removed%%.*}"
   if [ "$auto_hide" != "true" ] || [ "$added_int" -gt 0 ] || [ "$removed_int" -gt 0 ]; then
-    output+="  ${CLR_ADD}+${added_int}${CLR_RESET} ${CLR_DEL}-${removed_int}${CLR_RESET}"
+    add_seg "${CLR_ADD}+${added_int}${CLR_RESET} ${CLR_DEL}-${removed_int}${CLR_RESET}" 5
   fi
 fi
 
-# Dirty file count — yellow reminder to commit
+# Dirty file count (priority 5)
 if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
   if [ "$auto_hide" != "true" ] || [ "$dirty_count" -gt 0 ] 2>/dev/null; then
     dirty_icon=""
     [ "$use_icons" = "true" ] && dirty_icon="● "
-    output+="  ${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}"
+    add_seg "${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}" 5
   fi
 fi
 
-# Ahead/behind remote — arrows showing unpushed/unpulled commits
+# Ahead/behind remote (priority 6)
 if [ "$show_ahead_behind" = "true" ]; then
   ab_behind="${behind_count:-0}"
   ab_ahead="${ahead_count:-0}"
@@ -411,23 +432,21 @@ if [ "$show_ahead_behind" = "true" ]; then
     ab_text=""
     [ "$ab_behind" -gt 0 ] 2>/dev/null && ab_text+="↓${ab_behind}"
     [ "$ab_ahead" -gt 0 ] 2>/dev/null && { [ -n "$ab_text" ] && ab_text+=" "; ab_text+="↑${ab_ahead}"; }
-    if [ -n "$ab_text" ]; then
-      output+="  ${CLR_INFO}${ab_text}${CLR_RESET}"
-    fi
+    [ -n "$ab_text" ] && add_seg "${CLR_INFO}${ab_text}${CLR_RESET}" 6
   fi
 fi
 
-# Stash count
+# Stash count (priority 6)
 if [ "$show_stash" = "true" ]; then
   sc="${stash_count:-0}"
   if [ "$auto_hide" != "true" ] || [ "$sc" -gt 0 ] 2>/dev/null; then
     stash_icon=""
     [ "$use_icons" = "true" ] && stash_icon="≡ "
-    output+="  ${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}"
+    add_seg "${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}" 6
   fi
 fi
 
-# Session duration — converted from ms to Xh Ym or Ym
+# Session duration (priority 7)
 if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" != "0" ]; then
   total_secs=$(( ${duration_ms%%.*} / 1000 ))
   hours=$(( total_secs / 3600 ))
@@ -435,54 +454,120 @@ if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" !=
   dur_icon=""
   [ "$use_icons" = "true" ] && dur_icon="◷ "
 
+  dur_text=""
   if [ "$hours" -gt 0 ]; then
-    output+="  ${CLR_INFO}${dur_icon}${hours}h${mins}m${CLR_RESET}"
+    dur_text="${CLR_INFO}${dur_icon}${hours}h${mins}m${CLR_RESET}"
   elif [ "$mins" -gt 0 ]; then
-    output+="  ${CLR_INFO}${dur_icon}${mins}m${CLR_RESET}"
+    dur_text="${CLR_INFO}${dur_icon}${mins}m${CLR_RESET}"
   elif [ "$auto_hide" != "true" ]; then
-    output+="  ${CLR_INFO}${dur_icon}0m${CLR_RESET}"
+    dur_text="${CLR_INFO}${dur_icon}0m${CLR_RESET}"
   fi
+  [ -n "$dur_text" ] && add_seg "$dur_text" 7
 fi
 
-# Worktree indicator — only when in an isolated worktree
+# Worktree indicator (priority 8)
 if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
   wt_icon=""
   [ "$use_icons" = "true" ] && wt_icon="⎇ "
-  output+="  ${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}"
+  add_seg "${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}" 8
 fi
 
-# Session cost in USD
+# Session cost (priority 4)
 if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
-  # Hide $0 costs unless auto_hide is off
   cost_is_zero=false
   case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
   if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
-    output+="  ${CLR_WARN}\$${total_cost}${CLR_RESET}"
+    add_seg "${CLR_WARN}\$${total_cost}${CLR_RESET}" 4
   fi
 fi
 
-# Cost rate — dollars per hour, using awk for floating-point math
+# Cost rate (priority 4)
 if [ "$show_cost_rate" = "true" ] && [ -n "$total_cost" ] && [ -n "$duration_ms" ]; then
   dur_int="${duration_ms%%.*}"
-  # Suppress when duration < 60 seconds to avoid wild rates and div-by-zero
   if [ "$dur_int" -ge 60000 ] 2>/dev/null; then
     cost_rate=$(awk "BEGIN {printf \"%.2f\", $total_cost / ($dur_int / 3600000)}" 2>/dev/null) || cost_rate=""
     if [ -n "$cost_rate" ]; then
       rate_is_zero=false
       case "$cost_rate" in 0.00) rate_is_zero=true ;; esac
       if [ "$auto_hide" != "true" ] || [ "$rate_is_zero" = "false" ]; then
-        output+="  ${CLR_WARN}\$${cost_rate}/hr${CLR_RESET}"
+        add_seg "${CLR_WARN}\$${cost_rate}/hr${CLR_RESET}" 4
       fi
     fi
   fi
 fi
 
-# Update notification — shown when a newer version is available
+# Update notification (priority 9 — lowest)
 if [ -n "$update_available" ]; then
   update_icon=""
   [ "$use_icons" = "true" ] && update_icon="⬆ "
-  output+="  ${CLR_WARN}${update_icon}update available${CLR_RESET}"
+  add_seg "${CLR_WARN}${update_icon}update available${CLR_RESET}" 9
 fi
 
-# ── Print ─────────────────────────────────────────────────────
+# ── Truncation ───────────────────────────────────────────────
+# When enabled, drop lowest-priority segments until output fits.
+if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
+  # Detect terminal width
+  term_width=""
+  if [ -n "$max_width" ]; then
+    term_width="$max_width"
+  else
+    term_width=$(tput cols 2>/dev/null) || true
+    [ -z "$term_width" ] && term_width="${COLUMNS:-120}"
+  fi
+
+  # Mark segments as active (1) or dropped (0)
+  for (( i=0; i<seg_idx; i++ )); do seg_active[$i]=1; done
+
+  # Calculate total visible width (segments + separators)
+  calc_total_width() {
+    local total=0 first=1
+    for (( i=0; i<seg_idx; i++ )); do
+      [ "${seg_active[$i]}" = "0" ] && continue
+      if [ "$first" = "1" ]; then
+        first=0
+      else
+        total=$((total + 2))  # "  " separator
+      fi
+      total=$((total + $(visible_width "${seg_vals[$i]}")))
+    done
+    echo "$total"
+  }
+
+  # Drop lowest-priority segments until we fit
+  while true; do
+    total_w=$(calc_total_width)
+    [ "$total_w" -le "$term_width" ] 2>/dev/null && break
+
+    # Find the active segment with the highest priority number (lowest priority)
+    worst_idx=-1
+    worst_pri=0
+    for (( i=0; i<seg_idx; i++ )); do
+      [ "${seg_active[$i]}" = "0" ] && continue
+      if [ "${seg_pris[$i]}" -gt "$worst_pri" ] 2>/dev/null; then
+        worst_pri="${seg_pris[$i]}"
+        worst_idx=$i
+      fi
+    done
+
+    # Nothing left to drop
+    [ "$worst_idx" = "-1" ] && break
+    seg_active[$worst_idx]=0
+  done
+fi
+
+# ── Assemble & Print ─────────────────────────────────────────
+output=""
+first_seg=1
+for (( i=0; i<seg_idx; i++ )); do
+  if [ "$enable_truncation" = "true" ] && [ "${seg_active[$i]:-1}" = "0" ]; then
+    continue
+  fi
+  if [ "$first_seg" = "1" ]; then
+    first_seg=0
+  else
+    output+="  "
+  fi
+  output+="${seg_vals[$i]}"
+done
+
 printf "%b" "$output"
