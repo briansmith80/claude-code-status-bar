@@ -66,7 +66,8 @@ update_settings() {
   if [ ! -f "$file" ]; then
     cat > "$file" <<EOF
 {
-  "statusline": {
+  "statusLine": {
+    "type": "command",
     "command": "${cmd}"
   }
 }
@@ -75,8 +76,8 @@ EOF
     return
   fi
 
-  if grep -q '"statusline"' "$file"; then
-    echo "  settings.json already has a statusline entry — skipped."
+  if grep -q '"statusLine"' "$file"; then
+    echo "  settings.json already has a statusLine entry — skipped."
     echo "  To update manually: \"command\": \"${cmd}\""
     return
   fi
@@ -88,7 +89,7 @@ import json, sys
 path, cmd = sys.argv[1], sys.argv[2]
 with open(path) as f:
     data = json.load(f)
-data['statusline'] = {'command': cmd}
+data['statusLine'] = {'type': 'command', 'command': cmd}
 with open(path, 'w') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
@@ -100,7 +101,7 @@ import json, sys
 path, cmd = sys.argv[1], sys.argv[2]
 with open(path) as f:
     data = json.load(f)
-data['statusline'] = {'command': cmd}
+data['statusLine'] = {'type': 'command', 'command': cmd}
 with open(path, 'w') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
@@ -110,7 +111,8 @@ PYEOF
     echo ""
     echo "  Python not found — add this to ${file} manually:"
     echo '  {'
-    echo '    "statusline": {'
+    echo '    "statusLine": {'
+    echo '      "type": "command",'
     echo "      \"command\": \"${cmd}\""
     echo '    }'
     echo '  }'
