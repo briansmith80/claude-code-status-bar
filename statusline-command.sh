@@ -142,7 +142,8 @@ input=$(cat)
 # Extract a string value by key, e.g. "key": "value"
 extract() {
   local key="$1"
-  if [[ $input =~ \"$key\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+  local pattern="\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]+)\""
+  if [[ $input =~ $pattern ]]; then
     echo "${BASH_REMATCH[1]}"
   fi
 }
@@ -150,7 +151,8 @@ extract() {
 # Extract a numeric value by key, e.g. "key": 42 or "key": 0.45
 extract_num() {
   local key="$1"
-  if [[ $input =~ \"$key\"[[:space:]]*:[[:space:]]*([0-9]+\.?[0-9]*) ]]; then
+  local pattern="\"$key\"[[:space:]]*:[[:space:]]*([0-9]+\.?[0-9]*)"
+  if [[ $input =~ $pattern ]]; then
     echo "${BASH_REMATCH[1]}"
   fi
 }
@@ -192,7 +194,8 @@ worktree_name=$(extract "name")
 # Disambiguate: worktree.name only exists inside a "worktree" object.
 # Check if the input actually contains a worktree block.
 worktree=""
-if [[ $input =~ \"worktree\"[[:space:]]*:[[:space:]]*\{ ]]; then
+local_pattern="\"worktree\"[[:space:]]*:[[:space:]]*\{"
+if [[ $input =~ $local_pattern ]]; then
   worktree=$(sanitize "$worktree_name")
 fi
 

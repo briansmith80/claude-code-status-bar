@@ -1,5 +1,10 @@
 # claude-code-status-bar
 
+[![ShellCheck](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml)
+[![Version](https://img.shields.io/github/v/release/briansmith80/claude-code-status-bar?label=version)](https://github.com/briansmith80/claude-code-status-bar/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-brightgreen)](README.md)
+
 A configurable status bar for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
 ```
