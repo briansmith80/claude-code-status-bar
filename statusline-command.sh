@@ -133,6 +133,9 @@ use_icons=true
 context_warn_threshold=80
 enable_truncation=false
 max_width=""
+use_groups=false
+group_open="["
+group_close="]"
 colour_theme="default"
 
 # Load user overrides (if any)
@@ -366,10 +369,12 @@ build_progress_bar() {
 
 seg_idx=0
 
-# Helper: add a segment with given priority
+# Helper: add a segment with priority and optional group
+# Usage: add_seg "content" priority ["group_name"]
 add_seg() {
   seg_vals[$seg_idx]="$1"
   seg_pris[$seg_idx]="$2"
+  seg_groups[$seg_idx]="${3:-}"
   seg_idx=$((seg_idx + 1))
 }
 
@@ -389,7 +394,7 @@ fi
 if [ "$show_model" = "true" ]; then
   model_icon=""
   [ "$use_icons" = "true" ] && model_icon="⚙ "
-  add_seg "${CLR_MODEL}${model_icon}${model:-?}${CLR_RESET}" 3
+  add_seg "${CLR_MODEL}${model_icon}${model:-?}${CLR_RESET}" 3 "ctx"
 fi
 
 # Context bar (priority 2)
@@ -401,7 +406,7 @@ if [ "$show_context_bar" = "true" ]; then
   if [ "$pct_int" -ge "${context_warn_threshold:-80}" ] 2>/dev/null; then
     [ "$use_icons" = "true" ] && warn_prefix="⚠ "
   fi
-  add_seg "${warn_prefix}${progress_bar} ${pct_int}%" 2
+  add_seg "${warn_prefix}${progress_bar} ${pct_int}%" 2 "ctx"
 fi
 
 # Lines changed (priority 5)
@@ -411,7 +416,7 @@ if [ "$show_lines_changed" = "true" ]; then
   added_int="${added%%.*}"
   removed_int="${removed%%.*}"
   if [ "$auto_hide" != "true" ] || [ "$added_int" -gt 0 ] || [ "$removed_int" -gt 0 ]; then
-    add_seg "${CLR_ADD}+${added_int}${CLR_RESET} ${CLR_DEL}-${removed_int}${CLR_RESET}" 5
+    add_seg "${CLR_ADD}+${added_int}${CLR_RESET} ${CLR_DEL}-${removed_int}${CLR_RESET}" 5 "git"
   fi
 fi
 
@@ -420,7 +425,7 @@ if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
   if [ "$auto_hide" != "true" ] || [ "$dirty_count" -gt 0 ] 2>/dev/null; then
     dirty_icon=""
     [ "$use_icons" = "true" ] && dirty_icon="● "
-    add_seg "${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}" 5
+    add_seg "${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}" 5 "git"
   fi
 fi
 
@@ -432,7 +437,7 @@ if [ "$show_ahead_behind" = "true" ]; then
     ab_text=""
     [ "$ab_behind" -gt 0 ] 2>/dev/null && ab_text+="↓${ab_behind}"
     [ "$ab_ahead" -gt 0 ] 2>/dev/null && { [ -n "$ab_text" ] && ab_text+=" "; ab_text+="↑${ab_ahead}"; }
-    [ -n "$ab_text" ] && add_seg "${CLR_INFO}${ab_text}${CLR_RESET}" 6
+    [ -n "$ab_text" ] && add_seg "${CLR_INFO}${ab_text}${CLR_RESET}" 6 "git"
   fi
 fi
 
@@ -442,7 +447,7 @@ if [ "$show_stash" = "true" ]; then
   if [ "$auto_hide" != "true" ] || [ "$sc" -gt 0 ] 2>/dev/null; then
     stash_icon=""
     [ "$use_icons" = "true" ] && stash_icon="≡ "
-    add_seg "${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}" 6
+    add_seg "${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}" 6 "git"
   fi
 fi
 
@@ -462,7 +467,7 @@ if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" !=
   elif [ "$auto_hide" != "true" ]; then
     dur_text="${CLR_INFO}${dur_icon}0m${CLR_RESET}"
   fi
-  [ -n "$dur_text" ] && add_seg "$dur_text" 7
+  [ -n "$dur_text" ] && add_seg "$dur_text" 7 "session"
 fi
 
 # Worktree indicator (priority 8)
@@ -477,7 +482,7 @@ if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
   cost_is_zero=false
   case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
   if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
-    add_seg "${CLR_WARN}\$${total_cost}${CLR_RESET}" 4
+    add_seg "${CLR_WARN}\$${total_cost}${CLR_RESET}" 4 "session"
   fi
 fi
 
@@ -490,7 +495,7 @@ if [ "$show_cost_rate" = "true" ] && [ -n "$total_cost" ] && [ -n "$duration_ms"
       rate_is_zero=false
       case "$cost_rate" in 0.00) rate_is_zero=true ;; esac
       if [ "$auto_hide" != "true" ] || [ "$rate_is_zero" = "false" ]; then
-        add_seg "${CLR_WARN}\$${cost_rate}/hr${CLR_RESET}" 4
+        add_seg "${CLR_WARN}\$${cost_rate}/hr${CLR_RESET}" 4 "session"
       fi
     fi
   fi
@@ -556,18 +561,58 @@ if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
 fi
 
 # ── Assemble & Print ─────────────────────────────────────────
+# When use_groups=true, segments with the same group are wrapped in brackets
+# and separated by single space. Groups are separated by double space.
 output=""
 first_seg=1
+current_group=""
+group_has_content=false
+
 for (( i=0; i<seg_idx; i++ )); do
   if [ "$enable_truncation" = "true" ] && [ "${seg_active[$i]:-1}" = "0" ]; then
     continue
   fi
-  if [ "$first_seg" = "1" ]; then
-    first_seg=0
+
+  this_group="${seg_groups[$i]:-}"
+
+  if [ "$use_groups" = "true" ] && [ -n "$this_group" ]; then
+    if [ "$this_group" != "$current_group" ]; then
+      # Close previous group if open
+      if [ -n "$current_group" ] && [ "$group_has_content" = "true" ]; then
+        output+="${group_close}"
+      fi
+      # Separator between segments/groups
+      [ "$first_seg" != "1" ] && output+="  "
+      first_seg=0
+      # Open new group
+      output+="${group_open}"
+      current_group="$this_group"
+      group_has_content=true
+    else
+      # Same group — single space separator within group
+      output+=" "
+    fi
   else
-    output+="  "
+    # Close previous group if open
+    if [ "$use_groups" = "true" ] && [ -n "$current_group" ] && [ "$group_has_content" = "true" ]; then
+      output+="${group_close}"
+      current_group=""
+      group_has_content=false
+    fi
+    # Separator between segments
+    if [ "$first_seg" = "1" ]; then
+      first_seg=0
+    else
+      output+="  "
+    fi
   fi
+
   output+="${seg_vals[$i]}"
 done
+
+# Close final group if still open
+if [ "$use_groups" = "true" ] && [ -n "$current_group" ] && [ "$group_has_content" = "true" ]; then
+  output+="${group_close}"
+fi
 
 printf "%b" "$output"
