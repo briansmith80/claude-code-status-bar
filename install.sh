@@ -7,8 +7,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash -s -- --local
 #
 # Options:
-#   --global   Install to ~/.claude/ (default)
-#   --local    Install to .claude/ in the current project directory
+#   --global   Install to ~/.claude/ and update ~/.claude/settings.json (default)
+#   --local    Install to .claude/ and update .claude/settings.json in current project
 
 set -euo pipefail
 
@@ -37,8 +37,9 @@ else
 fi
 
 target_file="${target_dir}/${SCRIPT_NAME}"
+settings_file="${target_dir}/settings.json"
 
-# ── Download and install ─────────────────────────────────────
+# ── Download script ──────────────────────────────────────────
 echo "Installing claude-code-status-bar (${mode})..."
 
 mkdir -p "$target_dir"
@@ -48,22 +49,75 @@ if command -v curl > /dev/null 2>&1; then
 elif command -v wget > /dev/null 2>&1; then
   wget -qO "$target_file" "${REPO_RAW}/${SCRIPT_NAME}"
 else
-  echo "Error: curl or wget is required to download the script."
+  echo "Error: curl or wget is required."
   exit 1
 fi
 
 chmod +x "$target_file"
+echo "  Script installed to: ${target_file}"
+
+# ── Update settings.json ─────────────────────────────────────
+command_value="bash ${target_file}"
+
+update_settings() {
+  local file="$1"
+  local cmd="$2"
+
+  if [ ! -f "$file" ]; then
+    cat > "$file" <<EOF
+{
+  "statusline": {
+    "command": "${cmd}"
+  }
+}
+EOF
+    echo "  Created settings: ${file}"
+    return
+  fi
+
+  if grep -q '"statusline"' "$file"; then
+    echo "  settings.json already has a statusline entry — skipped."
+    echo "  To update manually: \"command\": \"${cmd}\""
+    return
+  fi
+
+  # Merge using Python (available on macOS, Linux, and Windows with Git Bash)
+  if command -v python3 > /dev/null 2>&1; then
+    python3 - "$file" "$cmd" <<'PYEOF'
+import json, sys
+path, cmd = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    data = json.load(f)
+data['statusline'] = {'command': cmd}
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+PYEOF
+    echo "  Updated settings: ${file}"
+  elif command -v python > /dev/null 2>&1; then
+    python - "$file" "$cmd" <<'PYEOF'
+import json, sys
+path, cmd = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    data = json.load(f)
+data['statusline'] = {'command': cmd}
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+PYEOF
+    echo "  Updated settings: ${file}"
+  else
+    echo ""
+    echo "  Python not found — add this to ${file} manually:"
+    echo '  {'
+    echo '    "statusline": {'
+    echo "      \"command\": \"${cmd}\""
+    echo '    }'
+    echo '  }'
+  fi
+}
+
+update_settings "$settings_file" "$command_value"
 
 echo ""
-echo "Installed to: ${target_file}"
-echo ""
-echo "To enable, add this to your Claude Code settings"
-echo "(~/.claude/settings.json or .claude/settings.json):"
-echo ""
-echo '  {'
-echo '    "statusline": {'
-echo "      \"command\": \"bash ${target_file}\""
-echo '    }'
-echo '  }'
-echo ""
-echo "Done!"
+echo "Done! Restart Claude Code to see your statusline."
