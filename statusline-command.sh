@@ -126,6 +126,7 @@ show_duration=true
 show_worktree=true
 show_cost=true
 auto_hide=true
+use_icons=true
 colour_theme="default"
 
 # Load user overrides (if any)
@@ -338,12 +339,16 @@ fi
 
 # Branch
 if [ "$show_branch" = "true" ] && [ -n "$branch" ]; then
-  output+="${CLR_BRANCH} on ${branch}${CLR_RESET}"
+  branch_icon=""
+  [ "$use_icons" = "true" ] && branch_icon="⌥ "
+  output+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
 fi
 
 # Model
 if [ "$show_model" = "true" ]; then
-  output+="  ${CLR_MODEL}${model:-?}${CLR_RESET}"
+  model_icon=""
+  [ "$use_icons" = "true" ] && model_icon="⚙ "
+  output+="  ${CLR_MODEL}${model_icon}${model:-?}${CLR_RESET}"
 fi
 
 # Context bar
@@ -368,7 +373,9 @@ fi
 # Dirty file count — yellow reminder to commit
 if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
   if [ "$auto_hide" != "true" ] || [ "$dirty_count" -gt 0 ] 2>/dev/null; then
-    output+="  ${CLR_WARN}${dirty_count} dirty${CLR_RESET}"
+    dirty_icon=""
+    [ "$use_icons" = "true" ] && dirty_icon="● "
+    output+="  ${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}"
   fi
 fi
 
@@ -377,19 +384,23 @@ if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" !=
   total_secs=$(( ${duration_ms%%.*} / 1000 ))
   hours=$(( total_secs / 3600 ))
   mins=$(( (total_secs % 3600) / 60 ))
+  dur_icon=""
+  [ "$use_icons" = "true" ] && dur_icon="◷ "
 
   if [ "$hours" -gt 0 ]; then
-    output+="  ${CLR_INFO}${hours}h${mins}m${CLR_RESET}"
+    output+="  ${CLR_INFO}${dur_icon}${hours}h${mins}m${CLR_RESET}"
   elif [ "$mins" -gt 0 ]; then
-    output+="  ${CLR_INFO}${mins}m${CLR_RESET}"
+    output+="  ${CLR_INFO}${dur_icon}${mins}m${CLR_RESET}"
   elif [ "$auto_hide" != "true" ]; then
-    output+="  ${CLR_INFO}0m${CLR_RESET}"
+    output+="  ${CLR_INFO}${dur_icon}0m${CLR_RESET}"
   fi
 fi
 
 # Worktree indicator — only when in an isolated worktree
 if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
-  output+="  ${CLR_BRANCH}⎇ ${worktree}${CLR_RESET}"
+  wt_icon=""
+  [ "$use_icons" = "true" ] && wt_icon="⎇ "
+  output+="  ${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}"
 fi
 
 # Session cost in USD
@@ -404,7 +415,9 @@ fi
 
 # Update notification — shown when a newer version is available
 if [ -n "$update_available" ]; then
-  output+="  ${CLR_WARN}⬆ update available${CLR_RESET}"
+  update_icon=""
+  [ "$use_icons" = "true" ] && update_icon="⬆ "
+  output+="  ${CLR_WARN}${update_icon}update available${CLR_RESET}"
 fi
 
 # ── Print ─────────────────────────────────────────────────────
