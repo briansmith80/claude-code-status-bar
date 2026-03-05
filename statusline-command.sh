@@ -127,8 +127,10 @@ show_stash=true
 show_duration=true
 show_worktree=true
 show_cost=true
+show_cost_rate=true
 auto_hide=true
 use_icons=true
+context_warn_threshold=80
 colour_theme="default"
 
 # Load user overrides (if any)
@@ -374,7 +376,11 @@ if [ "$show_context_bar" = "true" ]; then
   pct="${used:-0}"
   pct_int="${pct%%.*}"
   progress_bar=$(build_progress_bar "$pct_int")
-  output+="  ${progress_bar} ${pct_int}%"
+  warn_prefix=""
+  if [ "$pct_int" -ge "${context_warn_threshold:-80}" ] 2>/dev/null; then
+    [ "$use_icons" = "true" ] && warn_prefix="⚠ "
+  fi
+  output+="  ${warn_prefix}${progress_bar} ${pct_int}%"
 fi
 
 # Lines changed — green for additions, red for removals
@@ -452,6 +458,22 @@ if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
   case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
   if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
     output+="  ${CLR_WARN}\$${total_cost}${CLR_RESET}"
+  fi
+fi
+
+# Cost rate — dollars per hour, using awk for floating-point math
+if [ "$show_cost_rate" = "true" ] && [ -n "$total_cost" ] && [ -n "$duration_ms" ]; then
+  dur_int="${duration_ms%%.*}"
+  # Suppress when duration < 60 seconds to avoid wild rates and div-by-zero
+  if [ "$dur_int" -ge 60000 ] 2>/dev/null; then
+    cost_rate=$(awk "BEGIN {printf \"%.2f\", $total_cost / ($dur_int / 3600000)}" 2>/dev/null) || cost_rate=""
+    if [ -n "$cost_rate" ]; then
+      rate_is_zero=false
+      case "$cost_rate" in 0.00) rate_is_zero=true ;; esac
+      if [ "$auto_hide" != "true" ] || [ "$rate_is_zero" = "false" ]; then
+        output+="  ${CLR_WARN}\$${cost_rate}/hr${CLR_RESET}"
+      fi
+    fi
   fi
 fi
 
