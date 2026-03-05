@@ -122,6 +122,8 @@ show_model=true
 show_context_bar=true
 show_lines_changed=true
 show_dirty_count=true
+show_ahead_behind=true
+show_stash=true
 show_duration=true
 show_worktree=true
 show_cost=true
@@ -277,12 +279,14 @@ home_dir="$HOME"
 short_cwd="${cwd/#$home_dir/\~}"
 short_cwd=$(sanitize "$short_cwd")
 
-# ── Git Branch & Dirty Count ─────────────────────────────────
-# Detect the current branch name (or short SHA if detached HEAD).
+# ── Git Info ──────────────────────────────────────────────────
+# Detect branch, dirty count, ahead/behind, and stash count.
 # Uses -c core.fsmonitor=false to skip filesystem monitoring overhead.
-# Also counts uncommitted files for the dirty indicator.
 branch=""
 dirty_count=""
+ahead_count=""
+behind_count=""
+stash_count=""
 if [ -n "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-parse --git-dir > /dev/null 2>&1; then
   if [ "$show_branch" = "true" ]; then
     branch=$(git -C "$cwd" -c core.fsmonitor=false symbolic-ref --short HEAD 2>/dev/null \
@@ -291,9 +295,23 @@ if [ -n "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-parse --git-dir > 
   fi
 
   # Count uncommitted files (staged + unstaged + untracked).
-  # Uses --porcelain for stable machine-readable output.
   if [ "$show_dirty_count" = "true" ]; then
     dirty_count=$(git -C "$cwd" -c core.fsmonitor=false status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+  fi
+
+  # Ahead/behind remote — silently hidden when no upstream or detached HEAD.
+  # The || ab_output="" is critical: without it, set -e kills the script.
+  if [ "$show_ahead_behind" = "true" ]; then
+    ab_output=$(git -C "$cwd" -c core.fsmonitor=false rev-list --left-right --count HEAD...@{upstream} 2>/dev/null) || ab_output=""
+    if [ -n "$ab_output" ]; then
+      ahead_count=$(echo "$ab_output" | cut -f1)
+      behind_count=$(echo "$ab_output" | cut -f2)
+    fi
+  fi
+
+  # Stash count
+  if [ "$show_stash" = "true" ]; then
+    stash_count=$(git -C "$cwd" -c core.fsmonitor=false stash list 2>/dev/null | wc -l | tr -d ' ')
   fi
 fi
 
@@ -376,6 +394,30 @@ if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
     dirty_icon=""
     [ "$use_icons" = "true" ] && dirty_icon="● "
     output+="  ${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}"
+  fi
+fi
+
+# Ahead/behind remote — arrows showing unpushed/unpulled commits
+if [ "$show_ahead_behind" = "true" ]; then
+  ab_behind="${behind_count:-0}"
+  ab_ahead="${ahead_count:-0}"
+  if [ "$auto_hide" != "true" ] || [ "$ab_behind" -gt 0 ] || [ "$ab_ahead" -gt 0 ] 2>/dev/null; then
+    ab_text=""
+    [ "$ab_behind" -gt 0 ] 2>/dev/null && ab_text+="↓${ab_behind}"
+    [ "$ab_ahead" -gt 0 ] 2>/dev/null && { [ -n "$ab_text" ] && ab_text+=" "; ab_text+="↑${ab_ahead}"; }
+    if [ -n "$ab_text" ]; then
+      output+="  ${CLR_INFO}${ab_text}${CLR_RESET}"
+    fi
+  fi
+fi
+
+# Stash count
+if [ "$show_stash" = "true" ]; then
+  sc="${stash_count:-0}"
+  if [ "$auto_hide" != "true" ] || [ "$sc" -gt 0 ] 2>/dev/null; then
+    stash_icon=""
+    [ "$use_icons" = "true" ] && stash_icon="≡ "
+    output+="  ${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}"
   fi
 fi
 
