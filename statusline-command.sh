@@ -323,6 +323,7 @@ if [ -n "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-parse --git-dir > 
   # Ahead/behind remote — silently hidden when no upstream or detached HEAD.
   # The || ab_output="" is critical: without it, set -e kills the script.
   if [ "$show_ahead_behind" = "true" ]; then
+    # shellcheck disable=SC1083
     ab_output=$(git -C "$cwd" -c core.fsmonitor=false rev-list --left-right --count HEAD...@{upstream} 2>/dev/null) || ab_output=""
     if [ -n "$ab_output" ]; then
       ahead_count=$(echo "$ab_output" | cut -f1)
