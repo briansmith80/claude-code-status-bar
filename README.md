@@ -8,7 +8,7 @@
 A configurable status bar for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
 ```
-~/projects/my-app on main  Sonnet  ████████░░ 78%  +42 -7  3 dirty  12m  $0.45
+~/projects/my-app on ⌥ main  ⚙ Sonnet  ████████░░ 78%  +42 -7  ● 3 dirty  ↓2 ↑1  ◷ 12m  $0.45  $2.25/hr
 ```
 
 Pure bash. No dependencies. Works on macOS, Linux, and Windows (Git Bash / MSYS2).
@@ -51,20 +51,50 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 | Directory | `show_directory` | Working directory, shortened with `~` |
 | Branch | `show_branch` | Current git branch or short SHA |
 | Model | `show_model` | Active model (Opus, Sonnet, Haiku) |
-| Context bar | `show_context_bar` | Progress bar (green/yellow/red) |
+| Context bar | `show_context_bar` | Progress bar with warning at threshold |
 | Lines changed | `show_lines_changed` | Lines added/removed in session |
 | Dirty count | `show_dirty_count` | Uncommitted file count |
+| Ahead/behind | `show_ahead_behind` | Commits ahead/behind remote (`↓3 ↑1`) |
+| Stash count | `show_stash` | Git stash count |
 | Duration | `show_duration` | Session duration |
 | Worktree | `show_worktree` | Worktree name when active |
 | Cost | `show_cost` | Session cost in USD |
+| Cost rate | `show_cost_rate` | Burn rate in $/hr |
 
-To customise, create `~/.claude/statusline.conf` with only the toggles you want to change. This file is never overwritten by updates.
+## Configuration
+
+Create `~/.claude/statusline.conf` with your overrides. This file is never overwritten by updates.
 
 ```bash
 # ~/.claude/statusline.conf
+
+# Segment toggles (true/false)
 show_branch=false
 show_cost=false
+
+# Auto-hide segments with zero/empty values (default: true)
+auto_hide=true
+
+# Unicode icons before segments (default: true)
+use_icons=false
+
+# Colour theme: default, nord, dracula, solarized, mono
+colour_theme=nord
+
+# Context warning threshold percentage (default: 80)
+context_warn_threshold=85
+
+# Priority truncation for narrow terminals (default: false)
+enable_truncation=true
+max_width=100
+
+# Segment grouping with brackets (default: false)
+use_groups=true
+group_open="["
+group_close="]"
 ```
+
+The `NO_COLOR` environment variable is respected — when set, all colours are disabled regardless of theme.
 
 ## Updating
 

@@ -25,10 +25,14 @@ README.md                  # User-facing docs
 ## Key design decisions
 
 - **No jq** — Uses bash regex (`BASH_REMATCH`) for JSON parsing. Windows/MSYS2 users don't have jq.
+- **Bash 3.2 minimum** — Must work on stock macOS. No associative arrays, no `readarray`, no `${var,,}`.
 - **Background update check** — Fetches VERSION from GitHub every 6h in a background subshell. Never blocks the status bar.
 - **External config** — User overrides go in `statusline.conf`, sourced after defaults. Survives updates.
 - **Single version source** — Only `VERSION` file needs bumping. Installer downloads it; script reads it at runtime.
 - **Sanitize untrusted strings** — Branch names, paths, and worktree names are stripped of ANSI escapes before output.
+- **Colour themes via CLR_* variables** — All ANSI codes use theme variables set by `apply_theme()`. Supports NO_COLOR standard.
+- **Array-based segments** — Segments are built into `seg_vals[]`/`seg_pris[]`/`seg_groups[]` arrays for truncation and grouping support.
+- **set -e safety** — Git commands that may fail (e.g., `rev-list` with no upstream) use `|| fallback` pattern to prevent script death.
 
 ## How to release a new version
 
@@ -69,7 +73,8 @@ cp statusline-command.sh ~/.claude/statusline-command.sh
 
 - Bash with `set -e` — strict error handling
 - Comments use `# ── Section ───` separator style
-- ANSI colour codes: cyan=dir, magenta=branch, blue=model, green=additions, red=removals, yellow=warnings/cost/update
+- Colour codes use `CLR_*` theme variables (not inline ANSI codes)
+- Default palette: cyan=dir, magenta=branch, blue=model, green=additions, red=removals, yellow=warnings/cost
 - All git commands use `-c core.fsmonitor=false` to avoid filesystem monitoring overhead
 - Fallback chains: curl > wget, node > python3 > python > manual instructions
 
