@@ -125,6 +125,7 @@ show_dirty_count=true
 show_duration=true
 show_worktree=true
 show_cost=true
+auto_hide=true
 
 # Load user overrides (if any)
 STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
@@ -289,14 +290,16 @@ if [ "$show_lines_changed" = "true" ]; then
   removed="${lines_removed:-0}"
   added_int="${added%%.*}"
   removed_int="${removed%%.*}"
-  if [ "$added_int" -gt 0 ] || [ "$removed_int" -gt 0 ]; then
+  if [ "$auto_hide" != "true" ] || [ "$added_int" -gt 0 ] || [ "$removed_int" -gt 0 ]; then
     output+="  \033[0;32m+${added_int}\033[0m \033[0;31m-${removed_int}\033[0m"
   fi
 fi
 
 # Dirty file count — yellow reminder to commit
-if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ] && [ "$dirty_count" -gt 0 ] 2>/dev/null; then
-  output+="  \033[0;33m${dirty_count} dirty\033[0m"
+if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
+  if [ "$auto_hide" != "true" ] || [ "$dirty_count" -gt 0 ] 2>/dev/null; then
+    output+="  \033[0;33m${dirty_count} dirty\033[0m"
+  fi
 fi
 
 # Session duration — converted from ms to Xh Ym or Ym
@@ -309,6 +312,8 @@ if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" !=
     output+="  \033[0;36m${hours}h${mins}m\033[0m"
   elif [ "$mins" -gt 0 ]; then
     output+="  \033[0;36m${mins}m\033[0m"
+  elif [ "$auto_hide" != "true" ]; then
+    output+="  \033[0;36m0m\033[0m"
   fi
 fi
 
@@ -318,8 +323,13 @@ if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
 fi
 
 # Session cost in USD
-if [ "$show_cost" = "true" ] && [ -n "$total_cost" ] && [ "$total_cost" != "0" ]; then
-  output+="  \033[0;33m\$${total_cost}\033[0m"
+if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
+  # Hide $0 costs unless auto_hide is off
+  cost_is_zero=false
+  case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
+  if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
+    output+="  \033[0;33m\$${total_cost}\033[0m"
+  fi
 fi
 
 # Update notification — shown when a newer version is available
