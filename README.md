@@ -56,6 +56,14 @@ show_model=true
 # set any to false to hide
 ```
 
+## Uninstall
+
+```bash
+rm ~/.claude/statusline-command.sh
+```
+
+Then remove the `"statusLine"` block from `~/.claude/settings.json`.
+
 ## License
 
 MIT
