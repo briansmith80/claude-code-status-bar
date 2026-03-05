@@ -47,13 +47,12 @@ The status bar appears automatically.
 | Worktree | `show_worktree` | Worktree name when active |
 | Cost | `show_cost` | Session cost in USD |
 
-To toggle segments, edit the variables at the top of `~/.claude/statusline-command.sh`:
+To customise, create `~/.claude/statusline.conf` with only the toggles you want to change. This file is never overwritten by updates.
 
 ```bash
-show_directory=true
-show_branch=true
-show_model=true
-# set any to false to hide
+# ~/.claude/statusline.conf
+show_branch=false
+show_cost=false
 ```
 
 ## Updating
@@ -88,7 +87,10 @@ bash ~/.claude/statusline-command.sh --check-update   # force update check
 ## Uninstall
 
 ```bash
-rm ~/.claude/statusline-command.sh
+rm -f ~/.claude/statusline-command.sh
+rm -f ~/.claude/statusline.conf
+rm -f ~/.claude/.statusline-version
+rm -f ~/.claude/.statusline-update-cache
 ```
 
 Then remove the `"statusLine"` block from `~/.claude/settings.json`.

@@ -108,8 +108,13 @@ check_for_update() {
 check_for_update
 
 # ── Configuration ─────────────────────────────────────────────
-# Toggle each segment on/off (true/false).
-# Edit these values directly to customise your statusline.
+# Defaults — toggle each segment on/off (true/false).
+# To customise, create ~/.claude/statusline.conf with your overrides.
+# That file is never overwritten by updates.
+#
+# Example ~/.claude/statusline.conf:
+#   show_branch=false
+#   show_cost=false
 
 show_directory=true
 show_branch=true
@@ -120,6 +125,11 @@ show_dirty_count=true
 show_duration=true
 show_worktree=true
 show_cost=true
+
+# Load user overrides (if any)
+STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
+# shellcheck disable=SC1090
+[ -f "$STATUSLINE_CONF" ] && . "$STATUSLINE_CONF"
 
 # ── End Configuration ─────────────────────────────────────────
 
