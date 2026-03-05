@@ -18,6 +18,73 @@
 #
 # Uses pure bash regex for JSON parsing — no jq dependency required.
 
+set -e
+
+VERSION="1.0.0"
+UPDATE_CHECK_INTERVAL=21600  # seconds between update checks (6 hours)
+UPDATE_CACHE_DIR="${HOME}/.claude"
+UPDATE_CACHE_FILE="${UPDATE_CACHE_DIR}/.statusline-update-cache"
+REPO_RAW="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
+
+# ── CLI Flags ─────────────────────────────────────────────────
+case "${1:-}" in
+  --help|-h)
+    echo "Usage: echo '<json>' | bash statusline-command.sh"
+    echo ""
+    echo "Reads Claude Code statusline JSON from stdin and outputs"
+    echo "a formatted single-line status bar for your terminal."
+    echo ""
+    echo "Version: ${VERSION}"
+    exit 0
+    ;;
+  --version|-v)
+    echo "$VERSION"
+    exit 0
+    ;;
+  --check-update)
+    # Force an update check right now
+    rm -f "$UPDATE_CACHE_FILE"
+    ;;
+esac
+
+# ── Update Check ─────────────────────────────────────────────
+# Periodically fetches the remote VERSION file and caches the result.
+# Runs in the background so it never slows down the statusline.
+update_available=""
+
+check_for_update() {
+  local now
+  now=$(date +%s)
+
+  # Read cache: "timestamp remote_version"
+  if [ -f "$UPDATE_CACHE_FILE" ]; then
+    local cached_time cached_version
+    read -r cached_time cached_version < "$UPDATE_CACHE_FILE" 2>/dev/null || true
+    if [ -n "$cached_time" ] && [ $(( now - cached_time )) -lt $UPDATE_CHECK_INTERVAL ]; then
+      # Cache is fresh — use cached result
+      if [ -n "$cached_version" ] && [ "$cached_version" != "$VERSION" ]; then
+        update_available="$cached_version"
+      fi
+      return
+    fi
+  fi
+
+  # Cache is stale or missing — fetch in background and write cache
+  (
+    remote_version=""
+    if command -v curl > /dev/null 2>&1; then
+      remote_version=$(curl -fsSL --max-time 3 "${REPO_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]')
+    elif command -v wget > /dev/null 2>&1; then
+      remote_version=$(wget -qO- --timeout=3 "${REPO_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]')
+    fi
+    if [ -n "$remote_version" ]; then
+      echo "$(date +%s) $remote_version" > "$UPDATE_CACHE_FILE"
+    fi
+  ) &
+}
+
+check_for_update
+
 # ── Configuration ─────────────────────────────────────────────
 # Toggle each segment on/off (true/false).
 # Edit these values directly to customise your statusline.
@@ -56,6 +123,16 @@ extract_num() {
   fi
 }
 
+# Strip ANSI escape sequences and control characters from untrusted strings
+sanitize() {
+  local val="$1"
+  # Remove ANSI escape sequences (CSI and OSC)
+  val=$(printf '%s' "$val" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g')
+  # Remove remaining control characters (except space)
+  val=$(printf '%s' "$val" | tr -d '\000-\037\177')
+  echo "$val"
+}
+
 # ── Extract Fields ────────────────────────────────────────────
 
 # Working directory: prefer workspace.current_dir, fall back to top-level cwd
@@ -84,13 +161,14 @@ worktree_name=$(extract "name")
 # Check if the input actually contains a worktree block.
 worktree=""
 if [[ $input =~ \"worktree\"[[:space:]]*:[[:space:]]*\{ ]]; then
-  worktree="$worktree_name"
+  worktree=$(sanitize "$worktree_name")
 fi
 
 # ── Working Directory ─────────────────────────────────────────
 # Replace home directory prefix with ~ for a shorter display
 home_dir="$HOME"
 short_cwd="${cwd/#$home_dir/\~}"
+short_cwd=$(sanitize "$short_cwd")
 
 # ── Git Branch & Dirty Count ─────────────────────────────────
 # Detect the current branch name (or short SHA if detached HEAD).
@@ -102,6 +180,7 @@ if [ -n "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-parse --git-dir > 
   if [ "$show_branch" = "true" ]; then
     branch=$(git -C "$cwd" -c core.fsmonitor=false symbolic-ref --short HEAD 2>/dev/null \
       || git -C "$cwd" -c core.fsmonitor=false rev-parse --short HEAD 2>/dev/null)
+    branch=$(sanitize "$branch")
   fi
 
   # Count uncommitted files (staged + unstaged + untracked).
@@ -206,6 +285,11 @@ fi
 # Session cost in USD
 if [ "$show_cost" = "true" ] && [ -n "$total_cost" ] && [ "$total_cost" != "0" ]; then
   output+="  \033[0;33m\$${total_cost}\033[0m"
+fi
+
+# Update notification — shown when a newer version is available
+if [ -n "$update_available" ]; then
+  output+="  \033[0;33m⬆ v${update_available}\033[0m"
 fi
 
 # ── Print ─────────────────────────────────────────────────────

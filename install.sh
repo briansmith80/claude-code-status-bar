@@ -15,7 +15,14 @@ target_file="${target_dir}/${SCRIPT_NAME}"
 settings_file="${target_dir}/settings.json"
 
 # ── Download script ──────────────────────────────────────────
-echo "Installing claude-code-status-bar..."
+VERSION="1.0.0"
+
+# Detect install vs update
+if [ -f "$target_file" ]; then
+  echo "Updating claude-code-status-bar to v${VERSION}..."
+else
+  echo "Installing claude-code-status-bar v${VERSION}..."
+fi
 
 mkdir -p "$target_dir"
 
@@ -79,6 +86,9 @@ else
   echo ""
   echo "    \"statusLine\": { \"type\": \"command\", \"command\": \"${command_value}\" }"
 fi
+
+# ── Clear update cache ────────────────────────────────────────
+rm -f "${target_dir}/.statusline-update-cache"
 
 echo ""
 echo "Done! Your status bar should appear automatically."
