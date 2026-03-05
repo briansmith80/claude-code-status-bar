@@ -14,7 +14,7 @@ Pure bash. No dependencies. Works on macOS, Linux, and Windows (Git Bash / MSYS2
 curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
 ```
 
-Restart Claude Code and the status bar appears.
+The status bar appears automatically.
 
 > **Windows (PowerShell):** use `curl.exe` instead of `curl`.
 

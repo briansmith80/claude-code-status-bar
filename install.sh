@@ -122,4 +122,4 @@ with open(path, 'w') as f: json.dump(data, f, indent=2); f.write('\n')
 update_settings "$settings_file" "$command_value"
 
 echo ""
-echo "Done! Restart Claude Code to see your statusline."
+echo "Done! Your status bar should appear automatically."
