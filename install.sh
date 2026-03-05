@@ -3,8 +3,8 @@
 # Claude Code Status Bar — Installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/briansmith_80/claude-code-status-bar/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/briansmith_80/claude-code-status-bar/main/install.sh | bash -s -- --local
+#   curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash -s -- --local
 #
 # Options:
 #   --global   Install to ~/.claude/ (default)
@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/briansmith_80/claude-code-status-bar/main"
+REPO_RAW="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
 SCRIPT_NAME="statusline-command.sh"
 
 # ── Parse arguments ──────────────────────────────────────────

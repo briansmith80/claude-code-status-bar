@@ -13,13 +13,13 @@ Pure bash. No jq required. Works on macOS, Linux, and Windows (MSYS2/Git Bash).
 **One-liner (global):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/briansmith_80/claude-code-status-bar/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
 ```
 
 **Per-project:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/briansmith_80/claude-code-status-bar/main/install.sh | bash -s -- --local
+curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash -s -- --local
 ```
 
 **Manual:**
