@@ -127,7 +127,7 @@ show_stash=true
 show_duration=true
 show_worktree=true
 show_cost=true
-show_cost_rate=true
+show_cost_rate=false
 auto_hide=true
 use_icons=true
 context_warn_threshold=80
@@ -271,6 +271,9 @@ model=$(extract "display_name")
 # Context window usage as a percentage (0-100)
 used=$(extract_num "used_percentage")
 
+# Context window total size in tokens
+context_size=$(extract_num "context_window_size")
+
 # Cumulative session cost in USD
 total_cost=$(extract_num "total_cost_usd")
 
@@ -385,7 +388,7 @@ if [ "$show_directory" = "true" ]; then
 fi
 if [ "$show_branch" = "true" ] && [ -n "$branch" ]; then
   branch_icon=""
-  [ "$use_icons" = "true" ] && branch_icon="⌥ "
+  [ "$use_icons" = "true" ] && branch_icon="↱ "
   dir_branch+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
 fi
 [ -n "$dir_branch" ] && add_seg "$dir_branch" 1
@@ -406,7 +409,12 @@ if [ "$show_context_bar" = "true" ]; then
   if [ "$pct_int" -ge "${context_warn_threshold:-80}" ] 2>/dev/null; then
     [ "$use_icons" = "true" ] && warn_prefix="⚠ "
   fi
-  add_seg "${warn_prefix}${progress_bar} ${pct_int}%" 2 "ctx"
+  ctx_suffix=""
+  if [ -n "$context_size" ] && [ "$context_size" != "0" ]; then
+    ctx_k=$(( ${context_size%%.*} / 1000 ))
+    ctx_suffix=" of ${ctx_k}k"
+  fi
+  add_seg "${warn_prefix}${progress_bar} ${pct_int}%${ctx_suffix}" 2 "ctx"
 fi
 
 # Lines changed (priority 5)
@@ -482,7 +490,8 @@ if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
   cost_is_zero=false
   case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
   if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
-    add_seg "${CLR_WARN}\$${total_cost}${CLR_RESET}" 4 "session"
+    cost_fmt=$(awk "BEGIN {printf \"%.2f\", $total_cost}" 2>/dev/null) || cost_fmt="$total_cost"
+    add_seg "${CLR_WARN}\$${cost_fmt}${CLR_RESET}" 4 "session"
   fi
 fi
 
