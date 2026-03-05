@@ -58,7 +58,7 @@ show_model=true
 
 ## Updating
 
-When a new version is available, you'll see a `⬆ v1.x.x` indicator in your status bar. To update, run the same install command:
+When a new version is available, you'll see `⬆ update available` in your status bar. To update, run the same install command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
@@ -66,10 +66,15 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 
 The installer detects the existing installation and updates in place. The update notification checks GitHub every 6 hours and runs in the background — it never slows down your status bar.
 
-To manually check for updates:
+To manually check for updates and see the install command:
 
 ```bash
 bash ~/.claude/statusline-command.sh --check-update
+# Current: 1.0.0
+# Latest:  1.1.0
+#
+# Update available! Run:
+#   curl -fsSL https://raw.githubusercontent.com/.../install.sh | bash
 ```
 
 ## CLI Flags

@@ -42,8 +42,27 @@ case "${1:-}" in
     exit 0
     ;;
   --check-update)
-    # Force an update check right now
+    # Force a synchronous update check and print result
     rm -f "$UPDATE_CACHE_FILE"
+    remote_version=""
+    if command -v curl > /dev/null 2>&1; then
+      remote_version=$(curl -fsSL --max-time 5 "${REPO_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]')
+    elif command -v wget > /dev/null 2>&1; then
+      remote_version=$(wget -qO- --timeout=5 "${REPO_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]')
+    fi
+    echo "Current: ${VERSION}"
+    if [ -z "$remote_version" ]; then
+      echo "Latest:  (could not reach GitHub)"
+    elif [ "$remote_version" = "$VERSION" ]; then
+      echo "Latest:  ${remote_version}"
+      echo "You're up to date."
+    else
+      echo "Latest:  ${remote_version}"
+      echo ""
+      echo "Update available! Run:"
+      echo "  curl -fsSL ${REPO_RAW}/install.sh | bash"
+    fi
+    exit 0
     ;;
 esac
 
@@ -289,7 +308,7 @@ fi
 
 # Update notification — shown when a newer version is available
 if [ -n "$update_available" ]; then
-  output+="  \033[0;33m⬆ v${update_available}\033[0m"
+  output+="  \033[0;33m⬆ update available\033[0m"
 fi
 
 # ── Print ─────────────────────────────────────────────────────
