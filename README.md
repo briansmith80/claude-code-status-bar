@@ -18,14 +18,6 @@ The status bar appears automatically.
 
 > **Windows (PowerShell):** use `curl.exe` instead of `curl`.
 
-### Per-project install
-
-To install for a single project instead of globally:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash -s -- --local
-```
-
 ### Manual install
 
 1. Download `statusline-command.sh` to `~/.claude/`
