@@ -126,11 +126,81 @@ show_duration=true
 show_worktree=true
 show_cost=true
 auto_hide=true
+colour_theme="default"
 
 # Load user overrides (if any)
 STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 # shellcheck disable=SC1090
 [ -f "$STATUSLINE_CONF" ] && . "$STATUSLINE_CONF"
+
+# ── Colour Themes ────────────────────────────────────────────
+# Respect NO_COLOR standard (https://no-color.org/)
+[ -n "${NO_COLOR:-}" ] && colour_theme="mono"
+
+apply_theme() {
+  case "${colour_theme:-default}" in
+    nord)
+      CLR_DIR="\033[38;5;81m"     # frost blue
+      CLR_BRANCH="\033[38;5;139m"  # aurora purple
+      CLR_MODEL="\033[38;5;111m"   # frost lighter blue
+      CLR_ADD="\033[38;5;108m"     # aurora green
+      CLR_DEL="\033[38;5;174m"     # aurora red
+      CLR_WARN="\033[38;5;179m"    # aurora yellow
+      CLR_INFO="\033[38;5;110m"    # frost cyan
+      CLR_BAR_OK="\033[38;5;108m"  # aurora green
+      CLR_BAR_MED="\033[38;5;179m" # aurora yellow
+      CLR_BAR_HIGH="\033[38;5;174m" # aurora red
+      CLR_RESET="\033[0m"
+      ;;
+    dracula)
+      CLR_DIR="\033[38;5;141m"     # purple
+      CLR_BRANCH="\033[38;5;212m"  # pink
+      CLR_MODEL="\033[38;5;117m"   # cyan
+      CLR_ADD="\033[38;5;84m"      # green
+      CLR_DEL="\033[38;5;210m"     # red
+      CLR_WARN="\033[38;5;228m"    # yellow
+      CLR_INFO="\033[38;5;117m"    # cyan
+      CLR_BAR_OK="\033[38;5;84m"   # green
+      CLR_BAR_MED="\033[38;5;228m" # yellow
+      CLR_BAR_HIGH="\033[38;5;210m" # red
+      CLR_RESET="\033[0m"
+      ;;
+    solarized)
+      CLR_DIR="\033[38;5;37m"     # cyan
+      CLR_BRANCH="\033[38;5;61m"  # violet
+      CLR_MODEL="\033[38;5;33m"   # blue
+      CLR_ADD="\033[38;5;64m"     # green
+      CLR_DEL="\033[38;5;160m"    # red
+      CLR_WARN="\033[38;5;136m"   # yellow
+      CLR_INFO="\033[38;5;37m"    # cyan
+      CLR_BAR_OK="\033[38;5;64m"  # green
+      CLR_BAR_MED="\033[38;5;136m" # yellow
+      CLR_BAR_HIGH="\033[38;5;160m" # red
+      CLR_RESET="\033[0m"
+      ;;
+    mono)
+      CLR_DIR="" CLR_BRANCH="" CLR_MODEL=""
+      CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO=""
+      CLR_BAR_OK="" CLR_BAR_MED="" CLR_BAR_HIGH=""
+      CLR_RESET=""
+      ;;
+    *) # default — original colours
+      CLR_DIR="\033[0;36m"     # cyan
+      CLR_BRANCH="\033[0;35m"  # magenta
+      CLR_MODEL="\033[0;34m"   # blue
+      CLR_ADD="\033[0;32m"     # green
+      CLR_DEL="\033[0;31m"     # red
+      CLR_WARN="\033[0;33m"    # yellow
+      CLR_INFO="\033[0;36m"    # cyan
+      CLR_BAR_OK="\033[0;32m"  # green
+      CLR_BAR_MED="\033[0;33m" # yellow
+      CLR_BAR_HIGH="\033[0;31m" # red
+      CLR_RESET="\033[0m"
+      ;;
+  esac
+}
+
+apply_theme
 
 # ── End Configuration ─────────────────────────────────────────
 
@@ -240,17 +310,17 @@ build_progress_bar() {
   # Colour based on usage: green < 50%, yellow 50-79%, red 80%+
   local colour
   if [ "$pct" -ge 80 ]; then
-    colour="\033[0;31m"   # red
+    colour="$CLR_BAR_HIGH"
   elif [ "$pct" -ge 50 ]; then
-    colour="\033[0;33m"   # yellow
+    colour="$CLR_BAR_MED"
   else
-    colour="\033[0;32m"   # green
+    colour="$CLR_BAR_OK"
   fi
 
   local bar="${colour}"
   for (( i=0; i<filled; i++ )); do bar+="█"; done
   for (( i=0; i<empty; i++ ));  do bar+="░"; done
-  bar+="\033[0m"
+  bar+="$CLR_RESET"
 
   echo "$bar"
 }
@@ -263,17 +333,17 @@ output=""
 
 # Directory
 if [ "$show_directory" = "true" ]; then
-  output+="\033[0;36m${short_cwd}\033[0m"
+  output+="${CLR_DIR}${short_cwd}${CLR_RESET}"
 fi
 
 # Branch
 if [ "$show_branch" = "true" ] && [ -n "$branch" ]; then
-  output+="\033[0;35m on ${branch}\033[0m"
+  output+="${CLR_BRANCH} on ${branch}${CLR_RESET}"
 fi
 
 # Model
 if [ "$show_model" = "true" ]; then
-  output+="  \033[0;34m${model:-?}\033[0m"
+  output+="  ${CLR_MODEL}${model:-?}${CLR_RESET}"
 fi
 
 # Context bar
@@ -291,14 +361,14 @@ if [ "$show_lines_changed" = "true" ]; then
   added_int="${added%%.*}"
   removed_int="${removed%%.*}"
   if [ "$auto_hide" != "true" ] || [ "$added_int" -gt 0 ] || [ "$removed_int" -gt 0 ]; then
-    output+="  \033[0;32m+${added_int}\033[0m \033[0;31m-${removed_int}\033[0m"
+    output+="  ${CLR_ADD}+${added_int}${CLR_RESET} ${CLR_DEL}-${removed_int}${CLR_RESET}"
   fi
 fi
 
 # Dirty file count — yellow reminder to commit
 if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
   if [ "$auto_hide" != "true" ] || [ "$dirty_count" -gt 0 ] 2>/dev/null; then
-    output+="  \033[0;33m${dirty_count} dirty\033[0m"
+    output+="  ${CLR_WARN}${dirty_count} dirty${CLR_RESET}"
   fi
 fi
 
@@ -309,17 +379,17 @@ if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" !=
   mins=$(( (total_secs % 3600) / 60 ))
 
   if [ "$hours" -gt 0 ]; then
-    output+="  \033[0;36m${hours}h${mins}m\033[0m"
+    output+="  ${CLR_INFO}${hours}h${mins}m${CLR_RESET}"
   elif [ "$mins" -gt 0 ]; then
-    output+="  \033[0;36m${mins}m\033[0m"
+    output+="  ${CLR_INFO}${mins}m${CLR_RESET}"
   elif [ "$auto_hide" != "true" ]; then
-    output+="  \033[0;36m0m\033[0m"
+    output+="  ${CLR_INFO}0m${CLR_RESET}"
   fi
 fi
 
 # Worktree indicator — only when in an isolated worktree
 if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
-  output+="  \033[0;35m⎇ ${worktree}\033[0m"
+  output+="  ${CLR_BRANCH}⎇ ${worktree}${CLR_RESET}"
 fi
 
 # Session cost in USD
@@ -328,13 +398,13 @@ if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
   cost_is_zero=false
   case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
   if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
-    output+="  \033[0;33m\$${total_cost}\033[0m"
+    output+="  ${CLR_WARN}\$${total_cost}${CLR_RESET}"
   fi
 fi
 
 # Update notification — shown when a newer version is available
 if [ -n "$update_available" ]; then
-  output+="  \033[0;33m⬆ update available\033[0m"
+  output+="  ${CLR_WARN}⬆ update available${CLR_RESET}"
 fi
 
 # ── Print ─────────────────────────────────────────────────────
