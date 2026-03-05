@@ -22,6 +22,16 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash -s -- --local
 ```
 
+**Windows (PowerShell):**
+
+The `curl` command above requires Git Bash or MSYS2. In PowerShell, use `curl.exe` to invoke the real curl:
+
+```powershell
+curl.exe -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
+```
+
+Or open Git Bash and run the one-liner from there.
+
 **Manual:**
 
 1. Download `statusline-command.sh` to `~/.claude/` (global) or `.claude/` (per-project)
