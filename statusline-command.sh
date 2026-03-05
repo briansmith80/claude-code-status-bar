@@ -20,10 +20,13 @@
 
 set -e
 
-VERSION="1.0.0"
+SCRIPT_DIR="${HOME}/.claude"
+VERSION_FILE="${SCRIPT_DIR}/.statusline-version"
+VERSION="unknown"
+[ -f "$VERSION_FILE" ] && VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
+
 UPDATE_CHECK_INTERVAL=21600  # seconds between update checks (6 hours)
-UPDATE_CACHE_DIR="${HOME}/.claude"
-UPDATE_CACHE_FILE="${UPDATE_CACHE_DIR}/.statusline-update-cache"
+UPDATE_CACHE_FILE="${SCRIPT_DIR}/.statusline-update-cache"
 REPO_RAW="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
 
 # ── CLI Flags ─────────────────────────────────────────────────

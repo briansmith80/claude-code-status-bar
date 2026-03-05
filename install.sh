@@ -14,21 +14,33 @@ target_dir="$HOME/.claude"
 target_file="${target_dir}/${SCRIPT_NAME}"
 settings_file="${target_dir}/settings.json"
 
-# ── Download script ──────────────────────────────────────────
-VERSION="1.0.0"
-
-# Detect install vs update
-if [ -f "$target_file" ]; then
-  echo "Updating claude-code-status-bar to v${VERSION}..."
-else
-  echo "Installing claude-code-status-bar v${VERSION}..."
-fi
+# ── Download files ─────────────────────────────────────────────
+version_file="${target_dir}/.statusline-version"
 
 mkdir -p "$target_dir"
 
+# Download VERSION first so we can display it
 if command -v curl > /dev/null 2>&1; then
+  curl -fsSL "${REPO_RAW}/VERSION" -o "$version_file"
+  VERSION=$(tr -d '[:space:]' < "$version_file")
+
+  if [ -f "$target_file" ]; then
+    echo "Updating claude-code-status-bar to v${VERSION}..."
+  else
+    echo "Installing claude-code-status-bar v${VERSION}..."
+  fi
+
   curl -fsSL "${REPO_RAW}/${SCRIPT_NAME}" -o "$target_file"
 elif command -v wget > /dev/null 2>&1; then
+  wget -qO "$version_file" "${REPO_RAW}/VERSION"
+  VERSION=$(tr -d '[:space:]' < "$version_file")
+
+  if [ -f "$target_file" ]; then
+    echo "Updating claude-code-status-bar to v${VERSION}..."
+  else
+    echo "Installing claude-code-status-bar v${VERSION}..."
+  fi
+
   wget -qO "$target_file" "${REPO_RAW}/${SCRIPT_NAME}"
 else
   echo "Error: curl or wget is required."
@@ -37,6 +49,7 @@ fi
 
 chmod +x "$target_file"
 echo "  Script installed to: ${target_file}"
+echo "  Version: ${VERSION}"
 
 # ── Update settings.json ─────────────────────────────────────
 command_value="bash ${target_file}"
