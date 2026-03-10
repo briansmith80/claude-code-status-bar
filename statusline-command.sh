@@ -128,6 +128,8 @@ check_for_update() {
   if [ -f "$UPDATE_CACHE_FILE" ]; then
     local cached_time cached_version
     read -r cached_time cached_version < "$UPDATE_CACHE_FILE" 2>/dev/null || true
+    # Guard: cached_time must be numeric (corrupted cache files may contain other data)
+    case "$cached_time" in *[!0-9]*) cached_time="" ;; esac
     if [ -n "$cached_time" ] && [ $(( NOW_EPOCH - cached_time )) -lt $UPDATE_CHECK_INTERVAL ]; then
       # Cache is fresh — use cached result
       if [ -n "$cached_version" ] && [ "$cached_version" != "$VERSION" ]; then
@@ -284,7 +286,7 @@ input=$(cat)
 # Usage: extract_from "$json" "key"
 extract_from() {
   local json="$1" key="$2"
-  local pattern="\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]+)\""
+  local pattern="\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
   if [[ $json =~ $pattern ]]; then
     echo "${BASH_REMATCH[1]}"
   fi
@@ -598,6 +600,12 @@ add_seg() {
   seg_groups[$seg_idx]="${3:-}"
   seg_idx=$((seg_idx + 1))
 }
+
+# Session start placeholder — before first API response, fields are null/empty
+if [ -z "$model" ] && [ -z "$used" ]; then
+  printf "%b" "${CLR_DIM:-\033[2m}Starting...${CLR_RESET}"
+  exit 0
+fi
 
 # Directory + Branch (combined, priority 1)
 dir_branch=""

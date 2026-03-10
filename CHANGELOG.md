@@ -24,7 +24,7 @@ All notable changes to this project will be documented in this file.
 - `extract()` / `extract_num()` are now thin wrappers around `extract_from()` / `extract_num_from()` (consolidated from 4 independent functions to 2 + 2 wrappers)
 - Usage API fetch runs in background subshell (never blocks the statusline)
 - Usage cache uses embedded timestamp format (portable, no platform-specific `stat` needed)
-- `input=$(cat)` replaced with `read -r -d ''` (avoids fork)
+- `input=$(cat)` kept for MSYS2 compatibility (`read -r -d ''` silently fails on Windows bash)
 - Version reading uses `read -r` instead of `tr` (avoids fork)
 - `NOW_EPOCH` cached once at startup (eliminates 5-9 repeated `date +%s` forks)
 - Cost formatting uses `printf` builtin instead of `awk` subprocess
