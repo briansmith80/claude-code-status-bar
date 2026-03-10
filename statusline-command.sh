@@ -179,7 +179,7 @@ show_cost=true
 show_cost_rate=false
 show_usage_5h=true
 show_usage_7d=true
-usage_cache_seconds=60
+usage_cache_seconds=300
 auto_hide=true
 use_icons=true
 context_warn_threshold=80
@@ -440,18 +440,35 @@ fetch_usage_token() {
   echo "$token"
 }
 
+USAGE_BACKOFF_FILE="${SCRIPT_DIR}/.statusline-usage-backoff"
+
+usage_backoff_increase() {
+  # Exponential backoff: double the wait each failure, cap at 15 min.
+  local prev_backoff=0
+  [ -f "$USAGE_BACKOFF_FILE" ] && read -r prev_backoff < "$USAGE_BACKOFF_FILE" 2>/dev/null
+  case "$prev_backoff" in *[!0-9]*) prev_backoff=0 ;; esac
+  local next_backoff=$(( prev_backoff > 0 ? prev_backoff * 2 : usage_cache_seconds * 2 ))
+  [ "$next_backoff" -gt 900 ] && next_backoff=900
+  echo "$next_backoff" > "$USAGE_BACKOFF_FILE"
+}
+
 fetch_usage_data() {
   local token response
   token=$(fetch_usage_token) || return 1
   HTTP_AUTH_HEADER="Authorization: Bearer $token"
-  response=$(http_get "https://api.anthropic.com/api/oauth/usage" 3) || { HTTP_AUTH_HEADER=""; return 1; }
+  response=$(http_get "https://api.anthropic.com/api/oauth/usage" 3) || {
+    HTTP_AUTH_HEADER=""
+    usage_backoff_increase
+    return 1
+  }
   HTTP_AUTH_HEADER=""
   # Sanity check: response must contain "five_hour" or "seven_day"
   case "$response" in
     *five_hour*|*seven_day*) ;;
-    *) return 1 ;;
+    *) usage_backoff_increase; return 1 ;;
   esac
-  # Embed timestamp in cache for portable age checking (no stat needed)
+  # Success — clear backoff and update cache
+  rm -f "$USAGE_BACKOFF_FILE"
   echo "${NOW_EPOCH} ${response}" > "$USAGE_CACHE_FILE"
 }
 
@@ -468,11 +485,18 @@ if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
     # Guard: cached_ts must be numeric (old-format cache files lack the timestamp)
     case "$cached_ts" in *[!0-9]*) cached_ts=0 ;; esac
     cache_age=$(( NOW_EPOCH - cached_ts ))
-    if [ "$cache_age" -gt "$usage_cache_seconds" ] 2>/dev/null; then
+    # Determine effective refresh interval (respects exponential backoff on 429)
+    effective_interval="$usage_cache_seconds"
+    if [ -f "$USAGE_BACKOFF_FILE" ]; then
+      read -r backoff_secs < "$USAGE_BACKOFF_FILE" 2>/dev/null || backoff_secs=0
+      case "$backoff_secs" in *[!0-9]*) backoff_secs=0 ;; esac
+      [ "$backoff_secs" -gt "$effective_interval" ] && effective_interval="$backoff_secs"
+    fi
+    if [ "$cache_age" -gt "$effective_interval" ] 2>/dev/null; then
       needs_fetch=true
     fi
-    # Mark stale if cache is older than 3 minutes (API may be rate-limiting us)
-    if [ "$cache_age" -gt 180 ] 2>/dev/null; then
+    # Mark stale if cache is older than twice the base interval
+    if [ "$cache_age" -gt $(( usage_cache_seconds * 2 )) ] 2>/dev/null; then
       usage_stale=true
     fi
   fi
