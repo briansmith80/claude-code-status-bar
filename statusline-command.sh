@@ -600,9 +600,9 @@ build_progress_bar() {
 
   # Calculate target marker position (-1 = no marker)
   local target_pos=-1
-  if [ -n "$target_pct" ] && [ "$target_pct" -ge 0 ] 2>/dev/null && [ "$target_pct" -lt 100 ]; then
+  if [ -n "$target_pct" ] && [ "$target_pct" -ge 0 ] 2>/dev/null && [ "$target_pct" -le 100 ]; then
     target_pos=$(( target_pct * width / 100 ))
-    [ "$target_pos" -ge "$width" ] && target_pos=-1
+    [ "$target_pos" -ge "$width" ] && target_pos=$(( width - 1 ))
   fi
 
   # Colour based on usage: green < 50%, yellow 50-79%, red 80%+
