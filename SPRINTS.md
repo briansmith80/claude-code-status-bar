@@ -29,7 +29,7 @@ Validated sprint plan derived from [ROADMAP.md](ROADMAP.md). Each sprint is a sh
 
 ## Sprint 1: v1.4.0 — New Segments
 
-**Theme**: Consume the API fields we're already receiving but ignoring. Pure additive — no refactoring.
+**Theme**: Consume the API fields we're already receiving but ignoring, plus token conservation awareness features. Pure additive — no refactoring.
 **Why second**: Each new segment is independent (~10-15 lines, just extract + conditional + `add_seg`). Low risk, high user value, and builds familiarity with the segment pattern before we change it.
 
 | | # | Item | Type | Effort | Risk |
@@ -45,18 +45,24 @@ Validated sprint plan derived from [ROADMAP.md](ROADMAP.md). Each sprint is a sh
 | [ ] | 1.8 | `bar_width` config option (currently hardcoded to 10) — #9 | config | ~5 lines | Low |
 | [ ] | 1.9 | `branch_max_length` config option — #10 | config | ~8 lines | Low |
 | [ ] | 1.10 | `separator` config option (default `"  "`) — #11 | config | ~10 lines | Low |
+| [ ] | 1.11 | **Compact countdown** — tokens remaining before auto-compact — #58 | feature | ~15 lines | Low |
+| [ ] | 1.12 | **Time-to-limit estimate** for usage bars — #59 | feature | ~20 lines | Low |
+| [ ] | 1.13 | **Pace delta text** label (`+8%`/`-5%`) — #60 | feature | ~10 lines | Low |
 
-**Estimated LOC**: ~120 new/modified
+**Estimated LOC**: ~165 new/modified
 **Depends on**: Sprint 0 (clean baseline)
 **Releases as**: v1.4.0 (minor)
 
 ### Dependency notes
 
-- **Item 1.0 (`extract_block`) must be first.** Multiple segments (1.3, 1.4, 1.6) need to extract fields from nested JSON objects. This helper generalises the existing `fh_pattern`/`sd_pattern` approach from the usage parsing code — extract a parent block, then extract within it. Build it once, reuse everywhere.
+- **Item 1.0 (`extract_block`) must be first.** Multiple segments (1.3, 1.4, 1.6, 1.11) need to extract fields from nested JSON objects. This helper generalises the existing `fh_pattern`/`sd_pattern` approach from the usage parsing code — extract a parent block, then extract within it. Build it once, reuse everywhere.
 - Items 1.1-1.6 are independent of each other after 1.0 lands — can be implemented in any order.
 - Item 1.6 (cache hit ratio) requires extracting from `current_usage` block via `extract_block()`.
 - Item 1.8 (`bar_width`) should land before Sprint 3 (bar styles), since bar styles build on a configurable width.
 - Item 1.10 (`separator`) should land before Sprint 3 (separator styles), since styles build on a configurable separator.
+- **Item 1.11 (compact countdown)** needs `extract_block()` for `context_window` nested fields. Pure arithmetic: `(83.5% * window_size) - (used_pct% * window_size)`. **No competitor has this — unique differentiator.**
+- **Item 1.12 (time-to-limit)** uses data already in the usage cache. Linear extrapolation from pacing target and current utilization. **Most requested feature across competitors.**
+- **Item 1.13 (pace delta)** is trivial arithmetic on existing pacing data — gives meaning to the `│` pacing marker.
 
 ---
 
@@ -74,9 +80,13 @@ Validated sprint plan derived from [ROADMAP.md](ROADMAP.md). Each sprint is a sh
 | [ ] | 2.5 | 4 new themes: tokyo-night, rose-pine, gruvbox, catppuccin — #16 | feature | ~80 lines | Low |
 | [ ] | 2.6 | Per-segment icon overrides — #17 | config | ~20 lines | Low |
 | [ ] | 2.7 | Overflow indicator — show `…` when truncated — #18 | enhancement | ~10 lines | Low |
+| [ ] | 2.8 | **Compact buffer zone** on context bar (dim last ~16.5%) — #61 | feature | ~10 lines | Low |
+| [ ] | 2.9 | **Three-tier context severity** escalation — #62 | feature | ~15 lines | Low |
+| [ ] | 2.10 | **Session duration color** escalation — #63 | feature | ~10 lines | Low |
+| [ ] | 2.11 | **Model cost tier** indicator ($, $$, $$$) — #64 | feature | ~8 lines | Low |
 
-**Estimated LOC**: ~175 new/modified
-**Depends on**: Sprint 1 (needs `bar_width`, `separator` config)
+**Estimated LOC**: ~220 new/modified
+**Depends on**: Sprint 1 (needs `bar_width`, `separator` config, `extract_block()`)
 **Releases as**: v1.5.0 (minor)
 
 ### Dependency notes
@@ -85,6 +95,10 @@ Validated sprint plan derived from [ROADMAP.md](ROADMAP.md). Each sprint is a sh
 - Items 2.2 and 2.3 are independent visual changes — no risk of conflict.
 - Item 2.5 (themes) is pure additive — new cases in `apply_theme()`.
 - Item 2.7 (overflow) depends on the truncation system being stable (it is — no changes planned until Sprint 4).
+- **Item 2.8 (compact buffer zone)** depends on `CLR_DIM` from item 2.3. Dim the last ~2 chars of a 10-char context bar to show the autocompact danger zone.
+- **Item 2.9 (three-tier severity)** extends existing `context_warn_threshold` with a new `context_critical_threshold=95`. Graduated green → yellow → red → red+text.
+- **Item 2.10 (session duration color)** is a simple threshold check on `total_duration_ms`. Pairs well with model coloring (2.2).
+- **Item 2.11 (model cost tier)** is a case statement on model name, pairs with item 2.2 (model tier coloring). Opus burns quota ~1.7x faster than Sonnet — users should see this at a glance.
 
 ---
 
@@ -138,9 +152,13 @@ Validated sprint plan derived from [ROADMAP.md](ROADMAP.md). Each sprint is a sh
 | [ ] | 4.7 | Rate limit countdown ("resets in 47m" at 100%) — #31 | feature | ~15 lines | Low |
 | [ ] | 4.8 | `--dump-config` CLI flag — #32 | cli | ~25 lines | Low |
 | [ ] | 4.9 | `--preview` CLI flag (render with sample data) — #33 | cli | ~20 lines | Low |
+| [ ] | 4.10 | **Compact detection indicator** ("compacted" flash) — #65 | feature | ~15 lines | Low |
+| [ ] | 4.11 | **Messages remaining estimate** (`~12 msgs left`) — #66 | feature | ~25 lines | Medium |
+| [ ] | 4.12 | **Context velocity indicator** (burn rate arrow) — #67 | feature | ~15 lines | Low |
+| [ ] | 4.13 | **Per-turn token delta** (`last: 8.2k`) — #68 | feature | ~15 lines | Low |
 
-**Estimated LOC**: ~330 new/modified
-**Depends on**: Sprint 1 (token extraction), Sprint 3 (stable assembly)
+**Estimated LOC**: ~400 new/modified
+**Depends on**: Sprint 1 (token extraction, compact countdown), Sprint 3 (stable assembly)
 **Releases as**: v1.7.0 (minor)
 
 ### Dependency notes
@@ -149,6 +167,10 @@ Validated sprint plan derived from [ROADMAP.md](ROADMAP.md). Each sprint is a sh
 - Item 4.3 (token speed) depends on Sprint 1's token count extraction (item 1.3). The delta calculation needs a cache file: store `"$NOW_EPOCH $total_tokens"`, read previous entry, compute `(new_tokens - old_tokens) / (new_time - old_time)`.
 - Item 4.4 (session budget) reuses `build_progress_bar()` with `$total_cost / $session_budget * 100` as the percentage. Trivial if bar_width is configurable (Sprint 1).
 - Items 4.6 and 4.7 build on existing usage infrastructure — low risk.
+- **Items 4.10-4.13 share delta cache infrastructure with 4.3 (token speed).** All need a `~/.claude/.statusline-delta-cache` file storing `"$NOW_EPOCH $used_pct $total_tokens $total_cost"`. Build the cache read/write once in 4.3, reuse in 4.10-4.13.
+- **Item 4.10 (compact detection)** detects `used_percentage` drops > 20% between invocations — a signature of auto-compact firing. One-shot display, then clears.
+- **Item 4.11 (messages remaining)** needs invocation count from the delta cache + average tokens per turn. The most intuitive "fuel gauge" for non-technical users.
+- **Item 4.13 (per-turn delta)** directly addresses GitHub issue anthropics/claude-code#29600.
 
 ---
 
@@ -167,9 +189,11 @@ Validated sprint plan derived from [ROADMAP.md](ROADMAP.md). Each sprint is a sh
 | [ ] | 5.6 | Plan-aware limits (`plan_type=max5`) — #39 | feature | ~30 lines | Medium |
 | [ ] | 5.7 | Clickable OSC 8 links (`use_links=true`) — #40 | feature | ~25 lines | Medium |
 | [ ] | 5.8 | Install script testing in CI — #41 | ci | ~30 lines | Medium |
+| [ ] | 5.9 | **Cost sparkline** (mini Unicode chart) — #69 | feature | ~25 lines | Medium |
+| [ ] | 5.10 | **Desktop notifications** on threshold crossing — #70 | feature | ~30 lines | Medium |
 
-**Estimated LOC**: ~230 new/modified
-**Depends on**: Sprint 4 (BATS tests for safety)
+**Estimated LOC**: ~285 new/modified
+**Depends on**: Sprint 4 (BATS tests for safety, delta cache infrastructure)
 **Releases as**: v1.8.0 (minor)
 
 ### Dependency notes
@@ -178,6 +202,8 @@ Validated sprint plan derived from [ROADMAP.md](ROADMAP.md). Each sprint is a sh
 - Item 5.1 needs care to avoid unbounded file growth. Strategy: rotate when >1MB, keep 30 days.
 - Item 5.6 (plan limits) requires hardcoded knowledge of plan caps. These can change — needs a way to update. Consider a separate config key rather than hardcoding.
 - Item 5.7 (OSC 8 links) should be default-off since Terminal.app, Windows Terminal, and SSH sessions may not support it.
+- **Item 5.9 (cost sparkline)** needs a ring buffer file (8 entries) separate from delta cache. Write cost reading on each invocation, map range to Unicode block characters `▁▂▃▄▅▆▇█`.
+- **Item 5.10 (desktop notifications)** requires platform detection (macOS/Linux/Windows). Guard against spam via `last_notified_threshold` in cache file. One-shot per threshold crossing per session.
 
 ---
 
@@ -269,10 +295,10 @@ Our plan aligns: milestone-based (not time-boxed), patch releases for bugs, mino
 | Sprint | LOC | Items |
 |--------|-----|-------|
 | 0 (v1.3.1) | ~35 | 5 |
-| 1 (v1.4.0) | ~120 | 11 |
-| 2 (v1.5.0) | ~175 | 7 |
+| 1 (v1.4.0) | ~165 | 14 |
+| 2 (v1.5.0) | ~220 | 11 |
 | 3 (v1.6.0) | ~375 | 6 |
-| 4 (v1.7.0) | ~330 | 9 |
-| 5 (v1.8.0) | ~230 | 8 |
+| 4 (v1.7.0) | ~400 | 13 |
+| 5 (v1.8.0) | ~285 | 10 |
 | 6 (v2.0.0) | ~550 | 11 |
-| **Total** | **~1,815** | **57** |
+| **Total** | **~2,030** | **70** |
