@@ -179,7 +179,7 @@ show_cost=true
 show_cost_rate=false
 show_usage_5h=true
 show_usage_7d=true
-usage_cache_seconds=300
+usage_cache_seconds=1800
 auto_hide=true
 use_icons=true
 context_warn_threshold=80
@@ -443,13 +443,13 @@ fetch_usage_token() {
 USAGE_BACKOFF_FILE="${SCRIPT_DIR}/.statusline-usage-backoff"
 
 usage_backoff_increase() {
-  # Exponential backoff: double the wait each failure, cap at 15 min.
+  # Exponential backoff: double the wait each failure, cap at 30 min.
   local prev_backoff=0
   [ -f "$USAGE_BACKOFF_FILE" ] && read -r prev_backoff < "$USAGE_BACKOFF_FILE" 2>/dev/null
   case "$prev_backoff" in *[!0-9]*) prev_backoff=0 ;; esac
   local next_backoff=$(( prev_backoff > 0 ? prev_backoff * 2 : usage_cache_seconds * 2 ))
-  [ "$next_backoff" -gt 900 ] && next_backoff=900
-  echo "$next_backoff" > "$USAGE_BACKOFF_FILE"
+  [ "$next_backoff" -gt 1800 ] && next_backoff=1800
+  printf '%s %s\n' "$next_backoff" "$NOW_EPOCH" > "$USAGE_BACKOFF_FILE"
 }
 
 fetch_usage_data() {
@@ -488,8 +488,14 @@ if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
     # Determine effective refresh interval (respects exponential backoff on 429)
     effective_interval="$usage_cache_seconds"
     if [ -f "$USAGE_BACKOFF_FILE" ]; then
-      read -r backoff_secs < "$USAGE_BACKOFF_FILE" 2>/dev/null || backoff_secs=0
+      read -r backoff_secs backoff_ts < "$USAGE_BACKOFF_FILE" 2>/dev/null || backoff_secs=0
       case "$backoff_secs" in *[!0-9]*) backoff_secs=0 ;; esac
+      case "$backoff_ts" in *[!0-9]*) backoff_ts=0 ;; esac
+      # Expire backoff after 30 min so we don't stay stuck forever
+      if [ "$backoff_ts" -gt 0 ] && [ $(( NOW_EPOCH - backoff_ts )) -gt 1800 ] 2>/dev/null; then
+        rm -f "$USAGE_BACKOFF_FILE"
+        backoff_secs=0
+      fi
       [ "$backoff_secs" -gt "$effective_interval" ] && effective_interval="$backoff_secs"
     fi
     if [ "$cache_age" -gt "$effective_interval" ] 2>/dev/null; then
