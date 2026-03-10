@@ -452,6 +452,8 @@ usage_backoff_increase() {
   printf '%s %s\n' "$next_backoff" "$NOW_EPOCH" > "$USAGE_BACKOFF_FILE"
 }
 
+USAGE_LOG_FILE="${SCRIPT_DIR}/.statusline-usage-log"
+
 fetch_usage_data() {
   local token response
   token=$(fetch_usage_token) || return 1
@@ -459,17 +461,22 @@ fetch_usage_data() {
   response=$(http_get "https://api.anthropic.com/api/oauth/usage" 3) || {
     HTTP_AUTH_HEADER=""
     usage_backoff_increase
+    # Log failed attempt (keep last 50 lines)
+    echo "${NOW_EPOCH} 429" >> "$USAGE_LOG_FILE"
+    tail -50 "$USAGE_LOG_FILE" > "${USAGE_LOG_FILE}.tmp" && mv "${USAGE_LOG_FILE}.tmp" "$USAGE_LOG_FILE"
     return 1
   }
   HTTP_AUTH_HEADER=""
   # Sanity check: response must contain "five_hour" or "seven_day"
   case "$response" in
     *five_hour*|*seven_day*) ;;
-    *) usage_backoff_increase; return 1 ;;
+    *) usage_backoff_increase; echo "${NOW_EPOCH} bad_response" >> "$USAGE_LOG_FILE"; return 1 ;;
   esac
   # Success — clear backoff and update cache
   rm -f "$USAGE_BACKOFF_FILE"
   echo "${NOW_EPOCH} ${response}" > "$USAGE_CACHE_FILE"
+  echo "${NOW_EPOCH} 200" >> "$USAGE_LOG_FILE"
+  tail -50 "$USAGE_LOG_FILE" > "${USAGE_LOG_FILE}.tmp" && mv "${USAGE_LOG_FILE}.tmp" "$USAGE_LOG_FILE"
 }
 
 # Refresh cache if stale or missing (only when usage segments are enabled).
