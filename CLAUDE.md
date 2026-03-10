@@ -92,3 +92,4 @@ cp statusline-command.sh ~/.claude/statusline-command.sh
 - **`set -e` in subshells** — Background update fetch runs in `( ) &`. If curl/wget fails inside, only the subshell dies (by design).
 - **Usage API requires OAuth scopes** — The token must have `user:profile` scope. Tokens created via `claude setup-token` only have `user:inference` and won't work. Users need browser OAuth (quit all CC instances and restart).
 - **`date` portability for pacing** — macOS uses `date -juf`, GNU/MSYS2 uses `date -ud`. The `format_reset_label()` and `calc_pacing_target()` functions handle both.
+- **Do NOT use `read -r -d ''` to capture stdin** — It silently fails on MSYS2/Windows bash, producing an empty variable. Always use `input=$(cat)` instead. The fork cost is negligible compared to broken input on Windows.
