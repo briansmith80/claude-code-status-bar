@@ -272,7 +272,7 @@ apply_theme
 
 # ── End Configuration ─────────────────────────────────────────
 
-read -r -d '' input < /dev/stdin || true
+input=$(cat)
 
 # ── JSON Parsing Helpers ──────────────────────────────────────
 # These extract values from the JSON input using bash regex since
