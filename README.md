@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 | Model | `show_model` | Active model (Opus, Sonnet, Haiku) |
 | Context bar | `show_context_bar` | Progress bar with warning at threshold |
 | 5-hour usage | `show_usage_5h` | Rolling 5-hour API usage with pacing marker |
-| Weekly usage | `show_usage_weekly` | Rolling 7-day API usage with pacing marker |
+| Weekly usage | `show_usage_7d` | Rolling 7-day API usage with pacing marker |
 | Lines changed | `show_lines_changed` | Lines added/removed in session |
 | Dirty count | `show_dirty_count` | Uncommitted file count |
 | Ahead/behind | `show_ahead_behind` | Commits ahead/behind remote (`↓3 ↑1`) |
@@ -76,7 +76,7 @@ show_cost=false
 
 # Usage limit segments (default: true)
 show_usage_5h=true
-show_usage_weekly=true
+show_usage_7d=true
 usage_cache_seconds=60
 
 # Auto-hide segments with zero/empty values (default: true)

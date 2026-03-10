@@ -21,14 +21,67 @@
 
 set -e
 
+# Restrict file permissions for cache/temp files (not world-readable)
+umask 077
+
 SCRIPT_DIR="${HOME}/.claude"
 VERSION_FILE="${SCRIPT_DIR}/.statusline-version"
 VERSION="unknown"
-[ -f "$VERSION_FILE" ] && VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
+[ -f "$VERSION_FILE" ] && read -r VERSION < "$VERSION_FILE" 2>/dev/null || true
+VERSION="${VERSION//[[:space:]]/}"
+
+# Capture current epoch once — reused throughout to avoid repeated date forks
+NOW_EPOCH=$(date +%s)
 
 UPDATE_CHECK_INTERVAL=21600  # seconds between update checks (6 hours)
 UPDATE_CACHE_FILE="${SCRIPT_DIR}/.statusline-update-cache"
 REPO_RAW="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
+
+# ── Shared Helpers ──────────────────────────────────────────
+# HTTP GET helper — returns body on stdout. Usage: http_get URL [TIMEOUT]
+# Supports optional auth headers via $HTTP_AUTH_HEADER.
+http_get() {
+  local url="$1" timeout="${2:-3}"
+  if command -v curl > /dev/null 2>&1; then
+    if [ -n "${HTTP_AUTH_HEADER:-}" ]; then
+      # Pass auth header via stdin to avoid exposing token in process list
+      curl -s --max-time "$timeout" --config - "$url" 2>/dev/null <<EOF
+header = "${HTTP_AUTH_HEADER}"
+header = "anthropic-beta: oauth-2025-04-20"
+header = "Content-Type: application/json"
+EOF
+    else
+      curl -fsSL --max-time "$timeout" "$url" 2>/dev/null
+    fi
+  elif command -v wget > /dev/null 2>&1; then
+    if [ -n "${HTTP_AUTH_HEADER:-}" ]; then
+      wget -qO- --timeout="$timeout" --max-redirect=0 \
+        --header="${HTTP_AUTH_HEADER}" \
+        --header="anthropic-beta: oauth-2025-04-20" \
+        --header="Content-Type: application/json" \
+        "$url" 2>/dev/null
+    else
+      wget -qO- --timeout="$timeout" "$url" 2>/dev/null
+    fi
+  else
+    return 1
+  fi
+}
+
+# Parse an ISO 8601 timestamp to epoch seconds.
+# Usage: iso_to_epoch "2026-03-10T13:59:59.654957+00:00"
+iso_to_epoch() {
+  local ts="$1"
+  # Strip fractional seconds and timezone offset
+  local clean="${ts%%.*}"
+  clean="${clean%%+*}"
+  if [[ "${OSTYPE:-}" == darwin* ]]; then
+    date -juf "%Y-%m-%dT%H:%M:%S" "$clean" +%s 2>/dev/null
+  else
+    # GNU date (Linux & MSYS2/Windows)
+    date -ud "${clean}" +%s 2>/dev/null
+  fi
+}
 
 # ── CLI Flags ─────────────────────────────────────────────────
 case "${1:-}" in
@@ -48,12 +101,7 @@ case "${1:-}" in
   --check-update)
     # Force a synchronous update check and print result
     rm -f "$UPDATE_CACHE_FILE"
-    remote_version=""
-    if command -v curl > /dev/null 2>&1; then
-      remote_version=$(curl -fsSL --max-time 5 "${REPO_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]')
-    elif command -v wget > /dev/null 2>&1; then
-      remote_version=$(wget -qO- --timeout=5 "${REPO_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]')
-    fi
+    remote_version=$(http_get "${REPO_RAW}/VERSION" 5 | tr -d '[:space:]') || remote_version=""
     echo "Current: ${VERSION}"
     if [ -z "$remote_version" ]; then
       echo "Latest:  (could not reach GitHub)"
@@ -76,14 +124,11 @@ esac
 update_available=""
 
 check_for_update() {
-  local now
-  now=$(date +%s)
-
   # Read cache: "timestamp remote_version"
   if [ -f "$UPDATE_CACHE_FILE" ]; then
     local cached_time cached_version
     read -r cached_time cached_version < "$UPDATE_CACHE_FILE" 2>/dev/null || true
-    if [ -n "$cached_time" ] && [ $(( now - cached_time )) -lt $UPDATE_CHECK_INTERVAL ]; then
+    if [ -n "$cached_time" ] && [ $(( NOW_EPOCH - cached_time )) -lt $UPDATE_CHECK_INTERVAL ]; then
       # Cache is fresh — use cached result
       if [ -n "$cached_version" ] && [ "$cached_version" != "$VERSION" ]; then
         update_available="$cached_version"
@@ -94,12 +139,7 @@ check_for_update() {
 
   # Cache is stale or missing — fetch in background and write cache
   (
-    remote_version=""
-    if command -v curl > /dev/null 2>&1; then
-      remote_version=$(curl -fsSL --max-time 3 "${REPO_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]')
-    elif command -v wget > /dev/null 2>&1; then
-      remote_version=$(wget -qO- --timeout=3 "${REPO_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]')
-    fi
+    remote_version=$(http_get "${REPO_RAW}/VERSION" 3 | tr -d '[:space:]') || remote_version=""
     if [ -n "$remote_version" ]; then
       echo "$(date +%s) $remote_version" > "$UPDATE_CACHE_FILE"
     fi
@@ -116,6 +156,10 @@ check_for_update
 # Example ~/.claude/statusline.conf:
 #   show_branch=false
 #   show_cost=false
+#
+# Segment priorities (used by truncation — lower = kept longer):
+#   1=dir+branch  2=context  3=model,usage  4=cost  5=lines,dirty
+#   6=ahead/behind,stash  7=duration  8=worktree  9=update
 
 show_directory=true
 show_branch=true
@@ -130,7 +174,7 @@ show_worktree=true
 show_cost=true
 show_cost_rate=false
 show_usage_5h=true
-show_usage_weekly=true
+show_usage_7d=true
 usage_cache_seconds=60
 auto_hide=true
 use_icons=true
@@ -142,10 +186,16 @@ group_open="["
 group_close="]"
 colour_theme="default"
 
-# Load user overrides (if any)
+# Load user overrides (if any).
+# Note: this file has the same trust level as .bashrc — it can contain
+# arbitrary bash code. Only modify it yourself or via trusted tools.
 STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 # shellcheck disable=SC1090
 [ -f "$STATUSLINE_CONF" ] && . "$STATUSLINE_CONF"
+
+# Backwards compatibility: accept old name
+[ "${show_usage_weekly:-}" = "true" ] && show_usage_7d=true
+[ "${show_usage_weekly:-}" = "false" ] && show_usage_7d=false
 
 # ── Colour Themes ────────────────────────────────────────────
 # Respect NO_COLOR standard (https://no-color.org/)
@@ -222,31 +272,16 @@ apply_theme
 
 # ── End Configuration ─────────────────────────────────────────
 
-input=$(cat)
+read -r -d '' input < /dev/stdin || true
 
 # ── JSON Parsing Helpers ──────────────────────────────────────
 # These extract values from the JSON input using bash regex since
 # jq is not available in MSYS2/Git Bash on Windows by default.
+# All four variants share common regex logic. The _from variants
+# accept an explicit JSON string; the plain variants use $input.
 
-# Extract a string value by key, e.g. "key": "value"
-extract() {
-  local key="$1"
-  local pattern="\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]+)\""
-  if [[ $input =~ $pattern ]]; then
-    echo "${BASH_REMATCH[1]}"
-  fi
-}
-
-# Extract a numeric value by key, e.g. "key": 42 or "key": 0.45
-extract_num() {
-  local key="$1"
-  local pattern="\"$key\"[[:space:]]*:[[:space:]]*([0-9]+\.?[0-9]*)"
-  if [[ $input =~ $pattern ]]; then
-    echo "${BASH_REMATCH[1]}"
-  fi
-}
-
-# Extract a string value from an arbitrary JSON string (not $input)
+# Extract a string value by key from a JSON string
+# Usage: extract_from "$json" "key"
 extract_from() {
   local json="$1" key="$2"
   local pattern="\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]+)\""
@@ -255,7 +290,8 @@ extract_from() {
   fi
 }
 
-# Extract a numeric value from an arbitrary JSON string (not $input)
+# Extract a numeric value by key from a JSON string
+# Usage: extract_num_from "$json" "key"
 extract_num_from() {
   local json="$1" key="$2"
   local pattern="\"$key\"[[:space:]]*:[[:space:]]*([0-9]+\.?[0-9]*)"
@@ -264,11 +300,16 @@ extract_num_from() {
   fi
 }
 
-# Strip ANSI escape sequences and control characters from untrusted strings
+# Convenience wrappers that operate on the global $input
+extract()     { extract_from "$input" "$1"; }
+extract_num() { extract_num_from "$input" "$1"; }
+
+# Strip ANSI escape sequences and control characters from untrusted strings.
+# Handles CSI (ESC[...), OSC terminated by BEL or ST (ESC\), and DCS/APC.
 sanitize() {
   local val="$1"
-  # Remove ANSI escape sequences (CSI and OSC)
-  val=$(printf '%s' "$val" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g')
+  # Remove ANSI escape sequences (CSI, OSC with BEL, OSC with ST)
+  val=$(printf '%s' "$val" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b\][^\x1b]*\x1b\\//g; s/\x1b[PX_^][^\x1b]*\x1b\\//g')
   # Remove remaining control characters (except space)
   val=$(printf '%s' "$val" | tr -d '\000-\037\177')
   echo "$val"
@@ -276,7 +317,7 @@ sanitize() {
 
 # Strip ANSI escapes for width measurement (used by truncation)
 strip_ansi() {
-  printf '%b' "$1" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g'
+  printf '%b' "$1" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b\][^\x1b]*\x1b\\//g'
 }
 
 visible_width() {
@@ -290,6 +331,9 @@ visible_width() {
 # Working directory: prefer workspace.current_dir, fall back to top-level cwd
 cwd=$(extract "current_dir")
 [ -z "$cwd" ] && cwd=$(extract "cwd")
+
+# Sanitize cwd before using it in git commands (防 directory traversal)
+cwd=$(sanitize "$cwd")
 
 # Model display name, e.g. "Opus", "Sonnet", "Haiku"
 model=$(extract "display_name")
@@ -315,8 +359,8 @@ worktree_name=$(extract "name")
 # Disambiguate: worktree.name only exists inside a "worktree" object.
 # Check if the input actually contains a worktree block.
 worktree=""
-local_pattern="\"worktree\"[[:space:]]*:[[:space:]]*\{"
-if [[ $input =~ $local_pattern ]]; then
+wt_pattern="\"worktree\"[[:space:]]*:[[:space:]]*\{"
+if [[ $input =~ $wt_pattern ]]; then
   worktree=$(sanitize "$worktree_name")
 fi
 
@@ -329,12 +373,13 @@ short_cwd=$(sanitize "$short_cwd")
 # ── Git Info ──────────────────────────────────────────────────
 # Detect branch, dirty count, ahead/behind, and stash count.
 # Uses -c core.fsmonitor=false to skip filesystem monitoring overhead.
+# Guard: cwd must be a real directory to avoid traversal via crafted JSON.
 branch=""
 dirty_count=""
 ahead_count=""
 behind_count=""
 stash_count=""
-if [ -n "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-parse --git-dir > /dev/null 2>&1; then
+if [ -n "$cwd" ] && [ -d "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-parse --git-dir > /dev/null 2>&1; then
   if [ "$show_branch" = "true" ]; then
     branch=$(git -C "$cwd" -c core.fsmonitor=false symbolic-ref --short HEAD 2>/dev/null \
       || git -C "$cwd" -c core.fsmonitor=false rev-parse --short HEAD 2>/dev/null)
@@ -368,7 +413,7 @@ fi
 # Credentials are read from:
 #   macOS  — Keychain ("Claude Code-credentials")
 #   Linux/Windows — ~/.claude/.credentials.json
-# The API call has a 3-second timeout and results are cached to disk.
+# The API call runs in a background subshell (never blocks the statusline).
 # If the fetch fails, no usage segments are shown (graceful degradation).
 
 USAGE_CACHE_FILE="${SCRIPT_DIR}/.statusline-usage-cache"
@@ -394,50 +439,47 @@ fetch_usage_token() {
 fetch_usage_data() {
   local token response
   token=$(fetch_usage_token) || return 1
-  if command -v curl > /dev/null 2>&1; then
-    response=$(curl -s --max-time 3 "https://api.anthropic.com/api/oauth/usage" \
-      -H "Authorization: Bearer $token" \
-      -H "anthropic-beta: oauth-2025-04-20" \
-      -H "Content-Type: application/json" 2>/dev/null) || return 1
-  elif command -v wget > /dev/null 2>&1; then
-    response=$(wget -qO- --timeout=3 \
-      --header="Authorization: Bearer $token" \
-      --header="anthropic-beta: oauth-2025-04-20" \
-      --header="Content-Type: application/json" \
-      "https://api.anthropic.com/api/oauth/usage" 2>/dev/null) || return 1
-  else
-    return 1
-  fi
+  HTTP_AUTH_HEADER="Authorization: Bearer $token"
+  response=$(http_get "https://api.anthropic.com/api/oauth/usage" 3) || { HTTP_AUTH_HEADER=""; return 1; }
+  HTTP_AUTH_HEADER=""
   # Sanity check: response must contain "five_hour" or "seven_day"
   case "$response" in
     *five_hour*|*seven_day*) ;;
     *) return 1 ;;
   esac
-  echo "$response" > "$USAGE_CACHE_FILE"
+  # Embed timestamp in cache for portable age checking (no stat needed)
+  echo "${NOW_EPOCH} ${response}" > "$USAGE_CACHE_FILE"
 }
 
-# Refresh cache if stale or missing (only when usage segments are enabled)
-if [ "$show_usage_5h" = "true" ] || [ "$show_usage_weekly" = "true" ]; then
+# Refresh cache if stale or missing (only when usage segments are enabled).
+# Runs in a background subshell so it never blocks the statusline.
+if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
   needs_fetch=false
   if [ ! -f "$USAGE_CACHE_FILE" ]; then
     needs_fetch=true
   else
-    # Check cache age using portable stat
-    now_epoch=$(date +%s)
-    if [[ "${OSTYPE:-}" == darwin* ]]; then
-      cache_mtime=$(stat -f%m "$USAGE_CACHE_FILE" 2>/dev/null) || cache_mtime=0
-    else
-      cache_mtime=$(stat -c%Y "$USAGE_CACHE_FILE" 2>/dev/null) || cache_mtime=0
-    fi
-    if [ $(( now_epoch - cache_mtime )) -gt "$usage_cache_seconds" ]; then
+    # Read embedded timestamp from cache (format: "epoch json...")
+    read -r cached_ts _ < "$USAGE_CACHE_FILE" 2>/dev/null || cached_ts=0
+    # Guard: cached_ts must be numeric (old-format cache files lack the timestamp)
+    case "$cached_ts" in *[!0-9]*) cached_ts=0 ;; esac
+    if [ $(( NOW_EPOCH - cached_ts )) -gt "$usage_cache_seconds" ] 2>/dev/null; then
       needs_fetch=true
     fi
   fi
-  [ "$needs_fetch" = "true" ] && fetch_usage_data 2>/dev/null || true
+  if [ "$needs_fetch" = "true" ]; then
+    ( fetch_usage_data 2>/dev/null ) &
+  fi
 
-  # Parse cached usage data
+  # Parse cached usage data (may be from previous run if fetch is in-flight)
   if [ -f "$USAGE_CACHE_FILE" ]; then
-    usage_json=$(cat "$USAGE_CACHE_FILE" 2>/dev/null) || usage_json=""
+    # Skip the embedded timestamp, rest is JSON
+    usage_json=""
+    { read -r _ usage_json; } < "$USAGE_CACHE_FILE" 2>/dev/null || usage_json=""
+    # Handle old-format cache (raw JSON without epoch prefix)
+    case "$usage_json" in
+      "{"*) ;; # already looks like JSON, good
+      *) usage_json="" ;; # discard non-JSON (stale or corrupt cache)
+    esac
     if [ -n "$usage_json" ]; then
       # Extract five_hour block
       fh_pattern='"five_hour"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
@@ -461,19 +503,10 @@ fi
 # for even consumption across the rolling window.
 calc_pacing_target() {
   local resets_at="$1" window_secs="$2"
-  local now_ts reset_ts start_ts elapsed target
-  now_ts=$(date +%s)
-  # Strip fractional seconds and timezone for portable date parsing
-  local clean_ts="${resets_at%%.*}"  # remove .000000+00:00
-  clean_ts="${clean_ts%%+*}"         # remove +00:00 if no fractional
-  if [[ "${OSTYPE:-}" == darwin* ]]; then
-    reset_ts=$(date -juf "%Y-%m-%dT%H:%M:%S" "$clean_ts" +%s 2>/dev/null) || return 1
-  else
-    # GNU date (Linux & MSYS2/Windows)
-    reset_ts=$(date -ud "${clean_ts}" +%s 2>/dev/null) || return 1
-  fi
+  local reset_ts start_ts elapsed target
+  reset_ts=$(iso_to_epoch "$resets_at") || return 1
   start_ts=$(( reset_ts - window_secs ))
-  elapsed=$(( now_ts - start_ts ))
+  elapsed=$(( NOW_EPOCH - start_ts ))
   [ "$elapsed" -lt 0 ] && elapsed=0
   [ "$elapsed" -gt "$window_secs" ] && elapsed=$window_secs
   target=$(( (elapsed * 100 + window_secs / 2) / window_secs ))
@@ -483,14 +516,8 @@ calc_pacing_target() {
 # Format a reset timestamp into a short human-readable label
 format_reset_label() {
   local resets_at="$1" style="$2"
-  local clean_ts="${resets_at%%.*}"
-  clean_ts="${clean_ts%%+*}"
   local reset_ts
-  if [[ "${OSTYPE:-}" == darwin* ]]; then
-    reset_ts=$(date -juf "%Y-%m-%dT%H:%M:%S" "$clean_ts" +%s 2>/dev/null) || return 1
-  else
-    reset_ts=$(date -ud "${clean_ts}" +%s 2>/dev/null) || return 1
-  fi
+  reset_ts=$(iso_to_epoch "$resets_at") || return 1
   # Round to nearest hour for cleaner display
   local rounded_ts=$(( (reset_ts + 1800) / 3600 * 3600 ))
   if [ "$style" = "time" ]; then
@@ -502,17 +529,15 @@ format_reset_label() {
     fi
   elif [ "$style" = "day" ]; then
     # Day + time like "Thu,3pm"
+    local d h
     if [[ "${OSTYPE:-}" == darwin* ]]; then
-      local d h
       d=$(date -r "$rounded_ts" '+%a' 2>/dev/null | tr '[:upper:]' '[:lower:]')
       h=$(date -r "$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-      echo "${d},${h}"
     else
-      local d h
       d=$(date -d "@$rounded_ts" '+%a' 2>/dev/null | tr '[:upper:]' '[:lower:]')
       h=$(date -d "@$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-      echo "${d},${h}"
     fi
+    echo "${d},${h}"
   fi
 }
 
@@ -625,7 +650,7 @@ if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
 fi
 
 # Weekly usage limit (priority 3)
-if [ "$show_usage_weekly" = "true" ] && [ -n "$usage_7d" ]; then
+if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
   u7_int="${usage_7d%%.*}"
   u7_target=""
   u7_label=""
@@ -711,7 +736,7 @@ if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
   cost_is_zero=false
   case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
   if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
-    cost_fmt=$(awk "BEGIN {printf \"%.2f\", $total_cost}" 2>/dev/null) || cost_fmt="$total_cost"
+    cost_fmt=$(printf "%.2f" "$total_cost" 2>/dev/null) || cost_fmt="$total_cost"
     add_seg "${CLR_WARN}\$${cost_fmt}${CLR_RESET}" 4 "session"
   fi
 fi
@@ -720,7 +745,7 @@ fi
 if [ "$show_cost_rate" = "true" ] && [ -n "$total_cost" ] && [ -n "$duration_ms" ]; then
   dur_int="${duration_ms%%.*}"
   if [ "$dur_int" -ge 60000 ] 2>/dev/null; then
-    cost_rate=$(awk "BEGIN {printf \"%.2f\", $total_cost / ($dur_int / 3600000)}" 2>/dev/null) || cost_rate=""
+    cost_rate=$(awk -v cost="$total_cost" -v dur="$dur_int" 'BEGIN {printf "%.2f", cost / (dur / 3600000)}' 2>/dev/null) || cost_rate=""
     if [ -n "$cost_rate" ]; then
       rate_is_zero=false
       case "$cost_rate" in 0.00) rate_is_zero=true ;; esac
@@ -753,6 +778,11 @@ if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
   # Mark segments as active (1) or dropped (0)
   for (( i=0; i<seg_idx; i++ )); do seg_active[$i]=1; done
 
+  # Pre-compute visible widths (avoids repeated subshell forks in the loop)
+  for (( i=0; i<seg_idx; i++ )); do
+    seg_widths[$i]=$(visible_width "${seg_vals[$i]}")
+  done
+
   # Calculate total visible width (segments + separators)
   calc_total_width() {
     local total=0 first=1
@@ -763,7 +793,7 @@ if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
       else
         total=$((total + 2))  # "  " separator
       fi
-      total=$((total + $(visible_width "${seg_vals[$i]}")))
+      total=$((total + ${seg_widths[$i]}))
     done
     echo "$total"
   }

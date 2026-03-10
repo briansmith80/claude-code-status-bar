@@ -34,8 +34,12 @@ README.md                  # User-facing docs
 - **Colour themes via CLR_* variables** — All ANSI codes use theme variables set by `apply_theme()`. Supports NO_COLOR standard.
 - **Array-based segments** — Segments are built into `seg_vals[]`/`seg_pris[]`/`seg_groups[]` arrays for truncation and grouping support.
 - **set -e safety** — Git commands that may fail (e.g., `rev-list` with no upstream) use `|| fallback` pattern to prevent script death.
-- **Usage limits via OAuth API** — Fetches 5-hour and weekly utilisation from `api.anthropic.com/api/oauth/usage`. Credentials are read from Keychain (macOS) or `~/.claude/.credentials.json` (Linux/Windows). Cached to disk, refreshes every 60s.
+- **Usage limits via OAuth API** — Fetches 5-hour and 7-day utilisation from `api.anthropic.com/api/oauth/usage` in a background subshell. Credentials from Keychain (macOS) or `~/.claude/.credentials.json` (Linux/Windows). Cached with embedded timestamp, refreshes every 60s.
 - **Pacing markers** — Progress bars support an optional `│` marker (CLR_PACE) showing where usage *should* be for even consumption across the window.
+- **Token security** — OAuth tokens are passed to curl via `--config -` (stdin), not command-line args, so they're hidden from `ps`. wget uses `--max-redirect=0` to prevent token leakage on redirects.
+- **Shared helpers** — `http_get()` consolidates curl/wget fallback, `iso_to_epoch()` consolidates cross-platform date parsing. Avoids duplicated patterns.
+- **`umask 077`** — All cache/temp files are created with restrictive permissions (not world-readable).
+- **`NOW_EPOCH` cached once** — A single `date +%s` call at startup is reused everywhere to minimise fork overhead.
 
 ## How to release a new version
 

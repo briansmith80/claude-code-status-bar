@@ -7,17 +7,37 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - **5-hour usage limit segment** (`show_usage_5h`) — shows rolling 5-hour utilization from the Anthropic API with a colour-coded progress bar and reset time label
-- **Weekly usage limit segment** (`show_usage_weekly`) — shows rolling 7-day utilization with reset day and time
+- **7-day usage limit segment** (`show_usage_7d`) — shows rolling 7-day utilization with reset day and time
 - **Pacing markers** — a `│` marker on usage bars shows where you *should* be for even consumption across the window; helps avoid hitting limits early
 - **Usage cache** (`usage_cache_seconds`) — API responses cached to `~/.claude/.statusline-usage-cache`, refreshes every 60 seconds by default
 - **Cross-platform credential reading** — macOS Keychain, Linux `~/.claude/.credentials.json`, Windows/MSYS2 `~/.claude/.credentials.json`
 - **`CLR_PACE` theme variable** — pacing marker colour added to all themes (default, nord, dracula, solarized, mono)
-- **`extract_from()` / `extract_num_from()` helpers** — JSON parsing from arbitrary strings (not just stdin), used by usage API parsing
+- `http_get()` shared helper — consolidates curl/wget fallback pattern (was duplicated 3 times)
+- `iso_to_epoch()` shared helper — consolidates cross-platform ISO timestamp parsing
+- `umask 077` — cache and temp files are no longer world-readable
+- Segment priority table documented in config section comments
 - CHANGELOG.md
 
 ### Changed
 
 - `build_progress_bar()` now accepts an optional second argument for a pacing target percentage
+- `extract()` / `extract_num()` are now thin wrappers around `extract_from()` / `extract_num_from()` (consolidated from 4 independent functions to 2 + 2 wrappers)
+- Usage API fetch runs in background subshell (never blocks the statusline)
+- Usage cache uses embedded timestamp format (portable, no platform-specific `stat` needed)
+- `input=$(cat)` replaced with `read -r -d ''` (avoids fork)
+- Version reading uses `read -r` instead of `tr` (avoids fork)
+- `NOW_EPOCH` cached once at startup (eliminates 5-9 repeated `date +%s` forks)
+- Cost formatting uses `printf` builtin instead of `awk` subprocess
+
+### Fixed
+
+- **Security:** AWK code injection via cost values — now uses `-v` variable passing
+- **Security:** OAuth token was visible in `ps aux` — curl now uses `--config -` to pass auth headers via stdin
+- **Security:** wget followed redirects with Bearer token — added `--max-redirect=0`
+- **Security:** `cwd` from JSON input was not sanitized before `git -C` — now passes through `sanitize()` and `[ -d ]` guard
+- **Security:** ANSI sanitization now handles ST-terminated OSC sequences and DCS/APC escapes
+- Cache file race condition when reading old-format or partially-written files
+- `show_usage_weekly` renamed to `show_usage_7d` for naming consistency (old name still accepted via backwards compat shim)
 
 ## [1.2.0] - 2026-03-07
 
