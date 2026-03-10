@@ -45,7 +45,9 @@ http_get() {
   if command -v curl > /dev/null 2>&1; then
     if [ -n "${HTTP_AUTH_HEADER:-}" ]; then
       # Pass auth header via stdin to avoid exposing token in process list
-      curl -s --max-time "$timeout" --config - "$url" 2>/dev/null <<EOF
+      # -q suppresses .curlrc (e.g., Laragon's cainfo= causes warnings on MSYS2)
+      # --fail-with-body returns exit code 22 on HTTP 4xx/5xx (e.g., 429 rate limit)
+      curl -q -s --fail-with-body --max-time "$timeout" --config - "$url" 2>/dev/null <<EOF
 header = "${HTTP_AUTH_HEADER}"
 header = "anthropic-beta: oauth-2025-04-20"
 header = "Content-Type: application/json"
@@ -457,6 +459,7 @@ fetch_usage_data() {
 # Runs in a background subshell so it never blocks the statusline.
 if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
   needs_fetch=false
+  usage_stale=false
   if [ ! -f "$USAGE_CACHE_FILE" ]; then
     needs_fetch=true
   else
@@ -464,8 +467,13 @@ if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
     read -r cached_ts _ < "$USAGE_CACHE_FILE" 2>/dev/null || cached_ts=0
     # Guard: cached_ts must be numeric (old-format cache files lack the timestamp)
     case "$cached_ts" in *[!0-9]*) cached_ts=0 ;; esac
-    if [ $(( NOW_EPOCH - cached_ts )) -gt "$usage_cache_seconds" ] 2>/dev/null; then
+    cache_age=$(( NOW_EPOCH - cached_ts ))
+    if [ "$cache_age" -gt "$usage_cache_seconds" ] 2>/dev/null; then
       needs_fetch=true
+    fi
+    # Mark stale if cache is older than 3 minutes (API may be rate-limiting us)
+    if [ "$cache_age" -gt 180 ] 2>/dev/null; then
+      usage_stale=true
     fi
   fi
   if [ "$needs_fetch" = "true" ]; then
@@ -643,6 +651,11 @@ if [ "$show_context_bar" = "true" ]; then
   add_seg "${warn_prefix}${progress_bar} ${pct_int}%${ctx_suffix}" 2 "ctx"
 fi
 
+# Staleness suffix — appended to usage % when cache is > 3 min old
+# (API rate-limiting can prevent refreshes, so stale data gets a ~ marker)
+usage_stale_suffix=""
+[ "${usage_stale:-false}" = "true" ] && usage_stale_suffix="~"
+
 # 5-hour usage limit (priority 3)
 if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
   u5_int="${usage_5h%%.*}"
@@ -654,7 +667,7 @@ if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
     [ -n "$u5_reset_label" ] && u5_label="(${u5_reset_label})"
   fi
   u5_bar=$(build_progress_bar "$u5_int" "$u5_target")
-  add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_int}%" 3 "usage"
+  add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_int}%${usage_stale_suffix}" 3 "usage"
 fi
 
 # Weekly usage limit (priority 3)
@@ -668,7 +681,7 @@ if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
     [ -n "$u7_reset_label" ] && u7_label="(${u7_reset_label})"
   fi
   u7_bar=$(build_progress_bar "$u7_int" "$u7_target")
-  add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_int}%" 3 "usage"
+  add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_int}%${usage_stale_suffix}" 3 "usage"
 fi
 
 # Lines changed (priority 5)
