@@ -12,6 +12,7 @@
 #   - Session duration
 #   - Worktree indicator (when active)
 #   - Cumulative session cost in USD
+#   - 5-hour and weekly usage limits (from Anthropic OAuth API)
 #
 # This script receives JSON via stdin each time the statusline refreshes
 # (after every assistant message, permission change, or vim mode toggle).
@@ -128,6 +129,9 @@ show_duration=true
 show_worktree=true
 show_cost=true
 show_cost_rate=false
+show_usage_5h=true
+show_usage_weekly=true
+usage_cache_seconds=60
 auto_hide=true
 use_icons=true
 context_warn_threshold=80
@@ -160,6 +164,7 @@ apply_theme() {
       CLR_BAR_OK="\033[38;5;108m"  # aurora green
       CLR_BAR_MED="\033[38;5;179m" # aurora yellow
       CLR_BAR_HIGH="\033[38;5;174m" # aurora red
+      CLR_PACE="\033[38;5;199m"    # hot pink pacing marker
       CLR_RESET="\033[0m"
       ;;
     dracula)
@@ -173,6 +178,7 @@ apply_theme() {
       CLR_BAR_OK="\033[38;5;84m"   # green
       CLR_BAR_MED="\033[38;5;228m" # yellow
       CLR_BAR_HIGH="\033[38;5;210m" # red
+      CLR_PACE="\033[38;5;212m"    # pink pacing marker
       CLR_RESET="\033[0m"
       ;;
     solarized)
@@ -186,12 +192,13 @@ apply_theme() {
       CLR_BAR_OK="\033[38;5;64m"  # green
       CLR_BAR_MED="\033[38;5;136m" # yellow
       CLR_BAR_HIGH="\033[38;5;160m" # red
+      CLR_PACE="\033[38;5;125m"    # magenta pacing marker
       CLR_RESET="\033[0m"
       ;;
     mono)
       CLR_DIR="" CLR_BRANCH="" CLR_MODEL=""
       CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO=""
-      CLR_BAR_OK="" CLR_BAR_MED="" CLR_BAR_HIGH=""
+      CLR_BAR_OK="" CLR_BAR_MED="" CLR_BAR_HIGH="" CLR_PACE=""
       CLR_RESET=""
       ;;
     *) # default — original colours
@@ -205,6 +212,7 @@ apply_theme() {
       CLR_BAR_OK="\033[0;32m"  # green
       CLR_BAR_MED="\033[0;33m" # yellow
       CLR_BAR_HIGH="\033[0;31m" # red
+      CLR_PACE="\033[38;5;199m"  # hot pink pacing marker
       CLR_RESET="\033[0m"
       ;;
   esac
@@ -234,6 +242,24 @@ extract_num() {
   local key="$1"
   local pattern="\"$key\"[[:space:]]*:[[:space:]]*([0-9]+\.?[0-9]*)"
   if [[ $input =~ $pattern ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+# Extract a string value from an arbitrary JSON string (not $input)
+extract_from() {
+  local json="$1" key="$2"
+  local pattern="\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]+)\""
+  if [[ $json =~ $pattern ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+# Extract a numeric value from an arbitrary JSON string (not $input)
+extract_num_from() {
+  local json="$1" key="$2"
+  local pattern="\"$key\"[[:space:]]*:[[:space:]]*([0-9]+\.?[0-9]*)"
+  if [[ $json =~ $pattern ]]; then
     echo "${BASH_REMATCH[1]}"
   fi
 }
@@ -337,16 +363,175 @@ if [ -n "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-parse --git-dir > 
   fi
 fi
 
+# ── Usage Limits (5-hour and 7-day) ─────────────────────────
+# Fetches utilisation data from the Anthropic OAuth API and caches it.
+# Credentials are read from:
+#   macOS  — Keychain ("Claude Code-credentials")
+#   Linux/Windows — ~/.claude/.credentials.json
+# The API call has a 3-second timeout and results are cached to disk.
+# If the fetch fails, no usage segments are shown (graceful degradation).
+
+USAGE_CACHE_FILE="${SCRIPT_DIR}/.statusline-usage-cache"
+
+usage_5h="" usage_5h_resets="" usage_7d="" usage_7d_resets=""
+
+fetch_usage_token() {
+  local creds="" token=""
+  if [[ "${OSTYPE:-}" == darwin* ]]; then
+    # macOS: read from Keychain
+    creds=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null) || creds=""
+  fi
+  # Linux / Windows / macOS fallback: read from credentials file
+  if [ -z "$creds" ] && [ -f "${SCRIPT_DIR}/.credentials.json" ]; then
+    creds=$(cat "${SCRIPT_DIR}/.credentials.json" 2>/dev/null) || creds=""
+  fi
+  [ -z "$creds" ] && return 1
+  token=$(extract_from "$creds" "accessToken")
+  [ -z "$token" ] && return 1
+  echo "$token"
+}
+
+fetch_usage_data() {
+  local token response
+  token=$(fetch_usage_token) || return 1
+  if command -v curl > /dev/null 2>&1; then
+    response=$(curl -s --max-time 3 "https://api.anthropic.com/api/oauth/usage" \
+      -H "Authorization: Bearer $token" \
+      -H "anthropic-beta: oauth-2025-04-20" \
+      -H "Content-Type: application/json" 2>/dev/null) || return 1
+  elif command -v wget > /dev/null 2>&1; then
+    response=$(wget -qO- --timeout=3 \
+      --header="Authorization: Bearer $token" \
+      --header="anthropic-beta: oauth-2025-04-20" \
+      --header="Content-Type: application/json" \
+      "https://api.anthropic.com/api/oauth/usage" 2>/dev/null) || return 1
+  else
+    return 1
+  fi
+  # Sanity check: response must contain "five_hour" or "seven_day"
+  case "$response" in
+    *five_hour*|*seven_day*) ;;
+    *) return 1 ;;
+  esac
+  echo "$response" > "$USAGE_CACHE_FILE"
+}
+
+# Refresh cache if stale or missing (only when usage segments are enabled)
+if [ "$show_usage_5h" = "true" ] || [ "$show_usage_weekly" = "true" ]; then
+  needs_fetch=false
+  if [ ! -f "$USAGE_CACHE_FILE" ]; then
+    needs_fetch=true
+  else
+    # Check cache age using portable stat
+    now_epoch=$(date +%s)
+    if [[ "${OSTYPE:-}" == darwin* ]]; then
+      cache_mtime=$(stat -f%m "$USAGE_CACHE_FILE" 2>/dev/null) || cache_mtime=0
+    else
+      cache_mtime=$(stat -c%Y "$USAGE_CACHE_FILE" 2>/dev/null) || cache_mtime=0
+    fi
+    if [ $(( now_epoch - cache_mtime )) -gt "$usage_cache_seconds" ]; then
+      needs_fetch=true
+    fi
+  fi
+  [ "$needs_fetch" = "true" ] && fetch_usage_data 2>/dev/null || true
+
+  # Parse cached usage data
+  if [ -f "$USAGE_CACHE_FILE" ]; then
+    usage_json=$(cat "$USAGE_CACHE_FILE" 2>/dev/null) || usage_json=""
+    if [ -n "$usage_json" ]; then
+      # Extract five_hour block
+      fh_pattern='"five_hour"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
+      if [[ $usage_json =~ $fh_pattern ]]; then
+        fh_block="${BASH_REMATCH[1]}"
+        usage_5h=$(extract_num_from "$fh_block" "utilization")
+        usage_5h_resets=$(extract_from "$fh_block" "resets_at")
+      fi
+      # Extract seven_day block
+      sd_pattern='"seven_day"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
+      if [[ $usage_json =~ $sd_pattern ]]; then
+        sd_block="${BASH_REMATCH[1]}"
+        usage_7d=$(extract_num_from "$sd_block" "utilization")
+        usage_7d_resets=$(extract_from "$sd_block" "resets_at")
+      fi
+    fi
+  fi
+fi
+
+# Calculate pacing targets — what percentage you *should* have used
+# for even consumption across the rolling window.
+calc_pacing_target() {
+  local resets_at="$1" window_secs="$2"
+  local now_ts reset_ts start_ts elapsed target
+  now_ts=$(date +%s)
+  # Strip fractional seconds and timezone for portable date parsing
+  local clean_ts="${resets_at%%.*}"  # remove .000000+00:00
+  clean_ts="${clean_ts%%+*}"         # remove +00:00 if no fractional
+  if [[ "${OSTYPE:-}" == darwin* ]]; then
+    reset_ts=$(date -juf "%Y-%m-%dT%H:%M:%S" "$clean_ts" +%s 2>/dev/null) || return 1
+  else
+    # GNU date (Linux & MSYS2/Windows)
+    reset_ts=$(date -ud "${clean_ts}" +%s 2>/dev/null) || return 1
+  fi
+  start_ts=$(( reset_ts - window_secs ))
+  elapsed=$(( now_ts - start_ts ))
+  [ "$elapsed" -lt 0 ] && elapsed=0
+  [ "$elapsed" -gt "$window_secs" ] && elapsed=$window_secs
+  target=$(( (elapsed * 100 + window_secs / 2) / window_secs ))
+  echo "$target"
+}
+
+# Format a reset timestamp into a short human-readable label
+format_reset_label() {
+  local resets_at="$1" style="$2"
+  local clean_ts="${resets_at%%.*}"
+  clean_ts="${clean_ts%%+*}"
+  local reset_ts
+  if [[ "${OSTYPE:-}" == darwin* ]]; then
+    reset_ts=$(date -juf "%Y-%m-%dT%H:%M:%S" "$clean_ts" +%s 2>/dev/null) || return 1
+  else
+    reset_ts=$(date -ud "${clean_ts}" +%s 2>/dev/null) || return 1
+  fi
+  # Round to nearest hour for cleaner display
+  local rounded_ts=$(( (reset_ts + 1800) / 3600 * 3600 ))
+  if [ "$style" = "time" ]; then
+    # Short time like "11pm" or "3am"
+    if [[ "${OSTYPE:-}" == darwin* ]]; then
+      date -r "$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' '
+    else
+      date -d "@$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' '
+    fi
+  elif [ "$style" = "day" ]; then
+    # Day + time like "Thu,3pm"
+    if [[ "${OSTYPE:-}" == darwin* ]]; then
+      local d h
+      d=$(date -r "$rounded_ts" '+%a' 2>/dev/null | tr '[:upper:]' '[:lower:]')
+      h=$(date -r "$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+      echo "${d},${h}"
+    else
+      local d h
+      d=$(date -d "@$rounded_ts" '+%a' 2>/dev/null | tr '[:upper:]' '[:lower:]')
+      h=$(date -d "@$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+      echo "${d},${h}"
+    fi
+  fi
+}
+
 # ── Context Window Progress Bar ───────────────────────────────
 # Visual bar showing how much of the context window has been consumed.
 # Colour shifts from green → yellow → red as usage increases.
-# Note: only context window data is available — account-level usage
-# limits are not exposed in the statusline JSON input.
 build_progress_bar() {
   local pct=${1:-0}
+  local target_pct=${2:-}
   local width=10
   local filled=$(( pct * width / 100 ))
-  local empty=$(( width - filled ))
+  [ "$filled" -gt "$width" ] && filled=$width
+
+  # Calculate target marker position (-1 = no marker)
+  local target_pos=-1
+  if [ -n "$target_pct" ] && [ "$target_pct" -ge 0 ] 2>/dev/null && [ "$target_pct" -lt 100 ]; then
+    target_pos=$(( target_pct * width / 100 ))
+    [ "$target_pos" -ge "$width" ] && target_pos=-1
+  fi
 
   # Colour based on usage: green < 50%, yellow 50-79%, red 80%+
   local colour
@@ -359,8 +544,15 @@ build_progress_bar() {
   fi
 
   local bar="${colour}"
-  for (( i=0; i<filled; i++ )); do bar+="█"; done
-  for (( i=0; i<empty; i++ ));  do bar+="░"; done
+  for (( i=0; i<width; i++ )); do
+    if [ "$i" -eq "$target_pos" ]; then
+      bar+="${CLR_PACE}│${colour}"
+    elif [ "$i" -lt "$filled" ]; then
+      bar+="█"
+    else
+      bar+="░"
+    fi
+  done
   bar+="$CLR_RESET"
 
   echo "$bar"
@@ -416,6 +608,34 @@ if [ "$show_context_bar" = "true" ]; then
     ctx_suffix=" of ${ctx_k}k"
   fi
   add_seg "${warn_prefix}${progress_bar} ${pct_int}%${ctx_suffix}" 2 "ctx"
+fi
+
+# 5-hour usage limit (priority 3)
+if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
+  u5_int="${usage_5h%%.*}"
+  u5_target=""
+  u5_label=""
+  if [ -n "$usage_5h_resets" ]; then
+    u5_target=$(calc_pacing_target "$usage_5h_resets" $((5 * 3600))) || u5_target=""
+    u5_reset_label=$(format_reset_label "$usage_5h_resets" "time") || u5_reset_label=""
+    [ -n "$u5_reset_label" ] && u5_label="(${u5_reset_label})"
+  fi
+  u5_bar=$(build_progress_bar "$u5_int" "$u5_target")
+  add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_int}%" 3 "usage"
+fi
+
+# Weekly usage limit (priority 3)
+if [ "$show_usage_weekly" = "true" ] && [ -n "$usage_7d" ]; then
+  u7_int="${usage_7d%%.*}"
+  u7_target=""
+  u7_label=""
+  if [ -n "$usage_7d_resets" ]; then
+    u7_target=$(calc_pacing_target "$usage_7d_resets" $((7 * 86400))) || u7_target=""
+    u7_reset_label=$(format_reset_label "$usage_7d_resets" "day") || u7_reset_label=""
+    [ -n "$u7_reset_label" ] && u7_label="(${u7_reset_label})"
+  fi
+  u7_bar=$(build_progress_bar "$u7_int" "$u7_target")
+  add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_int}%" 3 "usage"
 fi
 
 # Lines changed (priority 5)

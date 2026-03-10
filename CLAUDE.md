@@ -21,6 +21,7 @@ README.md                  # User-facing docs
 | `.statusline-version` | Local copy of VERSION | Yes |
 | `statusline.conf` | User config overrides | **Never** |
 | `.statusline-update-cache` | Update check cache (timestamp + version) | Cleared on update |
+| `.statusline-usage-cache` | Usage API response cache (JSON) | Auto-refreshes every 60s |
 
 ## Key design decisions
 
@@ -33,6 +34,8 @@ README.md                  # User-facing docs
 - **Colour themes via CLR_* variables** — All ANSI codes use theme variables set by `apply_theme()`. Supports NO_COLOR standard.
 - **Array-based segments** — Segments are built into `seg_vals[]`/`seg_pris[]`/`seg_groups[]` arrays for truncation and grouping support.
 - **set -e safety** — Git commands that may fail (e.g., `rev-list` with no upstream) use `|| fallback` pattern to prevent script death.
+- **Usage limits via OAuth API** — Fetches 5-hour and weekly utilisation from `api.anthropic.com/api/oauth/usage`. Credentials are read from Keychain (macOS) or `~/.claude/.credentials.json` (Linux/Windows). Cached to disk, refreshes every 60s.
+- **Pacing markers** — Progress bars support an optional `│` marker (CLR_PACE) showing where usage *should* be for even consumption across the window.
 
 ## How to release a new version
 
@@ -83,3 +86,5 @@ cp statusline-command.sh ~/.claude/statusline-command.sh
 - **GitHub raw CDN caches aggressively** — After pushing VERSION, it can take 5+ minutes for `raw.githubusercontent.com` to serve the new content.
 - **Local install gets stale** — After editing the repo's `statusline-command.sh`, remember to copy it to `~/.claude/` for your own status bar to update.
 - **`set -e` in subshells** — Background update fetch runs in `( ) &`. If curl/wget fails inside, only the subshell dies (by design).
+- **Usage API requires OAuth scopes** — The token must have `user:profile` scope. Tokens created via `claude setup-token` only have `user:inference` and won't work. Users need browser OAuth (quit all CC instances and restart).
+- **`date` portability for pacing** — macOS uses `date -juf`, GNU/MSYS2 uses `date -ud`. The `format_reset_label()` and `calc_pacing_target()` functions handle both.
