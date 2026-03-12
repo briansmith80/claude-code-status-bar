@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-03-12
+
+### Added
+
+- **`extract_block()` helper** — new function for extracting nested JSON object blocks by key, enabling access to `vim`, `agent`, `workspace`, and `context_window` sub-objects
+- **Vim mode segment** (`show_vim_mode`) — shows NORMAL/INSERT from `vim.mode` in the JSON input (default: true)
+- **Agent name segment** (`show_agent`) — shows the agent name from `agent.name` when running with `--agent` (default: true)
+- **Token count segment** (`show_tokens`) — shows cumulative input/output tokens as `Xk in Yk out` from the `context_window` block (default: false, opt-in)
+- **200k token warning** — automatic `⚠ 200k+` warning when `exceeds_200k_tokens` is true in the JSON input (no config toggle — always active)
+- **`bar_width` config option** — configurable progress bar width in characters (default: 10), replaces previously hardcoded value
+- **`branch_max_length` config option** — truncates long branch names with an ellipsis when set (default: empty = no limit)
+
+### Changed
+
+- **Directory segment** now prefers `workspace.current_dir` (extracted via `extract_block`) with fallback to top-level `cwd`
+- `build_progress_bar()` now uses `bar_width` config instead of hardcoded width
+
 ## [1.3.0] - 2026-03-10
 
 ### Added

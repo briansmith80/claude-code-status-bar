@@ -38,15 +38,18 @@ README.md                  # User-facing docs
 - **Pacing markers** — Progress bars support an optional `│` marker (CLR_PACE) showing where usage *should* be for even consumption across the window.
 - **Token security** — OAuth tokens are passed to curl via `--config -` (stdin), not command-line args, so they're hidden from `ps`. wget uses `--max-redirect=0` to prevent token leakage on redirects. **Note:** the wget fallback still passes `--header` as a CLI argument (visible in `ps aux`). Curl is strongly preferred; wget is a last-resort fallback.
 - **Shared helpers** — `http_get()` consolidates curl/wget fallback, `iso_to_epoch()` consolidates cross-platform date parsing. Avoids duplicated patterns.
+- **`extract_block()` for nested JSON** — Extracts a JSON object block by key (content between `{ }`) to support nested structures like `vim`, `agent`, `workspace`, and `context_window`. Used by vim mode, agent name, token count, and workspace directory segments.
 - **`umask 077`** — All cache/temp files are created with restrictive permissions (not world-readable).
 - **`NOW_EPOCH` cached once** — A single `date +%s` call at startup is reused everywhere to minimise fork overhead.
+- **`bar_width` config** — Progress bar width is configurable (default 10), used by `build_progress_bar()`.
+- **`branch_max_length` config** — Long branch names are truncated with an ellipsis when set.
 
 ## Roadmap & Sprints
 
 See [ROADMAP.md](ROADMAP.md) for the feature roadmap and competitive landscape.
 See [SPRINTS.md](SPRINTS.md) for the validated sprint plan with dependency ordering and effort estimates.
 
-Current milestone: **Sprint 0 (v1.3.1)** — Housekeeping (bug fixes + docs).
+Current milestone: **Sprint 2 (v1.5.0)** — Visual Polish.
 
 ## How to release a new version
 
@@ -63,6 +66,12 @@ Test the script locally with sample JSON:
 
 ```bash
 echo '{"cwd":"/tmp","display_name":"Sonnet","used_percentage":60,"total_cost_usd":0.50}' | bash statusline-command.sh
+```
+
+Test with new v1.4.0 fields (vim mode, agent, workspace, tokens, 200k warning):
+
+```bash
+echo '{"cwd":"/tmp","display_name":"Sonnet","used_percentage":60,"total_cost_usd":0.50,"vim":{"mode":"NORMAL"},"agent":{"name":"my-agent"},"workspace":{"current_dir":"/home/user/project"},"context_window":{"total_input_tokens":45000,"total_output_tokens":12000},"exceeds_200k_tokens":true}' | bash statusline-command.sh
 ```
 
 Test update notification by writing a fake cache:

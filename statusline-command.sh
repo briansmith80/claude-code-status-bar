@@ -189,6 +189,11 @@ use_groups=false
 group_open="["
 group_close="]"
 colour_theme="default"
+show_vim_mode=true
+show_agent=true
+show_tokens=false
+bar_width=10
+branch_max_length=""
 
 # Load user overrides (if any).
 # Note: this file has the same trust level as .bashrc — it can contain
@@ -304,6 +309,16 @@ extract_num_from() {
   fi
 }
 
+# Extract a JSON object block by key, returning content between { }
+# Usage: extract_block "$json" "key"
+extract_block() {
+  local json="$1" key="$2"
+  local pattern="\"$key\"[[:space:]]*:[[:space:]]*\{([^}]+)\}"
+  if [[ $json =~ $pattern ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
 # Convenience wrappers that operate on the global $input
 extract()     { extract_from "$input" "$1"; }
 extract_num() { extract_num_from "$input" "$1"; }
@@ -333,7 +348,9 @@ visible_width() {
 # ── Extract Fields ────────────────────────────────────────────
 
 # Working directory: prefer workspace.current_dir, fall back to top-level cwd
-cwd=$(extract "current_dir")
+cwd=""
+ws_block=$(extract_block "$input" "workspace")
+[ -n "$ws_block" ] && cwd=$(extract_from "$ws_block" "current_dir")
 [ -z "$cwd" ] && cwd=$(extract "cwd")
 
 # Sanitize cwd before using it in git commands (防 directory traversal)
@@ -388,6 +405,9 @@ if [ -n "$cwd" ] && [ -d "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-p
     branch=$(git -C "$cwd" -c core.fsmonitor=false symbolic-ref --short HEAD 2>/dev/null \
       || git -C "$cwd" -c core.fsmonitor=false rev-parse --short HEAD 2>/dev/null)
     branch=$(sanitize "$branch")
+    if [ -n "$branch_max_length" ] && [ "${#branch}" -gt "$branch_max_length" ] 2>/dev/null; then
+      branch="${branch:0:$branch_max_length}…"
+    fi
   fi
 
   # Count uncommitted files (staged + unstaged + untracked).
@@ -594,7 +614,7 @@ format_reset_label() {
 build_progress_bar() {
   local pct=${1:-0}
   local target_pct=${2:-}
-  local width=10
+  local width="${bar_width:-10}"
   local filled=$(( pct * width / 100 ))
   [ "$filled" -gt "$width" ] && filled=$width
 
@@ -664,11 +684,34 @@ if [ "$show_branch" = "true" ] && [ -n "$branch" ]; then
 fi
 [ -n "$dir_branch" ] && add_seg "$dir_branch" 1
 
+# Vim mode indicator (priority 3)
+if [ "$show_vim_mode" = "true" ]; then
+  vim_block=$(extract_block "$input" "vim")
+  if [ -n "$vim_block" ]; then
+    vim_mode=$(extract_from "$vim_block" "mode")
+    [ -n "$vim_mode" ] && add_seg "${CLR_INFO}${vim_mode}${CLR_RESET}" 3
+  fi
+fi
+
 # Model (priority 3)
 if [ "$show_model" = "true" ]; then
   model_icon=""
   [ "$use_icons" = "true" ] && model_icon="⚙ "
   add_seg "${CLR_MODEL}${model_icon}${model:-?}${CLR_RESET}" 3 "ctx"
+fi
+
+# Agent name (priority 3)
+if [ "$show_agent" = "true" ]; then
+  agent_block=$(extract_block "$input" "agent")
+  if [ -n "$agent_block" ]; then
+    agent_name=$(extract_from "$agent_block" "name")
+    if [ -n "$agent_name" ]; then
+      agent_name=$(sanitize "$agent_name")
+      agent_icon=""
+      [ "$use_icons" = "true" ] && agent_icon="⚡ "
+      add_seg "${CLR_MODEL}${agent_icon}${agent_name}${CLR_RESET}" 3
+    fi
+  fi
 fi
 
 # Context bar (priority 2)
@@ -686,6 +729,26 @@ if [ "$show_context_bar" = "true" ]; then
     ctx_suffix=" of ${ctx_k}k"
   fi
   add_seg "${warn_prefix}${progress_bar} ${pct_int}%${ctx_suffix}" 2 "ctx"
+fi
+
+# 200k token warning (automatic — no config toggle)
+exceed_pattern='"exceeds_200k_tokens"[[:space:]]*:[[:space:]]*true'
+if [[ $input =~ $exceed_pattern ]]; then
+  add_seg "${CLR_WARN}⚠ 200k+${CLR_RESET}" 2 "ctx"
+fi
+
+# Token counts (priority 5)
+if [ "$show_tokens" = "true" ]; then
+  cw_block=$(extract_block "$input" "context_window")
+  if [ -n "$cw_block" ]; then
+    tok_in=$(extract_num_from "$cw_block" "total_input_tokens")
+    tok_out=$(extract_num_from "$cw_block" "total_output_tokens")
+    tok_in_k=$(( ${tok_in:-0} / 1000 ))
+    tok_out_k=$(( ${tok_out:-0} / 1000 ))
+    if [ "$auto_hide" != "true" ] || [ "$tok_in_k" -gt 0 ] || [ "$tok_out_k" -gt 0 ]; then
+      add_seg "${CLR_INFO}${tok_in_k}k in ${tok_out_k}k out${CLR_RESET}" 5
+    fi
+  fi
 fi
 
 # Staleness suffix — appended to usage % when cache is > 3 min old

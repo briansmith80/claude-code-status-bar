@@ -25,20 +25,22 @@ Feature roadmap for claude-code-status-bar. Focused on high-value additions that
 
 ---
 
-## v1.4.0 — New Segments
+## v1.4.0 — New Segments :white_check_mark:
 
 Consume API fields we're already receiving but ignoring. Pure additive — no refactoring.
 
+**Status**: Complete.
+
 | Item | Type | Description |
 |------|------|-------------|
-| `extract_block()` helper — #1 | infra | Nested JSON extraction for new API schema |
-| Vim mode segment — #2 | feature | Show NORMAL/INSERT when vim mode enabled |
-| Agent name segment — #3 | feature | Show agent name when running with `--agent` |
-| Token count segment — #4 | feature | Cumulative in/out token counts |
-| 200k token warning — #6 | feature | Automatic warning when tokens exceed 200k |
-| Use `workspace.current_dir` — #8 | enhancement | Prefer new API field with `cwd` fallback |
-| `bar_width` config — #9 | config | Configurable progress bar width (currently hardcoded to 10) |
-| `branch_max_length` config — #10 | config | Truncate long branch names |
+| ~~`extract_block()` helper — #1~~ | infra | Nested JSON extraction for new API schema |
+| ~~Vim mode segment — #2~~ | feature | Show NORMAL/INSERT when vim mode enabled |
+| ~~Agent name segment — #3~~ | feature | Show agent name when running with `--agent` |
+| ~~Token count segment — #4~~ | feature | Cumulative in/out token counts |
+| ~~200k token warning — #6~~ | feature | Automatic warning when tokens exceed 200k |
+| ~~Use `workspace.current_dir` — #8~~ | enhancement | Prefer new API field with `cwd` fallback |
+| ~~`bar_width` config — #9~~ | config | Configurable progress bar width (default 10) |
+| ~~`branch_max_length` config — #10~~ | config | Truncate long branch names |
 
 ---
 

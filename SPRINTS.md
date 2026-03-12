@@ -22,20 +22,20 @@ Lean sprint plan derived from [ROADMAP.md](ROADMAP.md). Three focused releases, 
 
 ---
 
-## Sprint 1: v1.4.0 — New Segments
+## Sprint 1: v1.4.0 — New Segments :white_check_mark:
 
-**Theme**: Consume API fields we're already receiving. Pure additive — no refactoring.
+**Status**: Complete.
 
 | | # | Item | Type | Effort |
 |---|---|------|------|--------|
-| [ ] | 1.0 | `extract_block()` helper for nested JSON — #1 | infra | ~15 lines |
-| [ ] | 1.1 | Vim mode segment (`vim.mode`) — #2 | feature | ~12 lines |
-| [ ] | 1.2 | Agent name segment (`agent.name`) — #3 | feature | ~12 lines |
-| [ ] | 1.3 | Token count segment (input/output) — #4 | feature | ~15 lines |
-| [ ] | 1.4 | 200k token warning (`exceeds_200k_tokens`) — #6 | feature | ~8 lines |
-| [ ] | 1.5 | Use `workspace.current_dir` with `cwd` fallback — #8 | enhancement | ~3 lines |
-| [ ] | 1.6 | `bar_width` config option — #9 | config | ~5 lines |
-| [ ] | 1.7 | `branch_max_length` config option — #10 | config | ~8 lines |
+| [x] | 1.0 | `extract_block()` helper for nested JSON — #1 | infra | ~15 lines |
+| [x] | 1.1 | Vim mode segment (`vim.mode`) — #2 | feature | ~12 lines |
+| [x] | 1.2 | Agent name segment (`agent.name`) — #3 | feature | ~12 lines |
+| [x] | 1.3 | Token count segment (input/output) — #4 | feature | ~15 lines |
+| [x] | 1.4 | 200k token warning (`exceeds_200k_tokens`) — #6 | feature | ~8 lines |
+| [x] | 1.5 | Use `workspace.current_dir` with `cwd` fallback — #8 | enhancement | ~3 lines |
+| [x] | 1.6 | `bar_width` config option — #9 | config | ~5 lines |
+| [x] | 1.7 | `branch_max_length` config option — #10 | config | ~8 lines |
 
 **Estimated LOC**: ~80 new/modified
 **Depends on**: Sprint 0 (complete)
@@ -59,7 +59,7 @@ Lean sprint plan derived from [ROADMAP.md](ROADMAP.md). Three focused releases, 
 | [ ] | 2.3 | New themes: tokyo-night, catppuccin — #16 | feature | ~40 lines |
 
 **Estimated LOC**: ~77 new/modified
-**Depends on**: Sprint 1
+**Depends on**: Sprint 1 (complete)
 
 ### Notes
 

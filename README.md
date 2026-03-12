@@ -48,10 +48,14 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 
 | Segment | Toggle | Description |
 |---------|--------|-------------|
-| Directory | `show_directory` | Working directory, shortened with `~` |
-| Branch | `show_branch` | Current git branch or short SHA |
+| Directory | `show_directory` | Working directory (prefers `workspace.current_dir`, falls back to `cwd`) |
+| Branch | `show_branch` | Current git branch or short SHA (truncated by `branch_max_length`) |
+| Vim mode | `show_vim_mode` | Shows NORMAL/INSERT from `vim.mode` |
 | Model | `show_model` | Active model (Opus, Sonnet, Haiku) |
+| Agent name | `show_agent` | Agent name when running with `--agent` |
 | Context bar | `show_context_bar` | Progress bar with warning at threshold |
+| 200k warning | *(automatic)* | Shows `⚠ 200k+` when `exceeds_200k_tokens` is true |
+| Token count | `show_tokens` | Cumulative input/output tokens (`Xk in Yk out`) |
 | 5-hour usage | `show_usage_5h` | Rolling 5-hour API usage with pacing marker |
 | Weekly usage | `show_usage_7d` | Rolling 7-day API usage with pacing marker |
 | Lines changed | `show_lines_changed` | Lines added/removed in session |
@@ -74,6 +78,11 @@ Create `~/.claude/statusline.conf` with your overrides. This file is never overw
 show_branch=false
 show_cost=false
 
+# New segments (v1.4.0)
+show_vim_mode=true       # Vim mode indicator (default: true)
+show_agent=true          # Agent name segment (default: true)
+show_tokens=false        # Token counts — opt-in (default: false)
+
 # Usage limit segments (default: true)
 show_usage_5h=true
 show_usage_7d=true
@@ -90,6 +99,12 @@ colour_theme=nord
 
 # Context warning threshold percentage (default: 80)
 context_warn_threshold=85
+
+# Progress bar width in characters (default: 10)
+bar_width=10
+
+# Truncate long branch names with ellipsis (default: "" = no limit)
+branch_max_length=20
 
 # Priority truncation for narrow terminals (default: false)
 enable_truncation=true
