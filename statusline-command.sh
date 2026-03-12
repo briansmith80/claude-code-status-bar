@@ -917,7 +917,7 @@ fi
 if [ -n "$update_available" ]; then
   update_icon=""
   [ "$use_icons" = "true" ] && update_icon="⬆ "
-  add_seg "${CLR_WARN}${update_icon}update available${CLR_RESET}" 9
+  add_seg "${CLR_ADD}${update_icon}update available${CLR_RESET}" 9
 fi
 
 # ── Truncation ───────────────────────────────────────────────
