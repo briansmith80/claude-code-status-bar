@@ -5,13 +5,13 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-brightgreen)](README.md)
 
-A configurable status bar for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+A pure bash status bar for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that shows your API usage limits, context window, git state, session cost, and more — with pacing markers that tell you if you're burning through your quota too fast.
 
 ```
-~/projects/my-app on ↱ main  ⚙ Opus 4.6  ████████░░ 78%  5hr(2pm) ▓▓▓│░░░░░░ 37%  wk(fri,3am) ██░░░░│░░░ 29%  +42 -7  ● 3 dirty  ↓2 ↑1  ◷ 12m  $0.45
+~/my-app on ↱ main  ⚙ Opus 4.6  ████████░░ 78% of 200k  5hr(2pm) ███│░░░░░░ 37%  wk(fri,3am) ██████░│░░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  ◷ 12m  $0.45
 ```
 
-Pure bash. No dependencies. Works on macOS, Linux, and Windows (Git Bash / MSYS2).
+18 segments. 7 colour themes. Zero dependencies. One-line install. Works on macOS, Linux, and Windows (Git Bash / MSYS2).
 
 ## Install
 
