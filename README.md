@@ -8,7 +8,7 @@
 A pure bash status bar for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that shows your API usage limits, context window, git state, session cost, and more — with pacing markers that tell you if you're burning through your quota too fast.
 
 ```
-~/my-app on ↱ main  ⚙ Opus 4.6  ████████░░ 78% of 200k  5hr(2pm) ███│░░░░░░ 37%  wk(fri,3am) ██████░│░░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  ◷ 12m  $0.45
+~/my-app on ↱ main  ◆ Opus 4.6  ████████░░ 78% of 200k  5hr(2pm) ███│░░░░░░ 37%  wk(fri,3am) ██████░│░░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
 ```
 
 18 segments. 7 colour themes. Zero dependencies. One-line install. Works on macOS, Linux, and Windows (Git Bash / MSYS2).
@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 | Model | `show_model` | Active model with tier coloring (Haiku=green, Sonnet=yellow, Opus=orange; respects NO_COLOR) |
 | Agent name | `show_agent` | Agent name when running with `--agent` |
 | Context bar | `show_context_bar` | Progress bar with warning at threshold |
-| 200k warning | *(automatic)* | Shows `⚠ 200k+` when `exceeds_200k_tokens` is true |
+| 200k warning | *(automatic)* | Shows `▲ 200k+` when `exceeds_200k_tokens` is true |
 | Token count | `show_tokens` | Cumulative input/output tokens (`Xk in Yk out`) |
 | 5-hour usage | `show_usage_5h` | Rolling 5-hour API usage with pacing marker |
 | Weekly usage | `show_usage_7d` | Rolling 7-day API usage with pacing marker |
@@ -86,7 +86,7 @@ show_tokens=false        # Token counts — opt-in (default: false)
 # Usage limit segments (default: true)
 show_usage_5h=true
 show_usage_7d=true
-usage_cache_seconds=60
+usage_cache_seconds=600
 
 # Auto-hide segments with zero/empty values (default: true)
 auto_hide=true
@@ -123,14 +123,14 @@ The `NO_COLOR` environment variable is respected — when set, all colours are d
 The status bar shows your Anthropic API usage limits with colour-coded progress bars:
 
 ```
-5hr(2pm) ▓▓▓│░░░░░░ 37%  wk(fri,3am) ██░░░░│░░░ 29%
+5hr(2pm) ███│░░░░░░ 37%  wk(fri,3am) ██░░░░│░░░ 29%
 ```
 
 - **5hr** — rolling 5-hour usage window, with reset time
 - **wk** — rolling 7-day usage window, with reset day and time
 - **`│` pacing marker** — shows where you *should* be for even usage across the window; if your bar is past the marker, you're ahead of pace
 
-Usage data is fetched from the Anthropic OAuth API and cached locally (default: every 60 seconds). If credentials are missing or the API is unreachable, the usage segments are silently hidden.
+Usage data is fetched from the Anthropic OAuth API and cached locally (default: every 10 minutes). If credentials are missing or the API is unreachable, the usage segments are silently hidden.
 
 ### Credentials
 
@@ -166,7 +166,7 @@ If usage segments don't appear:
 
 ## Updating
 
-When a new version is available, you'll see `⬆ update available` in your status bar. To update, run the same install command:
+When a new version is available, you'll see `↑ update available` in your status bar. To update, run the same install command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash

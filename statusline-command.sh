@@ -179,7 +179,7 @@ show_cost=true
 show_cost_rate=false
 show_usage_5h=true
 show_usage_7d=true
-usage_cache_seconds=1800
+usage_cache_seconds=600
 auto_hide=true
 use_icons=true
 context_warn_threshold=80
@@ -220,6 +220,7 @@ apply_theme() {
       CLR_DEL="\033[38;5;174m"     # aurora red
       CLR_WARN="\033[38;5;179m"    # aurora yellow
       CLR_INFO="\033[38;5;110m"    # frost cyan
+      CLR_DIM="\033[38;5;60m"     # polar night dim
       CLR_BAR_OK="\033[38;5;108m"  # aurora green
       CLR_BAR_MED="\033[38;5;179m" # aurora yellow
       CLR_BAR_HIGH="\033[38;5;174m" # aurora red
@@ -234,6 +235,7 @@ apply_theme() {
       CLR_DEL="\033[38;5;210m"     # red
       CLR_WARN="\033[38;5;228m"    # yellow
       CLR_INFO="\033[38;5;117m"    # cyan
+      CLR_DIM="\033[38;5;61m"     # comment grey
       CLR_BAR_OK="\033[38;5;84m"   # green
       CLR_BAR_MED="\033[38;5;228m" # yellow
       CLR_BAR_HIGH="\033[38;5;210m" # red
@@ -248,6 +250,7 @@ apply_theme() {
       CLR_DEL="\033[38;5;160m"    # red
       CLR_WARN="\033[38;5;136m"   # yellow
       CLR_INFO="\033[38;5;37m"    # cyan
+      CLR_DIM="\033[38;5;240m"   # base01 dim
       CLR_BAR_OK="\033[38;5;64m"  # green
       CLR_BAR_MED="\033[38;5;136m" # yellow
       CLR_BAR_HIGH="\033[38;5;160m" # red
@@ -262,6 +265,7 @@ apply_theme() {
       CLR_DEL="\033[38;5;204m"    # red #f7768e
       CLR_WARN="\033[38;5;179m"   # yellow #e0af68
       CLR_INFO="\033[38;5;117m"   # cyan #7dcfff
+      CLR_DIM="\033[38;5;59m"    # comment #565f89
       CLR_BAR_OK="\033[38;5;149m" # green #9ece6a
       CLR_BAR_MED="\033[38;5;179m" # yellow #e0af68
       CLR_BAR_HIGH="\033[38;5;204m" # red #f7768e
@@ -276,6 +280,7 @@ apply_theme() {
       CLR_DEL="\033[38;5;211m"    # red #f38ba8
       CLR_WARN="\033[38;5;223m"   # yellow #f9e2af
       CLR_INFO="\033[38;5;116m"   # sapphire #74c7ec
+      CLR_DIM="\033[38;5;243m"   # overlay0 #6c7086
       CLR_BAR_OK="\033[38;5;150m" # green #a6e3a1
       CLR_BAR_MED="\033[38;5;223m" # yellow #f9e2af
       CLR_BAR_HIGH="\033[38;5;211m" # red #f38ba8
@@ -284,7 +289,7 @@ apply_theme() {
       ;;
     mono)
       CLR_DIR="" CLR_BRANCH="" CLR_MODEL=""
-      CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO=""
+      CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO="" CLR_DIM=""
       CLR_BAR_OK="" CLR_BAR_MED="" CLR_BAR_HIGH="" CLR_PACE=""
       CLR_RESET=""
       ;;
@@ -296,6 +301,7 @@ apply_theme() {
       CLR_DEL="\033[0;31m"     # red
       CLR_WARN="\033[0;33m"    # yellow
       CLR_INFO="\033[0;36m"    # cyan
+      CLR_DIM="\033[0;90m"    # dark grey
       CLR_BAR_OK="\033[0;32m"  # green
       CLR_BAR_MED="\033[0;33m" # yellow
       CLR_BAR_HIGH="\033[0;31m" # red
@@ -670,12 +676,13 @@ build_progress_bar() {
     elif [ "$i" -lt "$filled" ]; then
       bar+="█"
     else
-      bar+="░"
+      bar+="${CLR_DIM}░${colour}"
     fi
   done
   bar+="$CLR_RESET"
 
-  echo "$bar"
+  # Output: bar\ncolour (caller can read second line for percentage colouring)
+  printf '%s\n%s' "$bar" "$colour"
 }
 
 # ── Build Output Segments ─────────────────────────────────────
@@ -724,7 +731,7 @@ fi
 # Model (priority 3) — coloured by tier: Haiku=green, Sonnet=yellow, Opus=orange
 if [ "$show_model" = "true" ]; then
   model_icon=""
-  [ "$use_icons" = "true" ] && model_icon="⚙ "
+  [ "$use_icons" = "true" ] && model_icon="◆ "
   case "${model:-}" in
     *Haiku*)  model_clr="$CLR_ADD" ;;                # green (cheap)
     *Sonnet*) model_clr="$CLR_WARN" ;;               # yellow (mid)
@@ -744,7 +751,7 @@ if [ "$show_agent" = "true" ]; then
     if [ -n "$agent_name" ]; then
       agent_name=$(sanitize "$agent_name")
       agent_icon=""
-      [ "$use_icons" = "true" ] && agent_icon="⚡ "
+      [ "$use_icons" = "true" ] && agent_icon="▸ "
       add_seg "${CLR_MODEL}${agent_icon}${agent_name}${CLR_RESET}" 3
     fi
   fi
@@ -754,23 +761,25 @@ fi
 if [ "$show_context_bar" = "true" ]; then
   pct="${used:-0}"
   pct_int="${pct%%.*}"
-  progress_bar=$(build_progress_bar "$pct_int")
+  bar_output=$(build_progress_bar "$pct_int")
+  progress_bar="${bar_output%%$'\n'*}"
+  bar_clr="${bar_output#*$'\n'}"
   warn_prefix=""
   if [ "$pct_int" -ge "${context_warn_threshold:-80}" ] 2>/dev/null; then
-    [ "$use_icons" = "true" ] && warn_prefix="⚠ "
+    [ "$use_icons" = "true" ] && warn_prefix="${CLR_WARN}▲${CLR_RESET} "
   fi
   ctx_suffix=""
   if [ -n "$context_size" ] && [ "$context_size" != "0" ]; then
     ctx_k=$(( ${context_size%%.*} / 1000 ))
     ctx_suffix=" of ${ctx_k}k"
   fi
-  add_seg "${warn_prefix}${progress_bar} ${pct_int}%${ctx_suffix}" 2 "ctx"
+  add_seg "${warn_prefix}${progress_bar} ${bar_clr}${pct_int}%${ctx_suffix}${CLR_RESET}" 2 "ctx"
 fi
 
 # 200k token warning (automatic — no config toggle)
 exceed_pattern='"exceeds_200k_tokens"[[:space:]]*:[[:space:]]*true'
 if [[ $input =~ $exceed_pattern ]]; then
-  add_seg "${CLR_WARN}⚠ 200k+${CLR_RESET}" 2 "ctx"
+  add_seg "${CLR_WARN}▲ 200k+${CLR_RESET}" 2 "ctx"
 fi
 
 # Token counts (priority 5)
@@ -802,8 +811,10 @@ if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
     u5_reset_label=$(format_reset_label "$usage_5h_resets" "time") || u5_reset_label=""
     [ -n "$u5_reset_label" ] && u5_label="(${u5_reset_label})"
   fi
-  u5_bar=$(build_progress_bar "$u5_int" "$u5_target")
-  add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_int}%${usage_stale_suffix}" 3 "usage"
+  u5_bar_output=$(build_progress_bar "$u5_int" "$u5_target")
+  u5_bar="${u5_bar_output%%$'\n'*}"
+  u5_bar_clr="${u5_bar_output#*$'\n'}"
+  add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_bar_clr}${u5_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage"
 fi
 
 # Weekly usage limit (priority 3)
@@ -816,8 +827,10 @@ if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
     u7_reset_label=$(format_reset_label "$usage_7d_resets" "day") || u7_reset_label=""
     [ -n "$u7_reset_label" ] && u7_label="(${u7_reset_label})"
   fi
-  u7_bar=$(build_progress_bar "$u7_int" "$u7_target")
-  add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_int}%${usage_stale_suffix}" 3 "usage"
+  u7_bar_output=$(build_progress_bar "$u7_int" "$u7_target")
+  u7_bar="${u7_bar_output%%$'\n'*}"
+  u7_bar_clr="${u7_bar_output#*$'\n'}"
+  add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_bar_clr}${u7_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage"
 fi
 
 # Lines changed (priority 5)
@@ -868,7 +881,7 @@ if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" !=
   hours=$(( total_secs / 3600 ))
   mins=$(( (total_secs % 3600) / 60 ))
   dur_icon=""
-  [ "$use_icons" = "true" ] && dur_icon="◷ "
+  [ "$use_icons" = "true" ] && dur_icon=""
 
   dur_text=""
   if [ "$hours" -gt 0 ]; then
@@ -884,7 +897,7 @@ fi
 # Worktree indicator (priority 8)
 if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
   wt_icon=""
-  [ "$use_icons" = "true" ] && wt_icon="⎇ "
+  [ "$use_icons" = "true" ] && wt_icon="⊞ "
   add_seg "${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}" 8
 fi
 
@@ -894,7 +907,16 @@ if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
   case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
   if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
     cost_fmt=$(printf "%.2f" "$total_cost" 2>/dev/null) || cost_fmt="$total_cost"
-    add_seg "${CLR_WARN}\$${cost_fmt}${CLR_RESET}" 4 "session"
+    # Colour by cost: green < $1, yellow $1-$5, red $5+
+    cost_cents=$(printf "%.0f" "$(awk -v c="$total_cost" 'BEGIN {print c * 100}' 2>/dev/null)" 2>/dev/null) || cost_cents=0
+    if [ "${cost_cents:-0}" -ge 500 ] 2>/dev/null; then
+      cost_clr="$CLR_BAR_HIGH"
+    elif [ "${cost_cents:-0}" -ge 100 ] 2>/dev/null; then
+      cost_clr="$CLR_WARN"
+    else
+      cost_clr="$CLR_ADD"
+    fi
+    add_seg "${cost_clr}\$${cost_fmt}${CLR_RESET}" 4 "session"
   fi
 fi
 
@@ -907,7 +929,15 @@ if [ "$show_cost_rate" = "true" ] && [ -n "$total_cost" ] && [ -n "$duration_ms"
       rate_is_zero=false
       case "$cost_rate" in 0.00) rate_is_zero=true ;; esac
       if [ "$auto_hide" != "true" ] || [ "$rate_is_zero" = "false" ]; then
-        add_seg "${CLR_WARN}\$${cost_rate}/hr${CLR_RESET}" 4 "session"
+        rate_cents=$(printf "%.0f" "$(awk -v c="$cost_rate" 'BEGIN {print c * 100}' 2>/dev/null)" 2>/dev/null) || rate_cents=0
+        if [ "${rate_cents:-0}" -ge 500 ] 2>/dev/null; then
+          rate_clr="$CLR_BAR_HIGH"
+        elif [ "${rate_cents:-0}" -ge 100 ] 2>/dev/null; then
+          rate_clr="$CLR_WARN"
+        else
+          rate_clr="$CLR_ADD"
+        fi
+        add_seg "${rate_clr}\$${cost_rate}/hr${CLR_RESET}" 4 "session"
       fi
     fi
   fi
@@ -916,7 +946,7 @@ fi
 # Update notification (priority 9 — lowest)
 if [ -n "$update_available" ]; then
   update_icon=""
-  [ "$use_icons" = "true" ] && update_icon="⬆ "
+  [ "$use_icons" = "true" ] && update_icon="↑ "
   add_seg "${CLR_ADD}${update_icon}update available${CLR_RESET}" 9
 fi
 

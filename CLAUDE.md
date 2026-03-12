@@ -21,7 +21,7 @@ README.md                  # User-facing docs
 | `.statusline-version` | Local copy of VERSION | Yes |
 | `statusline.conf` | User config overrides | **Never** |
 | `.statusline-update-cache` | Update check cache (timestamp + version) | Cleared on update |
-| `.statusline-usage-cache` | Usage API response cache (JSON) | Auto-refreshes every 60s |
+| `.statusline-usage-cache` | Usage API response cache (JSON) | Auto-refreshes every 10 min |
 
 ## Key design decisions
 
@@ -35,7 +35,7 @@ README.md                  # User-facing docs
 - **Model tier coloring** — Model name colour varies by tier (Haiku=green, Sonnet=yellow, Opus=orange) via a case statement. Respects NO_COLOR and mono theme.
 - **Array-based segments** — Segments are built into `seg_vals[]`/`seg_pris[]`/`seg_groups[]` arrays for truncation and grouping support.
 - **set -e safety** — Git commands that may fail (e.g., `rev-list` with no upstream) use `|| fallback` pattern to prevent script death.
-- **Usage limits via OAuth API** — Fetches 5-hour and 7-day utilisation from `api.anthropic.com/api/oauth/usage` in a background subshell. Credentials from Keychain (macOS) or `~/.claude/.credentials.json` (Linux/Windows). Cached with embedded timestamp, refreshes every 60s.
+- **Usage limits via OAuth API** — Fetches 5-hour and 7-day utilisation from `api.anthropic.com/api/oauth/usage` in a background subshell. Credentials from Keychain (macOS) or `~/.claude/.credentials.json` (Linux/Windows). Cached with embedded timestamp, refreshes every 10 min.
 - **Pacing markers** — Progress bars support an optional `│` marker (CLR_PACE) showing where usage *should* be for even consumption across the window.
 - **Token security** — OAuth tokens are passed to curl via `--config -` (stdin), not command-line args, so they're hidden from `ps`. wget uses `--max-redirect=0` to prevent token leakage on redirects. **Note:** the wget fallback still passes `--header` as a CLI argument (visible in `ps aux`). Curl is strongly preferred; wget is a last-resort fallback.
 - **Shared helpers** — `http_get()` consolidates curl/wget fallback, `iso_to_epoch()` consolidates cross-platform date parsing. Avoids duplicated patterns.

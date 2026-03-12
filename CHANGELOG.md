@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-03-12
+
+### Changed
+
+- **Safe Unicode icons** — replaced 6 problematic icons with universally compatible alternatives: `⚙`→`◆`, `⚡`→`▸`, `⚠`→`▲`, `⎇`→`⊞`, `⬆`→`↑`, dropped `◷` (duration needs no icon)
+- **Dim progress bar shading** — empty `░` slots now use `CLR_DIM` for better contrast against filled `█` blocks
+- **Coloured percentage text** — progress bar percentages now match the bar colour (green/yellow/red)
+- **Cost colour tiers** — cost displays green under $1, yellow $1–$5, red $5+
+- **Warning icon coloured** — context warning `▲` now uses `CLR_WARN` colour
+- **Update notification** — changed from yellow to green
+- **Usage cache interval** — reduced default from 30 minutes to 10 minutes for more accurate 5-hour readings
+
+### Added
+
+- **`CLR_DIM` theme variable** — new colour variable across all 7 themes for dimmed/secondary elements
+
 ## [1.5.0] - 2026-03-12
 
 ### Added

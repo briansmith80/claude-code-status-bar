@@ -82,12 +82,12 @@ Re-evaluate based on actual user feedback. The following ideas are parked — no
 | Separator config/styles | #11, #20 |
 | Compact countdown (tokens before auto-compact) | #58 |
 | Time-to-limit estimate for usage bars | #59 |
-| CLR_DIM modifier for secondary info | #14 |
+| ~~CLR_DIM modifier for secondary info~~ | ~~#14~~ (shipped in v1.5.1) |
 | Display workspace.project_dir | #15 |
 | Per-segment icon overrides | #17 |
 | Overflow indicator | #18 |
 | Progress bar styles (dots, line, ascii) | #19 |
-| Two-line layout | #21 |
+| Two-line layout (confirmed working) | #21 |
 | Right-aligned segments | #22 |
 | Progressive truncation cascade | #23 |
 | Segment reordering | #24 |
