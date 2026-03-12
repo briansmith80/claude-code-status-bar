@@ -54,12 +54,17 @@ Current milestone: **Sprint 3 (v1.6.0)** — Testing & CLI.
 
 ## How to release a new version
 
-1. Edit `VERSION` (e.g., `1.1.0`)
-2. `git add VERSION && git commit -m "release: v1.1.0" && git push`
-3. `git tag -a v1.1.0 -m "v1.1.0" && git push origin v1.1.0`
-4. `gh release create v1.1.0 --title "v1.1.0" --notes "..."`
+**IMPORTANT: Do not skip any of these steps.** Tags and GitHub releases have been missed before — always create them alongside the version bump.
 
-That's it. Users with the update check will see `⬆ update available` within 6 hours.
+1. Bump `VERSION` file (e.g., `1.5.0`)
+2. Update `CHANGELOG.md` with a new `[1.5.0] - YYYY-MM-DD` section
+3. Update all docs: README.md, CLAUDE.md (current milestone), ROADMAP.md, SPRINTS.md
+4. Commit everything: `git add -A && git commit -m "release: v1.5.0" && git push`
+5. Create annotated tag: `git tag -a v1.5.0 -m "v1.5.0" && git push origin v1.5.0`
+6. Create GitHub release with notes from CHANGELOG: `gh release create v1.5.0 --title "v1.5.0" --notes "..."`
+7. Copy script to local install: `cp statusline-command.sh ~/.claude/statusline-command.sh`
+
+Users with the update check will see `⬆ update available` within 6 hours.
 
 ## Testing
 
