@@ -31,7 +31,8 @@ README.md                  # User-facing docs
 - **External config** — User overrides go in `statusline.conf`, sourced after defaults. Survives updates.
 - **Single version source** — Only `VERSION` file needs bumping. Installer downloads it; script reads it at runtime.
 - **Sanitize untrusted strings** — Branch names, paths, and worktree names are stripped of ANSI escapes before output.
-- **Colour themes via CLR_* variables** — All ANSI codes use theme variables set by `apply_theme()`. Supports NO_COLOR standard.
+- **Colour themes via CLR_* variables** — All ANSI codes use theme variables set by `apply_theme()`. Seven built-in themes: default, nord, dracula, solarized, mono, tokyo-night, catppuccin. Supports NO_COLOR standard.
+- **Model tier coloring** — Model name colour varies by tier (Haiku=green, Sonnet=yellow, Opus=orange) via a case statement. Respects NO_COLOR and mono theme.
 - **Array-based segments** — Segments are built into `seg_vals[]`/`seg_pris[]`/`seg_groups[]` arrays for truncation and grouping support.
 - **set -e safety** — Git commands that may fail (e.g., `rev-list` with no upstream) use `|| fallback` pattern to prevent script death.
 - **Usage limits via OAuth API** — Fetches 5-hour and 7-day utilisation from `api.anthropic.com/api/oauth/usage` in a background subshell. Credentials from Keychain (macOS) or `~/.claude/.credentials.json` (Linux/Windows). Cached with embedded timestamp, refreshes every 60s.
@@ -49,7 +50,7 @@ README.md                  # User-facing docs
 See [ROADMAP.md](ROADMAP.md) for the feature roadmap and competitive landscape.
 See [SPRINTS.md](SPRINTS.md) for the validated sprint plan with dependency ordering and effort estimates.
 
-Current milestone: **Sprint 2 (v1.5.0)** — Visual Polish.
+Current milestone: **Sprint 3 (v1.6.0)** — Testing & CLI.
 
 ## How to release a new version
 
@@ -97,7 +98,7 @@ cp statusline-command.sh ~/.claude/statusline-command.sh
 - Bash with `set -e` — strict error handling
 - Comments use `# ── Section ───` separator style
 - Colour codes use `CLR_*` theme variables (not inline ANSI codes)
-- Default palette: cyan=dir, magenta=branch, blue=model, green=additions, red=removals, yellow=warnings/cost
+- Default palette: cyan=dir, magenta=branch, green/yellow/orange=model (tier-dependent), green=additions, red=removals, yellow=warnings/cost
 - All git commands use `-c core.fsmonitor=false` to avoid filesystem monitoring overhead
 - Fallback chains: curl > wget, node > python3 > python > manual instructions
 

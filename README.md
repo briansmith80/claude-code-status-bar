@@ -51,7 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 | Directory | `show_directory` | Working directory (prefers `workspace.current_dir`, falls back to `cwd`) |
 | Branch | `show_branch` | Current git branch or short SHA (truncated by `branch_max_length`) |
 | Vim mode | `show_vim_mode` | Shows NORMAL/INSERT from `vim.mode` |
-| Model | `show_model` | Active model (Opus, Sonnet, Haiku) |
+| Model | `show_model` | Active model with tier coloring (Haiku=green, Sonnet=yellow, Opus=orange; respects NO_COLOR) |
 | Agent name | `show_agent` | Agent name when running with `--agent` |
 | Context bar | `show_context_bar` | Progress bar with warning at threshold |
 | 200k warning | *(automatic)* | Shows `⚠ 200k+` when `exceeds_200k_tokens` is true |
@@ -94,7 +94,7 @@ auto_hide=true
 # Unicode icons before segments (default: true)
 use_icons=false
 
-# Colour theme: default, nord, dracula, solarized, mono
+# Colour theme: default, nord, dracula, solarized, mono, tokyo-night, catppuccin
 colour_theme=nord
 
 # Context warning threshold percentage (default: 80)

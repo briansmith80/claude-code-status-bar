@@ -48,24 +48,22 @@ Lean sprint plan derived from [ROADMAP.md](ROADMAP.md). Three focused releases, 
 
 ---
 
-## Sprint 2: v1.5.0 — Visual Polish
+## Sprint 2: v1.5.0 — Visual Polish :white_check_mark:
 
-**Theme**: Improve appearance without changing architecture.
+**Status**: Complete.
 
 | | # | Item | Type | Effort |
 |---|---|------|------|--------|
-| [ ] | 2.1 | Fish-style directory truncation (`dir_style=fish`) — #12 | feature | ~25 lines |
-| [ ] | 2.2 | Model tier coloring (Haiku/Sonnet/Opus) — #13 | feature | ~12 lines |
-| [ ] | 2.3 | New themes: tokyo-night, catppuccin — #16 | feature | ~40 lines |
+| [x] | 2.1 | Model tier coloring (Haiku/Sonnet/Opus) — #13 | feature | ~12 lines |
+| [x] | 2.2 | New themes: tokyo-night, catppuccin — #16 | feature | ~40 lines |
 
-**Estimated LOC**: ~77 new/modified
+**Estimated LOC**: ~52 new/modified
 **Depends on**: Sprint 1 (complete)
 
 ### Notes
 
-- Item 2.1 (fish dirs) must handle `~` expansion and `/c/Users/...` MSYS2 paths. Test on all 3 platforms.
-- Item 2.2 is a simple case statement in the model display logic.
-- Item 2.3 is pure additive — new cases in `apply_theme()`. Trimmed from 4 themes to 2 (highest community demand).
+- Item 2.1 is a simple case statement in the model display logic. Uses existing theme colours.
+- Item 2.2 is pure additive — new cases in `apply_theme()`. Two themes with highest community demand.
 
 ---
 
@@ -81,7 +79,7 @@ Lean sprint plan derived from [ROADMAP.md](ROADMAP.md). Three focused releases, 
 | [ ] | 3.4 | `--uninstall` CLI flag — #37 | cli | ~25 lines |
 
 **Estimated LOC**: ~240 new/modified
-**Depends on**: Sprint 2
+**Depends on**: Sprint 2 (complete)
 
 ### Notes
 
@@ -104,6 +102,6 @@ Stop and re-evaluate. See what users are actually asking for before building mor
 |--------|---------|-----|-------|
 | 0 | v1.3.1 | ~35 | 5 |
 | 1 | v1.4.0 | ~80 | 8 |
-| 2 | v1.5.0 | ~77 | 3 |
+| 2 | v1.5.0 | ~52 | 2 |
 | 3 | v1.6.0 | ~240 | 4 |
-| **Total** | | **~432** | **20** |
+| **Total** | | **~407** | **19** |

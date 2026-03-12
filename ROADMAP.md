@@ -44,15 +44,16 @@ Consume API fields we're already receiving but ignoring. Pure additive — no re
 
 ---
 
-## v1.5.0 — Visual Polish
+## v1.5.0 — Visual Polish :white_check_mark:
 
 Improve visual appearance without changing architecture.
 
+**Status**: Complete.
+
 | Item | Type | Description |
 |------|------|-------------|
-| Fish-style directory — #12 | feature | `dir_style=fish` truncation (`/h/u/p/my-app`) |
-| Model tier coloring — #13 | feature | Haiku=green, Sonnet=yellow, Opus=red |
-| New themes — #16 | feature | tokyo-night and catppuccin |
+| ~~Model tier coloring — #13~~ | feature | Haiku=green, Sonnet=yellow, Opus=orange |
+| ~~New themes — #16~~ | feature | tokyo-night and catppuccin |
 
 ---
 
@@ -75,6 +76,7 @@ Re-evaluate based on actual user feedback. The following ideas are parked — no
 
 | Idea | Source Issue |
 |------|-------------|
+| Fish-style directory truncation | #12 |
 | API wait time segment | #5 |
 | Cache hit ratio segment | #7 |
 | Separator config/styles | #11, #20 |

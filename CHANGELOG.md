@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-03-12
+
+### Added
+
+- **Model tier coloring** — model name colour varies by tier: Haiku=green, Sonnet=yellow, Opus=orange. Uses a case statement on the model name. Respects NO_COLOR and mono theme.
+- **tokyo-night theme** — new colour theme inspired by the Tokyo Night colour palette
+- **catppuccin theme** — new colour theme inspired by the Catppuccin colour palette
+
 ## [1.4.0] - 2026-03-12
 
 ### Added

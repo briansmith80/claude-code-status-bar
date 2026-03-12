@@ -254,6 +254,34 @@ apply_theme() {
       CLR_PACE="\033[38;5;125m"    # magenta pacing marker
       CLR_RESET="\033[0m"
       ;;
+    tokyo-night)
+      CLR_DIR="\033[38;5;111m"    # blue #7aa2f7
+      CLR_BRANCH="\033[38;5;141m" # purple #bb9af7
+      CLR_MODEL="\033[38;5;117m"  # cyan #7dcfff
+      CLR_ADD="\033[38;5;149m"    # green #9ece6a
+      CLR_DEL="\033[38;5;204m"    # red #f7768e
+      CLR_WARN="\033[38;5;179m"   # yellow #e0af68
+      CLR_INFO="\033[38;5;117m"   # cyan #7dcfff
+      CLR_BAR_OK="\033[38;5;149m" # green #9ece6a
+      CLR_BAR_MED="\033[38;5;179m" # yellow #e0af68
+      CLR_BAR_HIGH="\033[38;5;204m" # red #f7768e
+      CLR_PACE="\033[38;5;198m"   # pink #ff007c
+      CLR_RESET="\033[0m"
+      ;;
+    catppuccin)
+      CLR_DIR="\033[38;5;111m"    # blue #89b4fa
+      CLR_BRANCH="\033[38;5;183m" # mauve #cba6f7
+      CLR_MODEL="\033[38;5;116m"  # sapphire #74c7ec
+      CLR_ADD="\033[38;5;150m"    # green #a6e3a1
+      CLR_DEL="\033[38;5;211m"    # red #f38ba8
+      CLR_WARN="\033[38;5;223m"   # yellow #f9e2af
+      CLR_INFO="\033[38;5;116m"   # sapphire #74c7ec
+      CLR_BAR_OK="\033[38;5;150m" # green #a6e3a1
+      CLR_BAR_MED="\033[38;5;223m" # yellow #f9e2af
+      CLR_BAR_HIGH="\033[38;5;211m" # red #f38ba8
+      CLR_PACE="\033[38;5;218m"   # pink #f5c2e7
+      CLR_RESET="\033[0m"
+      ;;
     mono)
       CLR_DIR="" CLR_BRANCH="" CLR_MODEL=""
       CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO=""
@@ -693,11 +721,19 @@ if [ "$show_vim_mode" = "true" ]; then
   fi
 fi
 
-# Model (priority 3)
+# Model (priority 3) — coloured by tier: Haiku=green, Sonnet=yellow, Opus=orange
 if [ "$show_model" = "true" ]; then
   model_icon=""
   [ "$use_icons" = "true" ] && model_icon="⚙ "
-  add_seg "${CLR_MODEL}${model_icon}${model:-?}${CLR_RESET}" 3 "ctx"
+  case "${model:-}" in
+    *Haiku*)  model_clr="$CLR_ADD" ;;                # green (cheap)
+    *Sonnet*) model_clr="$CLR_WARN" ;;               # yellow (mid)
+    *Opus*)   model_clr="\033[38;5;208m" ;;           # orange (premium)
+    *)        model_clr="$CLR_MODEL" ;;               # default blue
+  esac
+  # Respect NO_COLOR / mono theme
+  [ -z "$CLR_RESET" ] && model_clr=""
+  add_seg "${model_clr}${model_icon}${model:-?}${CLR_RESET}" 3 "ctx"
 fi
 
 # Agent name (priority 3)
