@@ -89,6 +89,12 @@ case "${1:-}" in
     echo "Reads Claude Code statusline JSON from stdin and outputs"
     echo "a formatted status bar for your terminal."
     echo ""
+    echo "Flags:"
+    echo "  --help           Show this help"
+    echo "  --version        Print version"
+    echo "  --check-update   Force update check"
+    echo "  --dump-stdin     Show raw JSON from Claude Code (diagnostic)"
+    echo ""
     echo "Version: ${VERSION}"
     exit 0
     ;;
@@ -112,6 +118,18 @@ case "${1:-}" in
       echo "Update available! Run:"
       echo "  curl -fsSL ${REPO_RAW}/install.sh | bash"
     fi
+    exit 0
+    ;;
+  --dump-stdin)
+    # Diagnostic: show the raw JSON that Claude Code sends on stdin
+    raw=$(cat)
+    echo "$raw" | python3 -m json.tool 2>/dev/null || echo "$raw"
+    echo ""
+    echo "--- Fields detected ---"
+    echo "$raw" | grep -qo '"rate_limits"' && echo "rate_limits: YES (stdin-native, real-time)" || echo "rate_limits: NO (using OAuth fallback)"
+    echo "$raw" | grep -qo '"transcript_path"' && echo "transcript_path: YES (live activity available)" || echo "transcript_path: NO (no live activity)"
+    echo "$raw" | grep -qo '"model"[[:space:]]*:' && echo "model (nested): YES (new schema)" || echo "model (nested): NO"
+    echo "$raw" | grep -qo '"context_window"' && echo "context_window (nested): YES (new schema)" || echo "context_window (nested): NO"
     exit 0
     ;;
 esac
