@@ -2,14 +2,18 @@
 
 ## What this is
 
-A configurable status bar for Claude Code. Pure bash, no dependencies, cross-platform (macOS, Linux, Windows/MSYS2).
+A configurable status bar for Claude Code. Pure bash core with optional Node.js helper for live activity. Cross-platform (macOS, Linux, Windows/MSYS2).
 
 ## Architecture
 
 ```
 VERSION                    # Single source of truth for version (bump ONLY this file for releases)
 statusline-command.sh      # The runtime script — installed to ~/.claude/
-install.sh                 # Installer/updater — downloads script + VERSION from GitHub
+statusline-helper.js       # Optional Node.js transcript parser — installed to ~/.claude/
+install.sh                 # Installer/updater — downloads script + helper + VERSION from GitHub
+.claude-plugin/plugin.json # Plugin manifest for marketplace distribution
+commands/setup.md          # Slash command: /claude-code-status-bar:setup
+commands/configure.md      # Slash command: /claude-code-status-bar:configure
 README.md                  # User-facing docs
 ```
 
@@ -18,10 +22,13 @@ README.md                  # User-facing docs
 | File | Purpose | Overwritten on update? |
 |------|---------|----------------------|
 | `statusline-command.sh` | The script Claude Code runs | Yes |
+| `statusline-helper.js` | Node.js transcript parser (optional) | Yes |
 | `.statusline-version` | Local copy of VERSION | Yes |
 | `statusline.conf` | User config overrides | **Never** |
 | `.statusline-update-cache` | Update check cache (timestamp + version) | Cleared on update |
 | `.statusline-usage-cache` | Usage API response cache (JSON) | Auto-refreshes every 10 min |
+| `.statusline-activity-cache` | Transcript activity cache (JSON) | Auto-refreshes every call |
+| `.statusline-transcript-cache/` | Parsed transcript cache (by SHA256) | Auto-invalidates on change |
 
 ## Key design decisions
 
@@ -35,7 +42,10 @@ README.md                  # User-facing docs
 - **Model tier coloring** — Model name colour varies by tier (Haiku=green, Sonnet=yellow, Opus=orange) via a case statement. Respects NO_COLOR and mono theme.
 - **Array-based segments** — Segments are built into `seg_vals[]`/`seg_pris[]`/`seg_groups[]` arrays for truncation and grouping support.
 - **set -e safety** — Git commands that may fail (e.g., `rev-list` with no upstream) use `|| fallback` pattern to prevent script death.
-- **Usage limits via OAuth API** — Fetches 5-hour and 7-day utilisation from `api.anthropic.com/api/oauth/usage` in a background subshell. Credentials from Keychain (macOS) or `~/.claude/.credentials.json` (Linux/Windows). Cached with embedded timestamp, refreshes every 10 min.
+- **Usage limits: stdin-native + OAuth fallback** — Prefers `rate_limits.five_hour` and `rate_limits.seven_day` from stdin (CC >= 2.1, zero-cost, real-time). Falls back to OAuth API (`api.anthropic.com/api/oauth/usage`) for older CC versions. OAuth uses background subshell, Keychain/credentials.json, 10-min cache.
+- **Live activity via transcript** — Optional Node.js helper (`statusline-helper.js`) parses Claude Code's JSONL transcript for tool calls, subagent status, and todo progress. Runs in background with SHA256-keyed disk cache. Only activates when `transcript_path` is in stdin and Node.js is available.
+- **Two-line layout** — Line 1 is the metrics bar. Line 2 (dim) shows live activity when available. Line 2 only appears when there's data to show. Disable with `show_activity=false`.
+- **Plugin marketplace** — `.claude-plugin/plugin.json` enables `/plugin install`. Slash commands for setup and configuration.
 - **Pacing markers** — Progress bars support an optional `│` marker (CLR_PACE) showing where usage *should* be for even consumption across the window.
 - **Token security** — OAuth tokens are passed to curl via `--config -` (stdin), not command-line args, so they're hidden from `ps`. wget uses `--max-redirect=0` to prevent token leakage on redirects. **Note:** the wget fallback still passes `--header` as a CLI argument (visible in `ps aux`). Curl is strongly preferred; wget is a last-resort fallback.
 - **Shared helpers** — `http_get()` consolidates curl/wget fallback, `iso_to_epoch()` consolidates cross-platform date parsing. Avoids duplicated patterns.
@@ -50,7 +60,7 @@ README.md                  # User-facing docs
 See [ROADMAP.md](ROADMAP.md) for the feature roadmap and competitive landscape.
 See [SPRINTS.md](SPRINTS.md) for the validated sprint plan with dependency ordering and effort estimates.
 
-Current milestone: **Sprint 3 (v1.6.0)** — Testing & CLI.
+Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI.
 
 ## How to release a new version
 
@@ -62,22 +72,48 @@ Current milestone: **Sprint 3 (v1.6.0)** — Testing & CLI.
 4. Commit everything: `git add -A && git commit -m "release: v1.5.0" && git push`
 5. Create annotated tag: `git tag -a v1.5.0 -m "v1.5.0" && git push origin v1.5.0`
 6. Create GitHub release with notes from CHANGELOG: `gh release create v1.5.0 --title "v1.5.0" --notes "..."`
-7. Copy script to local install: `cp statusline-command.sh ~/.claude/statusline-command.sh`
+7. Copy files to local install: `cp statusline-command.sh ~/.claude/statusline-command.sh && cp statusline-helper.js ~/.claude/statusline-helper.js`
 
 Users with the update check will see `⬆ update available` within 6 hours.
 
 ## Testing
 
-Test the script locally with sample JSON:
+Test with old schema (backward compat):
 
 ```bash
 echo '{"cwd":"/tmp","display_name":"Sonnet","used_percentage":60,"total_cost_usd":0.50}' | bash statusline-command.sh
 ```
 
-Test with new v1.4.0 fields (vim mode, agent, workspace, tokens, 200k warning):
+Test with new nested schema (model, context_window):
+
+```bash
+echo '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":78,"context_window_size":200000},"total_cost_usd":2.50}' | bash statusline-command.sh
+```
+
+Test with stdin rate limits (no OAuth needed):
+
+```bash
+echo '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":65},"total_cost_usd":0.50,"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":1743019200},"seven_day":{"used_percentage":71,"resets_at":1743278400}}}' | bash statusline-command.sh
+```
+
+Test with v1.4.0 fields (vim mode, agent, workspace, tokens, 200k warning):
 
 ```bash
 echo '{"cwd":"/tmp","display_name":"Sonnet","used_percentage":60,"total_cost_usd":0.50,"vim":{"mode":"NORMAL"},"agent":{"name":"my-agent"},"workspace":{"current_dir":"/home/user/project"},"context_window":{"total_input_tokens":45000,"total_output_tokens":12000},"exceeds_200k_tokens":true}' | bash statusline-command.sh
+```
+
+Test live activity (Node.js helper):
+
+```bash
+# Create a test transcript
+cat > /tmp/test-transcript.jsonl << 'EOF'
+{"timestamp":"2026-03-26T10:00:00Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/src/main.ts"}}]}}
+{"timestamp":"2026-03-26T10:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}
+{"timestamp":"2026-03-26T10:00:02Z","message":{"content":[{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"/src/main.ts"}}]}}
+EOF
+# Pre-populate cache then test
+node statusline-helper.js /tmp/test-transcript.jsonl ~/.claude/.statusline-activity-cache
+echo '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":65},"total_cost_usd":0.50,"transcript_path":"/tmp/test-transcript.jsonl"}' | bash statusline-command.sh
 ```
 
 Test update notification by writing a fake cache:
@@ -96,6 +132,7 @@ After testing, update your local install:
 
 ```bash
 cp statusline-command.sh ~/.claude/statusline-command.sh
+cp statusline-helper.js ~/.claude/statusline-helper.js
 ```
 
 ## Code conventions

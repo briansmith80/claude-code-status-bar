@@ -31,6 +31,8 @@ if command -v curl > /dev/null 2>&1; then
   fi
 
   curl -fsSL "${REPO_RAW}/${SCRIPT_NAME}" -o "$target_file"
+  # Download Node.js helper for live activity (optional)
+  curl -fsSL "${REPO_RAW}/statusline-helper.js" -o "${target_dir}/statusline-helper.js" 2>/dev/null || true
 elif command -v wget > /dev/null 2>&1; then
   wget -qO "$version_file" "${REPO_RAW}/VERSION"
   VERSION=$(tr -d '[:space:]' < "$version_file")
@@ -42,6 +44,8 @@ elif command -v wget > /dev/null 2>&1; then
   fi
 
   wget -qO "$target_file" "${REPO_RAW}/${SCRIPT_NAME}"
+  # Download Node.js helper for live activity (optional)
+  wget -qO "${target_dir}/statusline-helper.js" "${REPO_RAW}/statusline-helper.js" 2>/dev/null || true
 else
   echo "Error: curl or wget is required."
   exit 1

@@ -6,7 +6,8 @@ Feature roadmap for claude-code-status-bar. Focused on high-value additions that
 
 | Project | Language | Key Differentiator |
 |---------|----------|--------------------|
-| **claude-code-status-bar (ours)** | Bash | Pure bash, no deps, cross-platform, usage pacing markers |
+| **claude-code-status-bar (ours)** | Bash + Node.js helper | Pure bash core, stdin-native limits, pacing markers, live activity, plugin marketplace |
+| [claude-hud](https://github.com/jarrodwatts/claude-hud) | TypeScript | 13k+ stars, plugin-native, transcript parsing, multi-line layout |
 | [ccstatusline](https://github.com/sirmalloc/ccstatusline) | Node.js | Powerline styling, interactive TUI config, 30+ widgets |
 | [claude-powerline](https://github.com/Owloops/claude-powerline) | Bash | Vim-style powerline, 10+ bar styles, 6 themes |
 | [claude_monitor_statusline](https://github.com/gabriel-dehan/claude_monitor_statusline) | Ruby | Plan-specific limits, message count |
@@ -16,8 +17,11 @@ Feature roadmap for claude-code-status-bar. Focused on high-value additions that
 
 ### Our Unique Strengths
 
-- **Pure bash, zero dependencies** — no jq, no node, no python, no rust
+- **Pure bash core** — no jq, no compiled binaries; optional Node.js helper for live activity
+- **Stdin-native rate limits** — reads usage data directly from Claude Code stdin (zero network requests)
 - **Pacing markers** on usage progress bars (unique to us)
+- **Live activity line** — tool counts, agent status, todo progress (via transcript parsing)
+- **Plugin marketplace** — installable via `/plugin install`, with setup/configure slash commands
 - **One-line installer** with background update checks
 - **External config file** that survives updates
 - **Priority-based truncation** for narrow terminals
@@ -57,7 +61,24 @@ Improve visual appearance without changing architecture.
 
 ---
 
-## v1.6.0 — Testing & CLI
+## v2.0.0 — Stdin-Native, Live Activity, Plugin Marketplace :white_check_mark:
+
+Major feature release closing the gap with claude-hud while keeping our pure-bash identity.
+
+**Status**: Complete.
+
+| Item | Type | Description |
+|------|------|-------------|
+| ~~Stdin-native rate limits~~ | feature | Read `rate_limits` from stdin; OAuth API as fallback |
+| ~~Updated schema parsing~~ | feature | Handle both old flat and new nested stdin formats |
+| ~~Live activity line~~ | feature | Two-line layout with tool/agent/todo activity on line 2 |
+| ~~Node.js transcript helper~~ | feature | `statusline-helper.js` with SHA256-cached transcript parsing |
+| ~~Plugin marketplace~~ | infra | `.claude-plugin/plugin.json`, setup/configure slash commands |
+| ~~`--no-optional-locks`~~ | fix | Prevent git index lock contention |
+
+---
+
+## v2.1.0 — Testing & CLI
 
 Protect what we've built and add practical CLI features.
 
@@ -70,7 +91,7 @@ Protect what we've built and add practical CLI features.
 
 ---
 
-## After v1.6.0
+## After v2.1.0
 
 Re-evaluate based on actual user feedback. The following ideas are parked — not planned, not promised. If users ask for them, we'll prioritize:
 
@@ -87,11 +108,11 @@ Re-evaluate based on actual user feedback. The following ideas are parked — no
 | Per-segment icon overrides | #17 |
 | Overflow indicator | #18 |
 | Progress bar styles (dots, line, ascii) | #19 |
-| Two-line layout (confirmed working) | #21 |
+| ~~Two-line layout~~ | ~~#21~~ (shipped in v2.0.0) |
 | Right-aligned segments | #22 |
 | Progressive truncation cascade | #23 |
 | Segment reordering | #24 |
-| Token speed | #27 |
+| ~~Token speed~~ | ~~#27~~ (partially addressed by live activity in v2.0.0) |
 | Session budget bar | #28 |
 | Cost velocity indicator | #29 |
 | Alert-only usage mode | #30 |
@@ -132,7 +153,7 @@ Open issues in [anthropics/claude-code](https://github.com/anthropics/claude-cod
 
 ## Principles
 
-1. **Stay pure bash** — no jq, no node, no python, no compiled binaries
+1. **Stay pure bash core** — no jq, no compiled binaries. Optional Node.js helper for features that need it (transcript parsing). Core status bar works without Node.js.
 2. **Never block the status bar** — network/slow ops in background subshells with caching
 3. **Config survives updates** — `statusline.conf` is never overwritten
 4. **Cross-platform first** — macOS, Linux, and Windows/MSYS2

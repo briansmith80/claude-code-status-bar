@@ -2,17 +2,13 @@
 #
 # Claude Code statusline script
 #
-# Displays a single-line status bar with configurable segments:
-#   - Working directory (shortened with ~)
-#   - Git branch name
-#   - Model name (Opus, Sonnet, Haiku)
-#   - Context window progress bar with colour thresholds
-#   - Lines added/removed in session
-#   - Uncommitted (dirty) file count from git
-#   - Session duration
-#   - Worktree indicator (when active)
-#   - Cumulative session cost in USD
-#   - 5-hour and weekly usage limits (from Anthropic OAuth API)
+# Displays a configurable status bar with two lines:
+#   Line 1: Working directory, git branch, model, context bar, usage limits,
+#           lines changed, dirty count, session cost, and more.
+#   Line 2: Live activity — running tools, subagent status, todo progress
+#           (optional, requires Node.js, reads Claude Code transcript).
+#
+# Usage limits are read from stdin (Claude Code >= 2.1) or fetched via OAuth API.
 #
 # This script receives JSON via stdin each time the statusline refreshes
 # (after every assistant message, permission change, or vim mode toggle).
@@ -91,7 +87,7 @@ case "${1:-}" in
     echo "Usage: echo '<json>' | bash statusline-command.sh"
     echo ""
     echo "Reads Claude Code statusline JSON from stdin and outputs"
-    echo "a formatted single-line status bar for your terminal."
+    echo "a formatted status bar for your terminal."
     echo ""
     echo "Version: ${VERSION}"
     exit 0
@@ -194,6 +190,7 @@ show_agent=true
 show_tokens=false
 bar_width=10
 branch_max_length=""
+show_activity=true
 
 # Load user overrides (if any).
 # Note: this file has the same trust level as .bashrc — it can contain
@@ -390,14 +387,30 @@ ws_block=$(extract_block "$input" "workspace")
 # Sanitize cwd before using it in git commands (防 directory traversal)
 cwd=$(sanitize "$cwd")
 
-# Model display name, e.g. "Opus", "Sonnet", "Haiku"
-model=$(extract "display_name")
+# Model display name: prefer model.display_name (new schema), fall back to top-level
+model=""
+model_block=$(extract_block "$input" "model")
+[ -n "$model_block" ] && model=$(extract_from "$model_block" "display_name")
+[ -z "$model" ] && model=$(extract "display_name")
 
-# Context window usage as a percentage (0-100)
-used=$(extract_num "used_percentage")
+# Context window usage: prefer context_window.used_percentage (new schema), fall back.
+# The fallback only runs when rate_limits is absent (old flat schema) to avoid
+# matching rate_limits.five_hour.used_percentage by accident.
+used=""
+cw_block=$(extract_block "$input" "context_window")
+[ -n "$cw_block" ] && used=$(extract_num_from "$cw_block" "used_percentage")
+if [ -z "$used" ]; then
+  rl_check='"rate_limits"[[:space:]]*:'
+  [[ ! $input =~ $rl_check ]] && used=$(extract_num "used_percentage")
+fi
 
 # Context window total size in tokens
-context_size=$(extract_num "context_window_size")
+context_size=""
+[ -n "$cw_block" ] && context_size=$(extract_num_from "$cw_block" "context_window_size")
+[ -z "$context_size" ] && context_size=$(extract_num "context_window_size")
+
+# Transcript path (for live activity — new in CC 2.1+)
+transcript_path=$(extract "transcript_path")
 
 # Cumulative session cost in USD
 total_cost=$(extract_num "total_cost_usd")
@@ -409,14 +422,11 @@ lines_removed=$(extract_num "total_lines_removed")
 # Session duration in milliseconds
 duration_ms=$(extract_num "total_duration_ms")
 
-# Worktree name (only present when working in an isolated worktree)
-worktree_name=$(extract "name")
-# Disambiguate: worktree.name only exists inside a "worktree" object.
-# Check if the input actually contains a worktree block.
+# Worktree name — extract from worktree block to avoid collision with agent.name
 worktree=""
-wt_pattern="\"worktree\"[[:space:]]*:[[:space:]]*\{"
-if [[ $input =~ $wt_pattern ]]; then
-  worktree=$(sanitize "$worktree_name")
+wt_block=$(extract_block "$input" "worktree")
+if [ -n "$wt_block" ]; then
+  worktree=$(sanitize "$(extract_from "$wt_block" "name")")
 fi
 
 # ── Working Directory ─────────────────────────────────────────
@@ -434,10 +444,10 @@ dirty_count=""
 ahead_count=""
 behind_count=""
 stash_count=""
-if [ -n "$cwd" ] && [ -d "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-parse --git-dir > /dev/null 2>&1; then
+if [ -n "$cwd" ] && [ -d "$cwd" ] && git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-parse --git-dir > /dev/null 2>&1; then
   if [ "$show_branch" = "true" ]; then
-    branch=$(git -C "$cwd" -c core.fsmonitor=false symbolic-ref --short HEAD 2>/dev/null \
-      || git -C "$cwd" -c core.fsmonitor=false rev-parse --short HEAD 2>/dev/null)
+    branch=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false symbolic-ref --short HEAD 2>/dev/null \
+      || git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-parse --short HEAD 2>/dev/null)
     branch=$(sanitize "$branch")
     if [ -n "$branch_max_length" ] && [ "${#branch}" -gt "$branch_max_length" ] 2>/dev/null; then
       branch="${branch:0:$branch_max_length}…"
@@ -446,14 +456,14 @@ if [ -n "$cwd" ] && [ -d "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-p
 
   # Count uncommitted files (staged + unstaged + untracked).
   if [ "$show_dirty_count" = "true" ]; then
-    dirty_count=$(git -C "$cwd" -c core.fsmonitor=false status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    dirty_count=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false status --porcelain 2>/dev/null | wc -l | tr -d ' ')
   fi
 
   # Ahead/behind remote — silently hidden when no upstream or detached HEAD.
   # The || ab_output="" is critical: without it, set -e kills the script.
   if [ "$show_ahead_behind" = "true" ]; then
     # shellcheck disable=SC1083
-    ab_output=$(git -C "$cwd" -c core.fsmonitor=false rev-list --left-right --count HEAD...@{upstream} 2>/dev/null) || ab_output=""
+    ab_output=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-list --left-right --count HEAD...@{upstream} 2>/dev/null) || ab_output=""
     if [ -n "$ab_output" ]; then
       ahead_count=$(echo "$ab_output" | cut -f1)
       behind_count=$(echo "$ab_output" | cut -f2)
@@ -462,21 +472,92 @@ if [ -n "$cwd" ] && [ -d "$cwd" ] && git -C "$cwd" -c core.fsmonitor=false rev-p
 
   # Stash count
   if [ "$show_stash" = "true" ]; then
-    stash_count=$(git -C "$cwd" -c core.fsmonitor=false stash list 2>/dev/null | wc -l | tr -d ' ')
+    stash_count=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false stash list 2>/dev/null | wc -l | tr -d ' ')
+  fi
+fi
+
+# ── Live Activity (transcript parsing via Node.js helper) ────
+# Reads Claude Code's JSONL transcript for tool/agent/todo activity.
+# Runs in background; uses cached result from previous invocation.
+ACTIVITY_CACHE_FILE="${SCRIPT_DIR}/.statusline-activity-cache"
+HELPER_SCRIPT="${SCRIPT_DIR}/statusline-helper.js"
+activity_line=""
+
+if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
+  if command -v node > /dev/null 2>&1 && [ -f "$HELPER_SCRIPT" ]; then
+    # Spawn helper in background (non-blocking)
+    ( node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null ) &
+
+    # Read cached activity from previous run
+    if [ -f "$ACTIVITY_CACHE_FILE" ]; then
+      cached_act_ts="" cached_act_json=""
+      { read -r cached_act_ts cached_act_json; } < "$ACTIVITY_CACHE_FILE" 2>/dev/null || true
+      case "$cached_act_ts" in *[!0-9]*) cached_act_ts=0 ;; esac
+      # Expire after 30 seconds (activity becomes stale quickly)
+      if [ -n "$cached_act_ts" ] && [ $(( NOW_EPOCH - cached_act_ts )) -le 30 ] 2>/dev/null; then
+        # Extract "activity" value from simple JSON {"activity":"..."}
+        act_pattern='"activity"[[:space:]]*:[[:space:]]*"([^"]*)"'
+        if [[ ${cached_act_json:-} =~ $act_pattern ]]; then
+          activity_line="${BASH_REMATCH[1]}"
+          activity_line=$(sanitize "$activity_line")
+        fi
+      fi
+    fi
   fi
 fi
 
 # ── Usage Limits (5-hour and 7-day) ─────────────────────────
-# Fetches utilisation data from the Anthropic OAuth API and caches it.
-# Credentials are read from:
-#   macOS  — Keychain ("Claude Code-credentials")
-#   Linux/Windows — ~/.claude/.credentials.json
-# The API call runs in a background subshell (never blocks the statusline).
-# If the fetch fails, no usage segments are shown (graceful degradation).
-
-USAGE_CACHE_FILE="${SCRIPT_DIR}/.statusline-usage-cache"
+# Preferred: read rate_limits from stdin (Claude Code >= 2.1).
+# Fallback:  fetch from Anthropic OAuth API with background caching.
 
 usage_5h="" usage_5h_resets="" usage_7d="" usage_7d_resets=""
+
+# ── Phase 1: Try stdin rate_limits (zero-cost, real-time) ────
+stdin_usage=false
+rl_guard='"rate_limits"[[:space:]]*:[[:space:]]*\{'
+if [[ $input =~ $rl_guard ]]; then
+  fh_stdin_block=$(extract_block "$input" "five_hour")
+  if [ -n "$fh_stdin_block" ]; then
+    stdin_5h=$(extract_num_from "$fh_stdin_block" "used_percentage")
+    stdin_5h_resets=$(extract_num_from "$fh_stdin_block" "resets_at")
+    if [ -n "$stdin_5h" ]; then
+      usage_5h="$stdin_5h"
+      # resets_at from stdin is epoch seconds — convert to ISO for pacing compat
+      if [ -n "$stdin_5h_resets" ]; then
+        stdin_5h_resets_int="${stdin_5h_resets%%.*}"
+        if [[ "${OSTYPE:-}" == darwin* ]]; then
+          usage_5h_resets=$(date -r "$stdin_5h_resets_int" -u '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_5h_resets=""
+        else
+          usage_5h_resets=$(date -ud "@$stdin_5h_resets_int" '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_5h_resets=""
+        fi
+      fi
+      stdin_usage=true
+    fi
+  fi
+  sd_stdin_block=$(extract_block "$input" "seven_day")
+  if [ -n "$sd_stdin_block" ]; then
+    stdin_7d=$(extract_num_from "$sd_stdin_block" "used_percentage")
+    stdin_7d_resets=$(extract_num_from "$sd_stdin_block" "resets_at")
+    if [ -n "$stdin_7d" ]; then
+      usage_7d="$stdin_7d"
+      if [ -n "$stdin_7d_resets" ]; then
+        stdin_7d_resets_int="${stdin_7d_resets%%.*}"
+        if [[ "${OSTYPE:-}" == darwin* ]]; then
+          usage_7d_resets=$(date -r "$stdin_7d_resets_int" -u '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_7d_resets=""
+        else
+          usage_7d_resets=$(date -ud "@$stdin_7d_resets_int" '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_7d_resets=""
+        fi
+      fi
+      stdin_usage=true
+    fi
+  fi
+fi
+
+# ── Phase 2: OAuth API Fallback (older Claude Code versions) ─
+# Only runs if stdin didn't provide rate limits.
+if [ "$stdin_usage" = "false" ]; then
+
+USAGE_CACHE_FILE="${SCRIPT_DIR}/.statusline-usage-cache"
 
 fetch_usage_token() {
   local creds="" token=""
@@ -599,6 +680,8 @@ if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
     fi
   fi
 fi
+
+fi  # end OAuth fallback (stdin_usage=false)
 
 # Calculate pacing targets — what percentage you *should* have used
 # for even consumption across the rolling window.
@@ -782,9 +865,8 @@ if [[ $input =~ $exceed_pattern ]]; then
   add_seg "${CLR_WARN}▲ 200k+${CLR_RESET}" 2 "ctx"
 fi
 
-# Token counts (priority 5)
+# Token counts (priority 5) — reuses $cw_block from context window extraction above
 if [ "$show_tokens" = "true" ]; then
-  cw_block=$(extract_block "$input" "context_window")
   if [ -n "$cw_block" ]; then
     tok_in=$(extract_num_from "$cw_block" "total_input_tokens")
     tok_out=$(extract_num_from "$cw_block" "total_output_tokens")
@@ -1062,4 +1144,11 @@ if [ "$use_groups" = "true" ] && [ -n "$current_group" ] && [ "$group_has_conten
   output+="${group_close}"
 fi
 
+# ── Line 1: Status bar ───────────────────────────────────────
 printf "%b" "$output"
+
+# ── Line 2: Live activity (optional) ────────────────────────
+if [ -n "$activity_line" ]; then
+  printf '\n'
+  printf "%b" "${CLR_DIM}${activity_line}${CLR_RESET}"
+fi

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-03-26
+
+### Added
+
+- **Stdin-native rate limits** — reads `rate_limits.five_hour` and `rate_limits.seven_day` directly from Claude Code's stdin JSON (CC >= 2.1). Zero network requests, real-time data. Falls back to OAuth API for older versions.
+- **Live activity line** (`show_activity`) — optional second line showing running tools, completed tool counts, subagent status, and todo progress. Parses Claude Code's JSONL transcript via a Node.js helper. Enabled by default; disable with `show_activity=false`.
+- **`statusline-helper.js`** — Node.js transcript parser with SHA256-keyed disk cache. Runs in background, never blocks the status bar. Only invoked when `transcript_path` is available and Node.js is installed.
+- **Plugin marketplace support** — `.claude-plugin/plugin.json` manifest, `/claude-code-status-bar:setup` and `/claude-code-status-bar:configure` slash commands. Install via `/plugin install` or submit to the Anthropic plugin directory.
+- **Updated stdin schema** — handles both legacy flat format (`display_name`, `used_percentage` at top level) and new nested format (`model.display_name`, `context_window.used_percentage`, `rate_limits`).
+
+### Changed
+
+- **Usage limits architecture** — stdin is now the primary data source; OAuth API is a fallback. This eliminates credential extraction, background HTTP requests, and cache management for users on current Claude Code versions.
+- **Git commands** now use `--no-optional-locks` to prevent index lock contention.
+- **Installer** now downloads `statusline-helper.js` alongside the main script (optional, failure does not block installation).
+
 ## [1.5.1] - 2026-03-12
 
 ### Changed

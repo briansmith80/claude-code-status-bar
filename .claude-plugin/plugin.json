@@ -1,0 +1,25 @@
+{
+  "name": "claude-code-status-bar",
+  "version": "2.0.0",
+  "description": "Configurable status bar for Claude Code — usage limits, context window, git state, live activity, pacing markers, and 7 colour themes. Pure bash, zero dependencies.",
+  "author": {
+    "name": "briansmith80",
+    "url": "https://github.com/briansmith80"
+  },
+  "homepage": "https://github.com/briansmith80/claude-code-status-bar",
+  "repository": "https://github.com/briansmith80/claude-code-status-bar",
+  "license": "MIT",
+  "keywords": [
+    "statusline",
+    "status-bar",
+    "usage",
+    "context",
+    "git",
+    "themes",
+    "pacing"
+  ],
+  "commands": [
+    "./commands/setup.md",
+    "./commands/configure.md"
+  ]
+}

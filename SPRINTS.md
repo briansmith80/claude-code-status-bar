@@ -4,7 +4,7 @@ Lean sprint plan derived from [ROADMAP.md](ROADMAP.md). Three focused releases, 
 
 > **Methodology**: Feature-based releases via GitHub Milestones (not time-boxed). Each milestone ships when complete. Bug fixes ship immediately as patch releases.
 >
-> **Versioning**: Stay on 1.x. Patch (1.x.x) for bug fixes. Minor (1.x.0) for new features.
+> **Versioning**: Semver. Major (x.0.0) for breaking changes or major features. Minor (x.y.0) for new features. Patch (x.y.z) for bug fixes.
 
 ---
 
@@ -67,30 +67,52 @@ Lean sprint plan derived from [ROADMAP.md](ROADMAP.md). Three focused releases, 
 
 ---
 
-## Sprint 3: v1.6.0 — Testing & CLI
+## Sprint 3: v2.0.0 — Stdin-Native, Live Activity, Plugin Marketplace :white_check_mark:
+
+**Theme**: Close the feature gap with claude-hud while keeping our pure-bash identity.
+
+**Status**: Complete.
+
+| | # | Item | Type | Effort |
+|---|---|------|------|--------|
+| [x] | 3.1 | Stdin-native rate limits | feature | ~40 lines |
+| [x] | 3.2 | Updated schema parsing (old + new) | feature | ~15 lines |
+| [x] | 3.3 | Node.js transcript helper | feature | ~260 lines (new file) |
+| [x] | 3.4 | Live activity integration in bash | feature | ~30 lines |
+| [x] | 3.5 | Two-line layout | feature | ~5 lines |
+| [x] | 3.6 | Plugin marketplace files | infra | ~100 lines (new files) |
+| [x] | 3.7 | `--no-optional-locks` on git | fix | ~1 line (replace_all) |
+| [x] | 3.8 | Installer update (download helper) | enhancement | ~4 lines |
+
+**Estimated LOC**: ~455 new/modified
+**Depends on**: Sprint 2 (complete)
+
+### Notes
+
+- Stdin rate limits skip OAuth entirely when `rate_limits` key present in stdin JSON.
+- `statusline-helper.js` uses SHA256-keyed disk cache, only re-parses on transcript change.
+- Activity line is enabled by default (`show_activity=true`), disable in `statusline.conf`.
+- Plugin slash commands: `/claude-code-status-bar:setup` and `/claude-code-status-bar:configure`.
+
+---
+
+## Sprint 4: v2.1.0 — Testing & CLI
 
 **Theme**: Protect what we've built and add practical CLI features.
 
 | | # | Item | Type | Effort |
 |---|---|------|------|--------|
-| [ ] | 3.1 | BATS test scaffold — #25 | testing | ~150 lines |
-| [ ] | 3.2 | CI matrix (macOS + MSYS2) — #26 | ci | ~40 lines |
-| [ ] | 3.3 | `--dump-config` CLI flag — #32 | cli | ~25 lines |
-| [ ] | 3.4 | `--uninstall` CLI flag — #37 | cli | ~25 lines |
+| [ ] | 4.1 | BATS test scaffold — #25 | testing | ~150 lines |
+| [ ] | 4.2 | CI matrix (macOS + MSYS2) — #26 | ci | ~40 lines |
+| [ ] | 4.3 | `--dump-config` CLI flag — #32 | cli | ~25 lines |
+| [ ] | 4.4 | `--uninstall` CLI flag — #37 | cli | ~25 lines |
 
 **Estimated LOC**: ~240 new/modified
-**Depends on**: Sprint 2 (complete)
-
-### Notes
-
-- BATS tests should cover: `extract_from()`, `build_progress_bar()`, `sanitize()`, theme application, config loading, edge cases (empty input, null fields).
-- CI matrix adds macOS and Windows (MSYS2) runners alongside existing ubuntu-latest.
-- `--dump-config` helps users debug config issues.
-- `--uninstall` replaces the current manual 5-step removal process.
+**Depends on**: Sprint 3 (complete)
 
 ---
 
-## After Sprint 3
+## After Sprint 4
 
 Stop and re-evaluate. See what users are actually asking for before building more. The [ROADMAP.md](ROADMAP.md) has a full list of parked ideas that can be promoted based on demand.
 
@@ -103,5 +125,6 @@ Stop and re-evaluate. See what users are actually asking for before building mor
 | 0 | v1.3.1 | ~35 | 5 |
 | 1 | v1.4.0 | ~80 | 8 |
 | 2 | v1.5.0 | ~52 | 2 |
-| 3 | v1.6.0 | ~240 | 4 |
-| **Total** | | **~407** | **19** |
+| 3 | v2.0.0 | ~455 | 8 |
+| 4 | v2.1.0 | ~240 | 4 |
+| **Total** | | **~862** | **27** |
