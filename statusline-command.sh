@@ -359,10 +359,11 @@ extract_num_from() {
 }
 
 # Extract a JSON object block by key, returning content between { }
+# Handles one level of nested braces (e.g., inner objects within the block).
 # Usage: extract_block "$json" "key"
 extract_block() {
   local json="$1" key="$2"
-  local pattern="\"$key\"[[:space:]]*:[[:space:]]*\{([^}]+)\}"
+  local pattern="\"$key\"[[:space:]]*:[[:space:]]*\{(([^{}]|\{[^}]*\})+)\}"
   if [[ $json =~ $pattern ]]; then
     echo "${BASH_REMATCH[1]}"
   fi
