@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.1] - 2026-04-09
+
+### Fixed
+
+- **Context window 0% on 1M context models** — `extract_block()` regex stopped at the first `}` inside nested JSON objects, causing `used_percentage` to be missed when `context_window` contains sub-objects (affects Opus 4.6 with 1M context)
+
 ## [2.0.0] - 2026-03-26
 
 ### Added
