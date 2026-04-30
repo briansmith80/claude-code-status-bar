@@ -872,8 +872,18 @@ if [ "$show_context_bar" = "true" ]; then
   fi
   ctx_suffix=""
   if [ -n "$context_size" ] && [ "$context_size" != "0" ]; then
-    ctx_k=$(( ${context_size%%.*} / 1000 ))
-    ctx_suffix=" of ${ctx_k}k"
+    ctx_int=${context_size%%.*}
+    if [ "$ctx_int" -ge 1000000 ] 2>/dev/null; then
+      ctx_m=$(( ctx_int / 1000000 ))
+      ctx_tenths=$(( (ctx_int % 1000000) / 100000 ))
+      if [ "$ctx_tenths" -eq 0 ]; then
+        ctx_suffix=" of ${ctx_m}M"
+      else
+        ctx_suffix=" of ${ctx_m}.${ctx_tenths}M"
+      fi
+    else
+      ctx_suffix=" of $(( ctx_int / 1000 ))k"
+    fi
   fi
   add_seg "${warn_prefix}${progress_bar} ${bar_clr}${pct_int}%${ctx_suffix}${CLR_RESET}" 2 "ctx"
 fi

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.2] - 2026-04-30
+
+### Changed
+
+- **Context window suffix uses `M` for million-token windows** — previously displayed as `of 1000k`, now shows `of 1M` (or `of 1.5M`, etc.). Sub-1M windows continue to display in `k`.
+
 ## [2.0.1] - 2026-04-09
 
 ### Fixed
