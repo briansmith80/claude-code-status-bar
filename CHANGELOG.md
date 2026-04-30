@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.4] - 2026-04-30
+
+### Removed
+
+- **Dead `.statusline-usage-log` writer** — `fetch_usage_data()` was appending `200`/`429`/`bad_response` lines to a log file that was never read by anything. Pure debug residue from old rate-limit work; removing it eliminates ~6 lines of code and two extra `tail`+`mv` disk operations per OAuth fetch. Existing log files at `~/.claude/.statusline-usage-log` are now orphaned and can be deleted manually.
+
+### Changed
+
+- **Opus orange is now theme-aware** — previously hardcoded as `\033[38;5;208m` (default-theme orange) in every theme. Each of the 7 themes now defines its own `CLR_MODEL_OPUS` so the Opus tier colour fits the palette: nord aurora orange, dracula `#ffb86c`, solarized `#cb4b16`, tokyo-night `#ff9e64`, catppuccin peach `#fab387`. Default theme keeps `208` (visually identical to before).
+
 ## [2.0.3] - 2026-04-30
 
 ### Fixed

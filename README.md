@@ -239,7 +239,6 @@ rm -f ~/.claude/.statusline-usage-cache
 rm -f ~/.claude/.statusline-activity-cache
 rm -rf ~/.claude/.statusline-transcript-cache
 rm -f ~/.claude/.statusline-usage-backoff
-rm -f ~/.claude/.statusline-usage-log
 ```
 
 Then remove the `"statusLine"` block from `~/.claude/settings.json`.

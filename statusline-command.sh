@@ -231,6 +231,7 @@ apply_theme() {
       CLR_DIR="\033[38;5;81m"     # frost blue
       CLR_BRANCH="\033[38;5;139m"  # aurora purple
       CLR_MODEL="\033[38;5;111m"   # frost lighter blue
+      CLR_MODEL_OPUS="\033[38;5;173m" # aurora orange (Opus tier)
       CLR_ADD="\033[38;5;108m"     # aurora green
       CLR_DEL="\033[38;5;174m"     # aurora red
       CLR_WARN="\033[38;5;179m"    # aurora yellow
@@ -246,6 +247,7 @@ apply_theme() {
       CLR_DIR="\033[38;5;141m"     # purple
       CLR_BRANCH="\033[38;5;212m"  # pink
       CLR_MODEL="\033[38;5;117m"   # cyan
+      CLR_MODEL_OPUS="\033[38;5;215m" # orange #ffb86c (Opus tier)
       CLR_ADD="\033[38;5;84m"      # green
       CLR_DEL="\033[38;5;210m"     # red
       CLR_WARN="\033[38;5;228m"    # yellow
@@ -261,6 +263,7 @@ apply_theme() {
       CLR_DIR="\033[38;5;37m"     # cyan
       CLR_BRANCH="\033[38;5;61m"  # violet
       CLR_MODEL="\033[38;5;33m"   # blue
+      CLR_MODEL_OPUS="\033[38;5;166m" # solarized orange (Opus tier)
       CLR_ADD="\033[38;5;64m"     # green
       CLR_DEL="\033[38;5;160m"    # red
       CLR_WARN="\033[38;5;136m"   # yellow
@@ -276,6 +279,7 @@ apply_theme() {
       CLR_DIR="\033[38;5;111m"    # blue #7aa2f7
       CLR_BRANCH="\033[38;5;141m" # purple #bb9af7
       CLR_MODEL="\033[38;5;117m"  # cyan #7dcfff
+      CLR_MODEL_OPUS="\033[38;5;215m" # orange #ff9e64 (Opus tier)
       CLR_ADD="\033[38;5;149m"    # green #9ece6a
       CLR_DEL="\033[38;5;204m"    # red #f7768e
       CLR_WARN="\033[38;5;179m"   # yellow #e0af68
@@ -291,6 +295,7 @@ apply_theme() {
       CLR_DIR="\033[38;5;111m"    # blue #89b4fa
       CLR_BRANCH="\033[38;5;183m" # mauve #cba6f7
       CLR_MODEL="\033[38;5;116m"  # sapphire #74c7ec
+      CLR_MODEL_OPUS="\033[38;5;216m" # peach #fab387 (Opus tier)
       CLR_ADD="\033[38;5;150m"    # green #a6e3a1
       CLR_DEL="\033[38;5;211m"    # red #f38ba8
       CLR_WARN="\033[38;5;223m"   # yellow #f9e2af
@@ -303,7 +308,7 @@ apply_theme() {
       CLR_RESET="\033[0m"
       ;;
     mono)
-      CLR_DIR="" CLR_BRANCH="" CLR_MODEL=""
+      CLR_DIR="" CLR_BRANCH="" CLR_MODEL="" CLR_MODEL_OPUS=""
       CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO="" CLR_DIM=""
       CLR_BAR_OK="" CLR_BAR_MED="" CLR_BAR_HIGH="" CLR_PACE=""
       CLR_RESET=""
@@ -312,6 +317,7 @@ apply_theme() {
       CLR_DIR="\033[0;36m"     # cyan
       CLR_BRANCH="\033[0;35m"  # magenta
       CLR_MODEL="\033[0;34m"   # blue
+      CLR_MODEL_OPUS="\033[38;5;208m" # orange (Opus tier)
       CLR_ADD="\033[0;32m"     # green
       CLR_DEL="\033[0;31m"     # red
       CLR_WARN="\033[0;33m"    # yellow
@@ -606,8 +612,6 @@ usage_backoff_increase() {
   printf '%s %s\n' "$next_backoff" "$NOW_EPOCH" > "$USAGE_BACKOFF_FILE"
 }
 
-USAGE_LOG_FILE="${SCRIPT_DIR}/.statusline-usage-log"
-
 fetch_usage_data() {
   local token response
   token=$(fetch_usage_token) || return 1
@@ -615,22 +619,17 @@ fetch_usage_data() {
   response=$(http_get "https://api.anthropic.com/api/oauth/usage" 3) || {
     HTTP_AUTH_HEADER=""
     usage_backoff_increase
-    # Log failed attempt (keep last 50 lines)
-    echo "${NOW_EPOCH} 429" >> "$USAGE_LOG_FILE"
-    tail -50 "$USAGE_LOG_FILE" > "${USAGE_LOG_FILE}.tmp" && mv "${USAGE_LOG_FILE}.tmp" "$USAGE_LOG_FILE"
     return 1
   }
   HTTP_AUTH_HEADER=""
   # Sanity check: response must contain "five_hour" or "seven_day"
   case "$response" in
     *five_hour*|*seven_day*) ;;
-    *) usage_backoff_increase; echo "${NOW_EPOCH} bad_response" >> "$USAGE_LOG_FILE"; return 1 ;;
+    *) usage_backoff_increase; return 1 ;;
   esac
   # Success — clear backoff and update cache
   rm -f "$USAGE_BACKOFF_FILE"
   echo "${NOW_EPOCH} ${response}" > "$USAGE_CACHE_FILE"
-  echo "${NOW_EPOCH} 200" >> "$USAGE_LOG_FILE"
-  tail -50 "$USAGE_LOG_FILE" > "${USAGE_LOG_FILE}.tmp" && mv "${USAGE_LOG_FILE}.tmp" "$USAGE_LOG_FILE"
 }
 
 # Refresh cache if stale or missing (only when usage segments are enabled).
@@ -837,7 +836,7 @@ if [ "$show_model" = "true" ]; then
   case "${model:-}" in
     *Haiku*)  model_clr="$CLR_ADD" ;;                # green (cheap)
     *Sonnet*) model_clr="$CLR_WARN" ;;               # yellow (mid)
-    *Opus*)   model_clr="\033[38;5;208m" ;;           # orange (premium)
+    *Opus*)   model_clr="$CLR_MODEL_OPUS" ;;          # theme-aware orange (premium)
     *)        model_clr="$CLR_MODEL" ;;               # default blue
   esac
   # Respect NO_COLOR / mono theme
