@@ -60,7 +60,7 @@ README.md                  # User-facing docs
 See [ROADMAP.md](ROADMAP.md) for the feature roadmap and competitive landscape.
 See [SPRINTS.md](SPRINTS.md) for the validated sprint plan with dependency ordering and effort estimates.
 
-Current focus: shipping **v2.0.x patches** (plugin manifest sync, doc cleanup, small fixes). Next milestone: **Sprint 4 (v2.1.0)** — Testing & CLI (not yet started).
+Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI :white_check_mark: shipped. BATS scaffold (28 tests), three-platform CI matrix, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`) all landed. Next: re-evaluate against user feedback per the post-Sprint-4 plan in SPRINTS.md.
 
 ## How to release a new version
 

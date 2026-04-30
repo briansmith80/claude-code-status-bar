@@ -106,19 +106,27 @@ Bug-fix and doc-cleanup releases shipped between v2.0.0 and the next milestone:
 
 ---
 
-## Sprint 4: v2.1.0 — Testing & CLI
+## Sprint 4: v2.1.0 — Testing & CLI :white_check_mark:
 
 **Theme**: Protect what we've built and add practical CLI features.
 
+**Status**: Complete.
+
 | | # | Item | Type | Effort |
 |---|---|------|------|--------|
-| [ ] | 4.1 | BATS test scaffold — #25 | testing | ~150 lines |
-| [ ] | 4.2 | CI matrix (macOS + MSYS2) — #26 | ci | ~40 lines |
-| [ ] | 4.3 | `--dump-config` CLI flag — #32 | cli | ~25 lines |
-| [ ] | 4.4 | `--uninstall` CLI flag — #37 | cli | ~25 lines |
+| [x] | 4.1 | BATS test scaffold — #25 | testing | ~150 lines |
+| [x] | 4.2 | CI matrix (macOS + MSYS2) — #26 | ci | ~40 lines |
+| [x] | 4.3 | `--dump-config` CLI flag — #32 | cli | ~25 lines |
+| [x] | 4.4 | `--uninstall` CLI flag — #37 | cli | ~25 lines |
 
 **Estimated LOC**: ~240 new/modified
 **Depends on**: Sprint 3 (complete)
+
+### Notes
+
+- 28 tests across 5 BATS files; Windows MSYS2 fork overhead means each test runs in ~1.4s there (Linux/macOS sub-100ms).
+- CI matrix runs on `ubuntu-latest`, `macos-latest`, `windows-latest`. Existing ShellCheck workflow kept untouched.
+- `--help` and `--version` flags shipped alongside `--dump-config` and `--uninstall` since they fit the same dispatch pattern.
 
 ---
 

@@ -57,6 +57,19 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 }
 ```
 
+## CLI Flags
+
+The status bar normally runs with no arguments — Claude Code pipes JSON to it on stdin. The flags below are for setup, diagnostics, and management.
+
+| Flag | Description | Example |
+|------|-------------|---------|
+| `--help` | Show usage info and exit. | `bash ~/.claude/statusline-command.sh --help` |
+| `--version` | Print the installed version (from `~/.claude/.statusline-version`) and exit. | `bash ~/.claude/statusline-command.sh --version` |
+| `--check-update` | Force a synchronous update check against GitHub. | `bash ~/.claude/statusline-command.sh --check-update` |
+| `--dump-config` | Print the resolved configuration (defaults overridden by `~/.claude/statusline.conf`) as `key=value` lines, alphabetically sorted. Useful for debugging "why isn't my override taking effect?" | `bash ~/.claude/statusline-command.sh --dump-config` |
+| `--dump-stdin` | Pretty-print the raw JSON Claude Code sends, plus a list of detected fields. Pipe Claude Code's stdin into it for diagnostics. | `echo '<json>' \| bash ~/.claude/statusline-command.sh --dump-stdin` |
+| `--uninstall` | Interactively remove all installed files. Prompts before deleting, and prompts separately before removing `statusline.conf` so you can keep your config. Reminds you to remove the `"statusLine"` block from `settings.json` manually. | `bash ~/.claude/statusline-command.sh --uninstall` |
+
 ## Two-Line Layout
 
 **Line 1** is the metrics bar — directory, branch, model, context, usage limits, git stats, cost.
@@ -219,14 +232,6 @@ To manually check for updates:
 bash ~/.claude/statusline-command.sh --check-update
 ```
 
-## CLI Flags
-
-```bash
-bash ~/.claude/statusline-command.sh --help          # show usage info
-bash ~/.claude/statusline-command.sh --version        # print version
-bash ~/.claude/statusline-command.sh --check-update   # force update check
-```
-
 ## Uninstall
 
 ```bash
@@ -242,6 +247,26 @@ rm -f ~/.claude/.statusline-usage-backoff
 ```
 
 Then remove the `"statusLine"` block from `~/.claude/settings.json`.
+
+## Testing
+
+A BATS test suite lives under [`tests/`](tests/) and runs in CI on Linux, macOS, and Windows (MSYS2).
+
+To run locally, install [bats-core](https://github.com/bats-core/bats-core):
+
+```bash
+brew install bats-core            # macOS
+sudo apt-get install -y bats      # Debian / Ubuntu
+pacman -S --noconfirm bats        # MSYS2
+```
+
+Then from the repo root:
+
+```bash
+bats tests/
+```
+
+See [`tests/README.md`](tests/README.md) for layout details.
 
 ## License
 

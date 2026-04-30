@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-04-30
+
+### Added
+
+- **BATS test scaffold** (`tests/`) — 28 tests across 5 files covering schema parsing (old flat + new nested + stdin `rate_limits`), segment rendering, all 7 themes, config overrides, and context-window formatting (200k / 1M / 1.5M, 0% / 100% bar fill). Run locally with `bats tests/`.
+- **CI matrix on three platforms** (`.github/workflows/tests.yml`) — runs the BATS suite on `ubuntu-latest`, `macos-latest`, and `windows-latest` (MSYS2). Existing ShellCheck workflow is unchanged.
+- **`--dump-config` flag** — prints the resolved configuration (defaults overridden by `~/.claude/statusline.conf`) as alphabetised `key=value` lines. Useful for debugging "why isn't my override taking effect?"
+- **`--uninstall` flag** — interactive removal of installed files. Prompts before deleting; prompts separately before removing `statusline.conf` so users can keep their config; reminds users to remove the `"statusLine"` block from `settings.json` manually (does not auto-edit JSON).
+- **`--version` flag** — prints the installed version and exits.
+- **`--help` flag** — prints usage info for all CLI flags.
+- **README "Testing" and "CLI Flags" sections** documenting the new tooling.
+
+### Changed
+
+- Update-check background subshell is now skipped when `--dump-config` or `--uninstall` is invoked, so diagnostic flags never make network calls.
+
 ## [2.0.4] - 2026-04-30
 
 ### Removed

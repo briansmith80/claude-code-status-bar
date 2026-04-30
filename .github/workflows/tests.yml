@@ -1,0 +1,52 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  linux:
+    name: BATS (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install BATS
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y bats
+      - name: Run tests
+        run: bats tests/
+
+  macos:
+    name: BATS (macos-latest)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install BATS
+        run: brew install bats-core
+      - name: Run tests
+        run: bats tests/
+
+  windows:
+    name: BATS (windows-latest, MSYS2)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: true
+          install: >-
+            bats
+            git
+            coreutils
+            sed
+            grep
+      - name: Run tests
+        run: bats tests/

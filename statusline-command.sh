@@ -82,18 +82,29 @@ iso_to_epoch() {
 }
 
 # ── CLI Flags ─────────────────────────────────────────────────
+# Note: --dump-config and --uninstall are handled later, AFTER defaults
+# and ~/.claude/statusline.conf have been loaded. The flags below exit
+# early because they don't depend on resolved config values.
 case "${1:-}" in
   --help|-h)
-    echo "Usage: echo '<json>' | bash statusline-command.sh"
+    echo "Usage: echo '<json>' | bash statusline-command.sh [FLAG]"
     echo ""
     echo "Reads Claude Code statusline JSON from stdin and outputs"
     echo "a formatted status bar for your terminal."
     echo ""
     echo "Flags:"
     echo "  --help           Show this help"
-    echo "  --version        Print version"
-    echo "  --check-update   Force update check"
-    echo "  --dump-stdin     Show raw JSON from Claude Code (diagnostic)"
+    echo "                     bash statusline-command.sh --help"
+    echo "  --version        Print version and exit"
+    echo "                     bash statusline-command.sh --version"
+    echo "  --check-update   Force a synchronous update check"
+    echo "                     bash statusline-command.sh --check-update"
+    echo "  --dump-stdin     Pretty-print the raw JSON Claude Code sends (diagnostic)"
+    echo "                     echo '<json>' | bash statusline-command.sh --dump-stdin"
+    echo "  --dump-config    Print resolved config (defaults + statusline.conf)"
+    echo "                     bash statusline-command.sh --dump-config"
+    echo "  --uninstall      Interactively remove installed files (prompts before deleting)"
+    echo "                     bash statusline-command.sh --uninstall"
     echo ""
     echo "Version: ${VERSION}"
     exit 0
@@ -164,7 +175,12 @@ check_for_update() {
   ) &
 }
 
-check_for_update
+# Skip the background update check for diagnostic / management flags
+# (they would race with cache deletion or pollute --dump-config output).
+case "${1:-}" in
+  --dump-config|--uninstall) ;;
+  *) check_for_update ;;
+esac
 
 # ── Configuration ─────────────────────────────────────────────
 # Defaults — toggle each segment on/off (true/false).
@@ -220,6 +236,110 @@ STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 # Backwards compatibility: accept old name
 [ "${show_usage_weekly:-}" = "true" ] && show_usage_7d=true
 [ "${show_usage_weekly:-}" = "false" ] && show_usage_7d=false
+
+# ── Post-config CLI Flags ─────────────────────────────────────
+# These flags need the resolved config (defaults + statusline.conf),
+# but must run BEFORE we read stdin, fetch caches, or hit the network.
+case "${1:-}" in
+  --dump-config)
+    # Print resolved config as alphabetically-sorted key=value pairs.
+    # Reflects defaults overridden by ~/.claude/statusline.conf.
+    {
+      printf 'auto_hide=%s\n'              "${auto_hide}"
+      printf 'bar_width=%s\n'              "${bar_width}"
+      printf 'branch_max_length=%s\n'      "${branch_max_length}"
+      printf 'colour_theme=%s\n'           "${colour_theme}"
+      printf 'context_warn_threshold=%s\n' "${context_warn_threshold}"
+      printf 'enable_truncation=%s\n'      "${enable_truncation}"
+      printf 'group_close=%s\n'            "${group_close}"
+      printf 'group_open=%s\n'             "${group_open}"
+      printf 'max_width=%s\n'              "${max_width}"
+      printf 'show_activity=%s\n'          "${show_activity}"
+      printf 'show_agent=%s\n'             "${show_agent}"
+      printf 'show_ahead_behind=%s\n'      "${show_ahead_behind}"
+      printf 'show_branch=%s\n'            "${show_branch}"
+      printf 'show_context_bar=%s\n'       "${show_context_bar}"
+      printf 'show_cost=%s\n'              "${show_cost}"
+      printf 'show_cost_rate=%s\n'         "${show_cost_rate}"
+      printf 'show_directory=%s\n'         "${show_directory}"
+      printf 'show_dirty_count=%s\n'       "${show_dirty_count}"
+      printf 'show_duration=%s\n'          "${show_duration}"
+      printf 'show_lines_changed=%s\n'     "${show_lines_changed}"
+      printf 'show_model=%s\n'             "${show_model}"
+      printf 'show_stash=%s\n'             "${show_stash}"
+      printf 'show_tokens=%s\n'            "${show_tokens}"
+      printf 'show_usage_5h=%s\n'          "${show_usage_5h}"
+      printf 'show_usage_7d=%s\n'          "${show_usage_7d}"
+      printf 'show_vim_mode=%s\n'          "${show_vim_mode}"
+      printf 'show_worktree=%s\n'          "${show_worktree}"
+      printf 'usage_cache_seconds=%s\n'    "${usage_cache_seconds}"
+      printf 'use_groups=%s\n'             "${use_groups}"
+      printf 'use_icons=%s\n'              "${use_icons}"
+    } | LC_ALL=C sort
+    exit 0
+    ;;
+  --uninstall)
+    # Interactive removal of all files installed under ~/.claude/.
+    # Mirrors the README "Uninstall" file list. statusline.conf is
+    # handled separately so the user can keep their config.
+    UNINSTALL_FILES=(
+      "${SCRIPT_DIR}/statusline-command.sh"
+      "${SCRIPT_DIR}/statusline-helper.js"
+      "${SCRIPT_DIR}/.statusline-version"
+      "${SCRIPT_DIR}/.statusline-update-cache"
+      "${SCRIPT_DIR}/.statusline-usage-cache"
+      "${SCRIPT_DIR}/.statusline-usage-backoff"
+      "${SCRIPT_DIR}/.statusline-activity-cache"
+    )
+    UNINSTALL_DIRS=(
+      "${SCRIPT_DIR}/.statusline-transcript-cache"
+    )
+    echo "This will remove the following files:"
+    for f in "${UNINSTALL_FILES[@]}"; do
+      echo "  $f"
+    done
+    for d in "${UNINSTALL_DIRS[@]}"; do
+      echo "  $d/ (directory)"
+    done
+    echo ""
+    echo "Your config file (${SCRIPT_DIR}/statusline.conf) will be kept"
+    echo "unless you confirm its removal in a follow-up prompt."
+    echo ""
+    response=""
+    read -r -p "Continue? [y/N] " response || response=""
+    case "$response" in
+      y|Y)
+        for f in "${UNINSTALL_FILES[@]}"; do
+          rm -f "$f"
+        done
+        for d in "${UNINSTALL_DIRS[@]}"; do
+          rm -rf "$d"
+        done
+        echo "Removed installed files."
+        conf_response=""
+        if [ -f "${SCRIPT_DIR}/statusline.conf" ]; then
+          read -r -p "Also remove ${SCRIPT_DIR}/statusline.conf? [y/N] " conf_response || conf_response=""
+          case "$conf_response" in
+            y|Y)
+              rm -f "${SCRIPT_DIR}/statusline.conf"
+              echo "Removed ${SCRIPT_DIR}/statusline.conf."
+              ;;
+            *)
+              echo "Kept ${SCRIPT_DIR}/statusline.conf."
+              ;;
+          esac
+        fi
+        echo ""
+        echo "Now remove the \"statusLine\" block from ~/.claude/settings.json manually."
+        exit 0
+        ;;
+      *)
+        echo "Cancelled."
+        exit 1
+        ;;
+    esac
+    ;;
+esac
 
 # ── Colour Themes ────────────────────────────────────────────
 # Respect NO_COLOR standard (https://no-color.org/)
