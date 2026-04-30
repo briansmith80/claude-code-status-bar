@@ -8,11 +8,11 @@
 A configurable status bar for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that shows API usage limits, context window, git state, live tool activity, session cost, and more — with pacing markers that tell you if you're burning through your quota too fast.
 
 ```
-Line 1: ~/my-app on ↱ main  ◆ Opus 4.6  ████████░░ 78% of 200k  5hr(2pm) ███│░░░░░░ 37%  wk(fri,3am) ██████░│░░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
+Line 1: ~/my-app on ↱ main  ◆ Opus 4.6  ████████░░ 78% of 200k  5hr (2pm) ███│░░░░░░ 37%  wk (fri,3am) ██████░│░░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
 Line 2: → Edit main.ts  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests
 ```
 
-18 segments + live activity line. 7 colour themes. Pure bash core. One-line install. Works on macOS, Linux, and Windows (Git Bash / MSYS2).
+17 segments + live activity line. 7 colour themes. Pure bash core. One-line install. Works on macOS, Linux, and Windows (Git Bash / MSYS2).
 
 ## Install
 

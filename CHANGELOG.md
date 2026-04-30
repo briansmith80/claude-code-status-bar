@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.3] - 2026-04-30
+
+### Fixed
+
+- **`.claude-plugin/plugin.json` version drift** — manifest was stuck at `2.0.0` despite v2.0.1 and v2.0.2 shipping. Now matches `VERSION`.
+- **README typos** — "18 segments" → 17 (actual count); `5hr(2pm)` → `5hr (2pm)` and `wk(fri,3am)` → `wk (fri,3am)` to match real script output.
+- **Stray Chinese character** in `statusline-command.sh` cwd-sanitize comment (autocomplete artefact).
+
+### Changed
+
+- **Release checklist in `CLAUDE.md`** now includes a step to bump `.claude-plugin/plugin.json` (root cause of past drift).
+- **`SPRINTS.md`** now acknowledges v2.0.x patch releases shipped between v2.0.0 and the upcoming v2.1.0.
+
 ## [2.0.2] - 2026-04-30
 
 ### Changed

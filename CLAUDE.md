@@ -60,19 +60,20 @@ README.md                  # User-facing docs
 See [ROADMAP.md](ROADMAP.md) for the feature roadmap and competitive landscape.
 See [SPRINTS.md](SPRINTS.md) for the validated sprint plan with dependency ordering and effort estimates.
 
-Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI.
+Current focus: shipping **v2.0.x patches** (plugin manifest sync, doc cleanup, small fixes). Next milestone: **Sprint 4 (v2.1.0)** — Testing & CLI (not yet started).
 
 ## How to release a new version
 
-**IMPORTANT: Do not skip any of these steps.** Tags and GitHub releases have been missed before — always create them alongside the version bump.
+**IMPORTANT: Do not skip any of these steps.** Tags, GitHub releases, and the plugin manifest version have all been missed before — always update them alongside the version bump.
 
 1. Bump `VERSION` file (e.g., `1.5.0`)
 2. Update `CHANGELOG.md` with a new `[1.5.0] - YYYY-MM-DD` section
-3. Update all docs: README.md, CLAUDE.md (current milestone), ROADMAP.md, SPRINTS.md
-4. Commit everything: `git add -A && git commit -m "release: v1.5.0" && git push`
-5. Create annotated tag: `git tag -a v1.5.0 -m "v1.5.0" && git push origin v1.5.0`
-6. Create GitHub release with notes from CHANGELOG: `gh release create v1.5.0 --title "v1.5.0" --notes "..."`
-7. Copy files to local install: `cp statusline-command.sh ~/.claude/statusline-command.sh && cp statusline-helper.js ~/.claude/statusline-helper.js`
+3. Bump `.claude-plugin/plugin.json` `"version"` to match `VERSION`
+4. Update all docs: README.md, CLAUDE.md (current milestone), ROADMAP.md, SPRINTS.md
+5. Commit everything: `git add -A && git commit -m "release: v1.5.0" && git push`
+6. Create annotated tag: `git tag -a v1.5.0 -m "v1.5.0" && git push origin v1.5.0`
+7. Create GitHub release with notes from CHANGELOG: `gh release create v1.5.0 --title "v1.5.0" --notes "..."`
+8. Copy files to local install: `cp statusline-command.sh ~/.claude/statusline-command.sh && cp statusline-helper.js ~/.claude/statusline-helper.js`
 
 Users with the update check will see `⬆ update available` within 6 hours.
 

@@ -96,6 +96,16 @@ Lean sprint plan derived from [ROADMAP.md](ROADMAP.md). Three focused releases, 
 
 ---
 
+## Patch releases (v2.0.x)
+
+Bug-fix and doc-cleanup releases shipped between v2.0.0 and the next milestone:
+
+- **v2.0.1** — `extract_block()` regex fix for nested JSON (1M-context models displayed 0%).
+- **v2.0.2** — Context-window suffix renders as `1M` instead of `1000k` for million-token windows.
+- **v2.0.3** — `.claude-plugin/plugin.json` version sync, doc cleanup, release-checklist hardening.
+
+---
+
 ## Sprint 4: v2.1.0 — Testing & CLI
 
 **Theme**: Protect what we've built and add practical CLI features.

@@ -403,7 +403,7 @@ ws_block=$(extract_block "$input" "workspace")
 [ -n "$ws_block" ] && cwd=$(extract_from "$ws_block" "current_dir")
 [ -z "$cwd" ] && cwd=$(extract "cwd")
 
-# Sanitize cwd before using it in git commands (防 directory traversal)
+# Sanitize cwd before using it in git commands (defends against directory traversal)
 cwd=$(sanitize "$cwd")
 
 # Model display name: prefer model.display_name (new schema), fall back to top-level
