@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-labelledby="spTitle">
+  <title id="spTitle">claude-code-status-bar: usage limits, context, git state and live activity in your Claude Code status bar</title>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="20%" r="65%">
+      <stop offset="0%" stop-color="#d97757" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#d97757" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="#0d1117"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <text x="640" y="126" text-anchor="middle" font-family="'Cascadia Code', Consolas, 'SF Mono', Menlo, ui-monospace, monospace" font-size="62" font-weight="700" letter-spacing="-1"><tspan fill="#d97757">claude</tspan><tspan fill="#e6edf3">-code-status-bar</tspan></text>
+  <text x="640" y="174" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="22" fill="#8b949e">Usage limits, context, git state &amp; live activity under every response</text>
+  <text x="640" y="216" text-anchor="middle" font-family="'Cascadia Code', Consolas, 'SF Mono', Menlo, ui-monospace, monospace" font-size="15" fill="#6e7681">pure bash · zero dependencies · 7 themes · macOS / Linux / Windows</text>
+  <g>
+    <rect x="80" y="258" width="1120" height="322" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <circle cx="108" cy="282" r="5.5" fill="#f85149"/>
+    <circle cx="128" cy="282" r="5.5" fill="#d29922"/>
+    <circle cx="148" cy="282" r="5.5" fill="#3fb950"/>
+    <text x="1172" y="287" text-anchor="end" font-family="'Cascadia Code', Consolas, 'SF Mono', Menlo, ui-monospace, monospace" font-size="13" fill="#8b949e">Claude Code</text>
+    <line x1="81" y1="302" x2="1199" y2="302" stroke="#30363d" stroke-opacity="0.7"/>
+    <text x="104" y="338" font-family="'Cascadia Code', Consolas, 'SF Mono', Menlo, ui-monospace, monospace" font-size="15"><tspan fill="#58a6ff">›</tspan><tspan fill="#8b949e"> add input validation to the signup form</tspan></text>
+    <text x="104" y="370" font-family="'Cascadia Code', Consolas, 'SF Mono', Menlo, ui-monospace, monospace" font-size="15"><tspan fill="#d97757">●</tspan><tspan fill="#8b949e"> I'll add validation to the form fields and wire up the error states.</tspan></text>
+    <rect x="126" y="388" width="430" height="8" rx="4" fill="#21262d"/>
+    <rect x="126" y="406" width="310" height="8" rx="4" fill="#21262d"/>
+    <rect x="126" y="424" width="370" height="8" rx="4" fill="#21262d"/>
+    <line x1="81" y1="456" x2="1199" y2="456" stroke="#30363d" stroke-opacity="0.7"/>
+    <text x="104" y="500" font-family="'Cascadia Code', Consolas, 'SF Mono', Menlo, ui-monospace, monospace" font-size="13.5"><tspan fill="#39c5cf">~/my-app</tspan><tspan fill="#8b949e"> on </tspan><tspan fill="#bc8cff">↱ main</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#d97757">◆ Opus 4.6</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#d29922">███████</tspan><tspan fill="#484f58">░░░</tspan><tspan fill="#d29922"> 78%</tspan><tspan fill="#8b949e">  5hr (2pm) </tspan><tspan fill="#3fb950">███</tspan><tspan fill="#e6edf3">│</tspan><tspan fill="#484f58">░░░░░░</tspan><tspan fill="#3fb950"> 37%</tspan><tspan fill="#8b949e">  wk (fri,3am) </tspan><tspan fill="#d29922">███████</tspan><tspan fill="#e6edf3">│</tspan><tspan fill="#484f58">░░</tspan><tspan fill="#d29922"> 72%</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#3fb950">+42</tspan><tspan fill="#8b949e"> </tspan><tspan fill="#f85149">-7</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#d29922">● 3 dirty</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#3fb950">$0.45</tspan></text>
+    <text x="104" y="536" font-family="'Cascadia Code', Consolas, 'SF Mono', Menlo, ui-monospace, monospace" font-size="13.5" fill="#8b949e">→ Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests</text>
+  </g>
+</svg>
