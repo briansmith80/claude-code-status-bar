@@ -2,10 +2,12 @@
 //
 // statusline-subagent.js - Subagent panel row renderer for claude-code-status-bar
 //
-// Claude Code's agent panel (the rows below the prompt while subagents,
-// workflows, or background tasks run) can delegate row rendering to a
-// command via the "subagentStatusLine" setting. Claude Code pipes one JSON
-// object per refresh tick (every ~5s):
+// Claude Code's agent panel (the rows below the prompt while agents run)
+// can delegate row rendering to a command via the "subagentStatusLine"
+// setting. As of Claude Code 2.1.170 only Task-tool subagent rows (task
+// type "local_agent") are delegated; workflow and background-task rows are
+// drawn by a separate panel path and never reach this script. Claude Code
+// pipes one JSON object per refresh tick (every ~5s):
 //
 //   { ..., "columns": <usable row width>, "tasks": [
 //       { "id", "name", "type", "status", "description", "label",

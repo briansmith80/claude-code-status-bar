@@ -58,12 +58,27 @@ echo "  Script installed to: ${target_file}"
 echo "  Version: ${VERSION}"
 
 # ── Update settings.json ─────────────────────────────────────
-command_value="bash ${target_file}"
+# On Windows, settings.json needs native paths (C:/...): Claude Code spawns
+# these commands via PowerShell or cmd when Git Bash is missing, and native
+# node resolves an MSYS path like /c/Users/... to C:\c\Users\... and dies.
+settings_script_path="$target_file"
+settings_subagent_path="${target_dir}/statusline-subagent.js"
+if command -v cygpath > /dev/null 2>&1; then
+  settings_script_path=$(cygpath -m "$settings_script_path" 2>/dev/null || echo "$settings_script_path")
+  settings_subagent_path=$(cygpath -m "$settings_subagent_path" 2>/dev/null || echo "$settings_subagent_path")
+fi
+
+# Quote the script paths so the commands survive profile dirs with spaces
+# (e.g. C:/Users/John Smith) under every spawn shell (bash, PowerShell, cmd)
+command_value="bash \"${settings_script_path}\""
 # Subagent panel rows need Node.js; only wire them when node is available
 subagent_value=""
 if command -v node > /dev/null 2>&1; then
-  subagent_value="node ${target_dir}/statusline-subagent.js"
+  subagent_value="node \"${settings_subagent_path}\""
 fi
+# JSON-escaped copies for contexts that write raw JSON text
+command_value_json=${command_value//\"/\\\"}
+subagent_value_json=${subagent_value//\"/\\\"}
 
 if [ ! -f "$settings_file" ]; then
   if [ -n "$subagent_value" ]; then
@@ -71,11 +86,11 @@ if [ ! -f "$settings_file" ]; then
 {
   "statusLine": {
     "type": "command",
-    "command": "${command_value}"
+    "command": "${command_value_json}"
   },
   "subagentStatusLine": {
     "type": "command",
-    "command": "${subagent_value}"
+    "command": "${subagent_value_json}"
   }
 }
 EOF
@@ -84,7 +99,7 @@ EOF
 {
   "statusLine": {
     "type": "command",
-    "command": "${command_value}"
+    "command": "${command_value_json}"
   }
 }
 EOF
@@ -129,7 +144,36 @@ else
   echo "  Could not update settings automatically."
   echo "  Add this to ${settings_file} manually:"
   echo ""
-  echo "    \"statusLine\": { \"type\": \"command\", \"command\": \"${command_value}\" }"
+  echo "    \"statusLine\": { \"type\": \"command\", \"command\": \"${command_value_json}\" }"
+fi
+
+# ── Migrate commands written by older installs (Windows) ─────
+# Pre-2.6.1 installs wrote MSYS-style paths (e.g. "node /c/Users/..."), which
+# fail when Claude Code spawns the command via PowerShell or cmd instead of
+# Git Bash, and unquoted paths, which break on profile dirs with spaces.
+# Rewrite only exact matches of this installer's own old commands; customised
+# entries are never touched.
+if [ -f "$settings_file" ] && [ -n "$subagent_value" ] \
+  && command -v cygpath > /dev/null 2>&1; then
+  node -e "
+    const fs = require('fs');
+    const [file, newBash, oldBash1, oldBash2, newNode, oldNode1, oldNode2] = process.argv.slice(1);
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const migrated = [];
+    const fix = (key, fresh, ...old) => {
+      const entry = data[key];
+      if (entry && old.includes(entry.command)) { entry.command = fresh; migrated.push(key); }
+    };
+    fix('statusLine', newBash, oldBash1, oldBash2);
+    fix('subagentStatusLine', newNode, oldNode1, oldNode2);
+    if (migrated.length) {
+      fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+      console.log('  Migrated to Windows-native quoted paths (' + migrated.join(', ') + '): ' + file);
+    }
+  " "$settings_file" \
+    "$command_value" "bash ${target_file}" "bash ${settings_script_path}" \
+    "$subagent_value" "node ${target_dir}/statusline-subagent.js" "node ${settings_subagent_path}" \
+    || echo "  Settings migration check skipped (could not parse settings.json)."
 fi
 
 # ── Clear update cache ────────────────────────────────────────

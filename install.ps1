@@ -70,12 +70,14 @@ if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
 }
 
 # ── Update settings.json ──────────────────────────────────────
-# Forward slashes: Claude Code consumes backslashes in command paths
+# Forward slashes: Claude Code consumes backslashes in command paths.
+# The paths are quoted so the commands survive profile dirs with spaces
+# (e.g. C:/Users/John Smith) under every spawn shell (bash, PowerShell, cmd).
 $fwdTarget = $TargetDir -replace '\\', '/'
-$statusCmd = "bash $fwdTarget/statusline-command.sh"
+$statusCmd = "bash `"$fwdTarget/statusline-command.sh`""
 $subagentCmd = $null
 if (Get-Command node -ErrorAction SilentlyContinue) {
-  $subagentCmd = "node $fwdTarget/statusline-subagent.js"
+  $subagentCmd = "node `"$fwdTarget/statusline-subagent.js`""
 }
 
 $settingsFile = Join-Path $TargetDir 'settings.json'
@@ -102,9 +104,31 @@ if (-not (Test-Path $settingsFile)) {
         -NotePropertyValue ([pscustomobject]@{ type = 'command'; command = $subagentCmd })
       $added += 'subagentStatusLine'
     }
-    if ($added.Count -gt 0) {
+    # Migrate commands written by older installs: MSYS-style paths (from
+    # install.sh under Git Bash, e.g. "node /c/Users/...") fail when Claude
+    # Code spawns the command via PowerShell or cmd, and unquoted paths break
+    # on profile dirs with spaces. Rewrite only exact matches of our own old
+    # commands; customised entries are never touched.
+    $migrated = @()
+    if ($TargetDir -match '^([A-Za-z]):[\\/](.*)$') {
+      $msysTarget = '/' + $Matches[1].ToLower() + '/' + ($Matches[2] -replace '\\', '/')
+      $oldForms = @{
+        statusLine         = @("bash $msysTarget/statusline-command.sh", "bash $fwdTarget/statusline-command.sh")
+        subagentStatusLine = @("node $msysTarget/statusline-subagent.js", "node $fwdTarget/statusline-subagent.js")
+      }
+      $freshCmds = @{ statusLine = $statusCmd; subagentStatusLine = $subagentCmd }
+      foreach ($key in @('statusLine', 'subagentStatusLine')) {
+        $entry = $json.PSObject.Properties[$key]
+        if ($freshCmds[$key] -and $entry -and $oldForms[$key] -contains $entry.Value.command) {
+          $entry.Value.command = $freshCmds[$key]
+          $migrated += $key
+        }
+      }
+    }
+    if ($added.Count -gt 0 -or $migrated.Count -gt 0) {
       Write-NoBomFile -Path $settingsFile -Content (($json | ConvertTo-Json -Depth 50) + "`n")
-      Write-Host "  Updated settings ($($added -join ', ')): $settingsFile"
+      if ($added.Count -gt 0) { Write-Host "  Updated settings ($($added -join ', ')): $settingsFile" }
+      if ($migrated.Count -gt 0) { Write-Host "  Migrated to Windows-native quoted paths ($($migrated -join ', ')): $settingsFile" }
     } else {
       Write-Host "  settings.json already configured - skipped."
     }

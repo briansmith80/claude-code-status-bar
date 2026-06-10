@@ -54,7 +54,7 @@ Pure bash core, no jq, no compiled binaries. One-line install. Seven colour them
 - **Auto-compact awareness**: the context bar carries a `│` marker at the point where Claude Code will auto-compact, and the `▲` warning fires when you are within 20k tokens of it, on any window size. No other status line gets this right.
 - **Pacing markers** on the usage bars: a `│` shows where your usage *should* be for even consumption across the window, so "37% used" becomes "37% used and comfortably under pace".
 - **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
-- **Subagent panel rows**: while agents and workflows run, the agent panel shows status icons, elapsed time, token cost, and a live `tok/s` burn rate per task.
+- **Subagent panel rows**: while Task-tool subagents run, the agent panel shows status icons, elapsed time, token cost, and a live `tok/s` burn rate per task.
 - **Pure bash core** (bash 3.2+, stock macOS works). JSON is parsed with bash regex, so there is no jq dependency to install on Windows.
 - **Seven colour themes**: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `mono`, plus full [`NO_COLOR`](https://no-color.org/) support.
 - **Never blocks**: update checks, the usage API fallback, and transcript parsing all run in background subshells. The bar renders from caches.
@@ -96,7 +96,7 @@ Both installers are non-interactive and transparent about what they do:
 
 1. Download `statusline-command.sh`, the two optional Node.js helpers (`statusline-helper.js` for the activity line, `statusline-subagent.js` for the agent panel rows), and the version file into `~/.claude/`.
 2. Create `~/.claude/settings.json` with a `statusLine` entry (plus a `subagentStatusLine` entry when Node.js is available), or merge the missing entries into your existing file **without touching your other settings**. The bash installer merges using node, python3, or python; the PowerShell installer does it natively.
-3. Existing `statusLine` and `subagentStatusLine` entries are left completely untouched. Migrating from another status line? Remove your old entry first, then re-run the installer.
+3. Existing `statusLine` and `subagentStatusLine` entries are left untouched, with one exception: commands this installer itself wrote in an older format (MSYS-style `/c/...` or unquoted paths, which fail under some spawn shells on Windows) are upgraded in place on re-run. Migrating from another status line? Remove your old entry first, then re-run the installer.
 4. If the bash installer finds no JSON-capable interpreter, it prints the exact snippets to paste into `settings.json` yourself.
 5. Clear the update-check cache so the new version is picked up immediately.
 
@@ -172,7 +172,7 @@ Good to know:
 
 ## Subagent status line
 
-While subagents, workflows, or background tasks run, Claude Code shows an agent panel below the prompt. The optional `statusline-subagent.js` renderer (installed and wired automatically when Node.js is available) restyles those rows to match the status bar and adds live numbers:
+While agents, workflows, or background tasks run, Claude Code shows an agent panel below the prompt. The optional `statusline-subagent.js` renderer (installed and wired automatically when Node.js is available) restyles the subagent rows in that panel, the ones spawned through the Task tool, to match the status bar and adds live numbers:
 
 ```
 ⚒ Audit the usage parsing code  1m24s · 12.4k tok · 354 tok/s ▄▅▆▇▇▆█
@@ -185,6 +185,7 @@ While subagents, workflows, or background tasks run, Claude Code shows an agent 
 - **Token cost and burn rate**: Claude Code samples each task's token count on every refresh; the renderer turns those samples into a `tok/s` rate plus a small sparkline, so a runaway agent is visible before it finishes.
 - **Aligned and width-aware**: descriptions are padded into a column across rows, and each row is trimmed to the panel width (the sparkline is dropped first, then the rate).
 - **Fail-safe**: on any error or unexpected input the script prints nothing and Claude Code falls back to its default rows. Set `subagent_rows=false` in `statusline.conf` to keep the defaults permanently.
+- **Scope**: Claude Code only delegates Task-tool subagent rows to custom renderers (verified against CC 2.1.170). Workflow and background-task rows are drawn by a separate panel path and keep Claude Code's built-in style. The renderer already handles those task shapes, so they will light up if a later Claude Code starts sending them.
 
 The installer wires this into `settings.json` when Node.js is present, leaving any existing entry untouched:
 
@@ -196,6 +197,8 @@ The installer wires this into `settings.json` when Node.js is present, leaving a
   }
 }
 ```
+
+On Windows, use a quoted Windows-native path instead of `~` (for example `node \"C:/Users/name/.claude/statusline-subagent.js\"`). Claude Code may spawn this command via PowerShell or cmd, which neither expand `~` nor resolve MSYS-style `/c/...` paths for node, so those forms fail silently and the panel keeps its default rows. The installers write the native form for you.
 
 ## Segments
 
@@ -512,8 +515,9 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.6.1**: Windows install hardening: settings.json gets quoted Windows-native paths (the MSYS `/c/...` form broke the subagent renderer under PowerShell/cmd spawns), both installers migrate their own older commands on re-run, and docs now state the renderer's real scope (Task-tool subagent rows only).
 - **2.6.0**: Compaction-aware context warnings (a `│` marker at the auto-compact point, `▲` timed to Claude Code's own warning), the `▲ 200k+` segment retired, and a native Windows PowerShell installer.
-- **2.5.0**: Subagent panel renderer: status icons, elapsed time, token cost, and live `tok/s` burn rate for every running agent, workflow, and background task.
+- **2.5.0**: Subagent panel renderer: status icons, elapsed time, token cost, and live `tok/s` burn rate for every running Task-tool subagent.
 - **2.4.0**: Live activity overhaul: incremental transcript parsing, age-out of finished items, a `✗` failed-tool indicator, elapsed time on running tools, the `activity_ttl_seconds` config, and terminal-width trimming.
 - **2.3.0**: Countdown labels for usage bars (`usage_label=countdown`), a PR segment, worktree detection for any linked worktree, and per-session activity caches.
 - **2.2.0**: Claude Code 2.1.170 audit. Fable/Mythos models get a theme-aware purple tier colour, new effort level and fast mode segments, rate-limit parsing scoped to the `rate_limits` block, and ISO timestamp tolerance.

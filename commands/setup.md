@@ -73,7 +73,7 @@ The statusLine config should be:
 }
 ```
 
-When Node.js is available, also merge a subagentStatusLine entry (skip if one already exists, asking the user before replacing). This styles the agent panel rows shown while subagents run:
+When Node.js is available, also merge a subagentStatusLine entry (skip if one already exists, asking the user before replacing). This styles the agent panel rows shown while Task-tool subagents run (Claude Code draws workflow and background-task rows itself):
 ```json
 {
   "subagentStatusLine": {
@@ -82,6 +82,8 @@ When Node.js is available, also merge a subagentStatusLine entry (skip if one al
   }
 }
 ```
+
+On Windows, write the expanded Windows-native path, quoted, instead of `~` (for example `node \"C:/Users/name/.claude/statusline-subagent.js\"`). Claude Code may spawn this command via PowerShell or cmd, which do not expand `~` or resolve MSYS-style `/c/...` paths for node, making the renderer fail silently; quoting keeps the command working when the profile directory contains spaces. The same applies to the statusLine entry: prefer `bash \"C:/Users/name/.claude/statusline-command.sh\"`.
 
 ## Step 4: Test
 

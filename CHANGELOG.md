@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.6.1] - 2026-06-10
+
+Scope honesty for the subagent renderer, and Windows installs that survive every spawn shell.
+
+### Fixed
+
+- **`install.sh` on Windows (MSYS2/Git Bash) now writes Windows-native paths into `settings.json`** (via `cygpath -m`, e.g. `node "C:/Users/name/.claude/statusline-subagent.js"` instead of `node /c/Users/...`). Claude Code prefers Git Bash to spawn `statusLine`/`subagentStatusLine` commands but falls back to PowerShell or cmd when Git Bash is missing, and native node resolves an MSYS `/c/...` path to the nonexistent `C:\c\...`, so the subagent renderer died silently on such machines. Native paths work under the Git Bash, PowerShell, and cmd spawn paths alike. `/setup` carries the same guidance.
+- **Both installers migrate the commands they previously wrote.** Re-running `install.sh` or `install.ps1` on Windows upgrades an existing `statusLine`/`subagentStatusLine` entry in place when its command exactly matches one of this project's own older formats (MSYS-style or unquoted native paths). Customised entries are still never touched.
+- **Script paths in the written commands are now quoted**, so installs survive profile directories with spaces (e.g. `C:/Users/John Smith`) under every spawn shell. Previously such a path split at the space and the command died with exit 127.
+- **Docs no longer claim the subagent renderer styles workflow and background-task rows.** Claude Code (verified against 2.1.170) only delegates Task-tool subagent rows (task type `local_agent`) to `subagentStatusLine`; workflow and background-task rows are drawn by a separate panel path that ignores custom renderers. README, CLAUDE.md, and the script header now state the real scope. The renderer keeps its handling for the other task shapes in case a later Claude Code starts sending them.
+
 ## [2.6.0] - 2026-06-10
 
 Context warnings rebuilt around how Claude Code actually compacts, plus a first-class Windows install experience.
@@ -29,7 +40,7 @@ Context warnings rebuilt around how Claude Code actually compacts, plus a first-
 
 ### Added
 
-- **Subagent panel renderer** (`statusline-subagent.js`): implements Claude Code's `subagentStatusLine` protocol to restyle the agent panel rows shown while subagents, workflows, and background tasks run. Each row gets a theme-aware status icon (`⚒` running, `✓` done, `✗` failed, `◌` queued), elapsed time, compact token cost, and a live `tok/s` burn rate with sparkline computed from Claude Code's per-tick token samples. Descriptions align into a column across rows; rows trim to the panel width. Any error makes the script print nothing, so Claude Code falls back to its default rows. Disable with `subagent_rows=false` in `statusline.conf`.
+- **Subagent panel renderer** (`statusline-subagent.js`): implements Claude Code's `subagentStatusLine` protocol to restyle the agent panel rows shown while subagents, workflows, and background tasks run. *(Correction: Claude Code only delegates Task-tool subagent rows to custom renderers; workflow and background-task rows keep its built-in style. See 2.6.1.)* Each row gets a theme-aware status icon (`⚒` running, `✓` done, `✗` failed, `◌` queued), elapsed time, compact token cost, and a live `tok/s` burn rate with sparkline computed from Claude Code's per-tick token samples. Descriptions align into a column across rows; rows trim to the panel width. Any error makes the script print nothing, so Claude Code falls back to its default rows. Disable with `subagent_rows=false` in `statusline.conf`.
 - **Installer wiring**: `install.sh` downloads the renderer and adds a `subagentStatusLine` entry to `settings.json` when Node.js is available, never touching an existing entry. The `/setup` slash command does the same from the plugin cache. `--uninstall` removes the new file.
 - **8 new BATS tests** (`tests/subagent.bats`, suite now 62) covering rendering, status icons, NO_COLOR, width fitting, malformed input, default-row passthrough, the `subagent_rows` toggle, and output validity.
 
