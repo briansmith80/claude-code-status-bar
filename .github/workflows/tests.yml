@@ -43,10 +43,13 @@ jobs:
           msystem: MSYS
           update: true
           install: >-
-            bats
             git
             coreutils
             sed
             grep
+      - name: Install BATS
+        # The MSYS2 pacman repo no longer ships a bats package; bats-core is
+        # pure bash, so run it straight from a pinned clone instead.
+        run: git clone --depth 1 --branch v1.13.0 https://github.com/bats-core/bats-core.git "$HOME/bats-core"
       - name: Run tests
-        run: bats tests/
+        run: '"$HOME/bats-core/bin/bats" tests/'

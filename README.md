@@ -401,13 +401,15 @@ To run locally, install [bats-core](https://github.com/bats-core/bats-core):
 ```bash
 brew install bats-core            # macOS
 sudo apt-get install -y bats      # Debian / Ubuntu
-pacman -S --noconfirm bats        # MSYS2
+# Windows (Git Bash / MSYS2): no pacman package; run bats-core from a clone
+git clone --depth 1 https://github.com/bats-core/bats-core.git ~/bats-core
 ```
 
 Then from the repo root:
 
 ```bash
-bats tests/
+bats tests/                       # macOS / Linux
+~/bats-core/bin/bats tests/       # Windows
 ```
 
 See [`tests/README.md`](tests/README.md) for layout details.

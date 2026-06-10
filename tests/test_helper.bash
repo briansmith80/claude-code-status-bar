@@ -51,6 +51,7 @@ run_statusline() {
   # to set HOME and feed stdin. Callers expecting `run`-style $output and
   # $status will get them via this manual capture.
   output="$(printf '%s' "$json" | HOME="${TEST_HOME}" bash "${STATUSLINE_SCRIPT}" 2>/dev/null)"
+  # shellcheck disable=SC2034  # consumed by the .bats tests, not this file
   status=$?
 }
 
@@ -59,6 +60,7 @@ run_statusline() {
 run_statusline_env() {
   local json="$1"; shift
   output="$(printf '%s' "$json" | env "$@" HOME="${TEST_HOME}" bash "${STATUSLINE_SCRIPT}" 2>/dev/null)"
+  # shellcheck disable=SC2034  # consumed by the .bats tests, not this file
   status=$?
 }
 

@@ -10,7 +10,7 @@ credentials never leak into a run.
 |----------|---------|
 | macOS | `brew install bats-core` |
 | Debian / Ubuntu | `sudo apt-get install -y bats` |
-| Windows / MSYS2 | `pacman -S --noconfirm bats` |
+| Windows (Git Bash / MSYS2) | `git clone --depth 1 https://github.com/bats-core/bats-core.git ~/bats-core`, then run `~/bats-core/bin/bats` (the MSYS2 pacman repo no longer ships a bats package) |
 | Other Linux | see <https://github.com/bats-core/bats-core> |
 
 ## Run
