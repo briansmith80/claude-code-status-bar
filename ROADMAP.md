@@ -156,6 +156,7 @@ The statusline stdin JSON now also carries fields with no segment yet; promote o
 - `pr.number` / `pr.url` / `pr.review_state`: ~~a PR segment without shelling out to `gh`~~ **shipped in v2.3.0** (`show_pr`).
 - `workspace.repo.{host,owner,name}`: repo identity without parsing `git remote`.
 - `session_name`, `output_style.name`, `thinking.enabled`, `cost.total_api_duration_ms`: minor candidates.
+- Context extras: a `context_label=until-compact` style showing the same "% until auto-compact" number Claude Code's own UI uses, and a compaction counter (detect the used-percentage drop per session, as ccstatusline does).
 - `COLUMNS`/`LINES` env vars (CC 2.1.153+): already used for truncation width since v2.2.0; could drive adaptive layouts.
 
 ---

@@ -43,3 +43,46 @@ load test_helper
   [ "$count" -eq 10 ]
   assert_plain_contains "100%"
 }
+
+# ── Auto-compact awareness (v2.6.0) ──────────────────────────
+
+@test "context bar shows the auto-compact marker on a 200k window" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":50,"context_window_size":200000,"total_input_tokens":100000}}'
+  local plain
+  plain="$(strip_ansi "$output")"
+  [[ "$plain" == *"│"* ]]
+}
+
+@test "auto warning fires within 20k tokens of the compact point" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":74,"context_window_size":200000,"total_input_tokens":148000}}'
+  assert_plain_contains "▲"
+}
+
+@test "no auto warning while comfortably below the compact point" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":70,"context_window_size":200000,"total_input_tokens":140000}}'
+  assert_plain_not_contains "▲"
+}
+
+@test "1M window does not warn at 80% raw usage (old fixed threshold)" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"used_percentage":80,"context_window_size":1000000,"total_input_tokens":800000}}'
+  assert_plain_not_contains "▲"
+}
+
+@test "CLAUDE_CODE_AUTO_COMPACT_WINDOW moves the marker and warning" {
+  run_statusline_env '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"used_percentage":15,"context_window_size":1000000,"total_input_tokens":150000}}' "CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000"
+  assert_plain_contains "▲"
+}
+
+@test "DISABLE_AUTO_COMPACT removes the marker and falls back to the 80% rule" {
+  run_statusline_env '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":70,"context_window_size":200000,"total_input_tokens":140000}}' "DISABLE_AUTO_COMPACT=1"
+  local plain
+  plain="$(strip_ansi "$output")"
+  [[ "$plain" != *"│"* ]]
+  assert_plain_not_contains "▲"
+}
+
+@test "numeric context_warn_threshold keeps the legacy raw-percentage rule" {
+  write_conf "context_warn_threshold=60"
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":65,"context_window_size":200000}}'
+  assert_plain_contains "▲"
+}

@@ -58,7 +58,7 @@ Ask the user what they'd like to customize. Present these categories:
 - `usage_cache_seconds` — OAuth fallback refresh interval in seconds; ignored when stdin provides rate limits (default: 600)
 - `bar_width` — Progress bar width in characters (default: 10)
 - `branch_max_length` — Truncate long branch names (default: unlimited)
-- `context_warn_threshold` — Warn at this % context usage (default: 80)
+- `context_warn_threshold` — auto = warn within 20k tokens of Claude Code's auto-compact point (default); or a raw percentage like 80
 - `enable_truncation` — Drop segments on narrow terminals (default: false)
 - `max_width` — Override terminal width for truncation
 

@@ -53,3 +53,16 @@ jobs:
         run: git clone --depth 1 --branch v1.13.0 https://github.com/bats-core/bats-core.git "$HOME/bats-core"
       - name: Run tests
         run: '"$HOME/bats-core/bin/bats" tests/'
+      - name: Validate install.ps1
+        shell: pwsh
+        run: |
+          $tokens = $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+          $t = Join-Path $env:RUNNER_TEMP 'sl-ps-test'
+          ./install.ps1 -SourceDir "$PWD" -TargetDir $t
+          if (-not (Test-Path "$t/statusline-command.sh")) { throw 'statusline-command.sh missing' }
+          $s = Get-Content "$t/settings.json" -Raw | ConvertFrom-Json
+          if (-not $s.statusLine.command) { throw 'statusLine not wired' }
+          ./install.ps1 -SourceDir "$PWD" -TargetDir $t
+          Write-Host 'install.ps1 OK (fresh install + idempotent re-run)'

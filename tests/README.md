@@ -31,7 +31,10 @@ bats tests/basic.bats
 
 - `test_helper.bash` — shared helpers (`run_statusline`, `strip_ansi`, sandbox).
 - `basic.bats` — schema parsing (old flat, new nested, stdin `rate_limits`).
-- `segments.bats` — directory, model, cost, vim mode, agent, 200k warning.
+- `segments.bats` — directory, model, cost, vim mode, agent segments.
 - `themes.bats` — all seven themes plus `NO_COLOR` behaviour.
 - `config.bats` — `~/.claude/statusline.conf` overrides.
-- `context_window.bats` — `of 200k` / `of 1M` / `of 1.5M` formatting and bar fill.
+- `context_window.bats` — `of 200k` / `of 1M` formatting, bar fill, and auto-compact marker/warning.
+- `cc21.bats` — Claude Code 2.1.x schema: nested `cost`, `current_usage`, Fable tier colour, effort/fast-mode segments, rate-limit scoping, countdown labels, PR segment, worktree fallback.
+- `activity.bats` — live activity helper: age-out, failure indicator, elapsed time, incremental parsing, `activity_ttl_seconds`, width trim.
+- `subagent.bats` — subagent panel renderer: icons, rates, width fitting, toggles.

@@ -11,7 +11,8 @@ VERSION                    # Single source of truth for version (bump ONLY this 
 statusline-command.sh      # The runtime script — installed to ~/.claude/
 statusline-helper.js       # Optional Node.js transcript parser — installed to ~/.claude/
 statusline-subagent.js     # Optional Node.js subagent panel renderer — installed to ~/.claude/
-install.sh                 # Installer/updater — downloads script + helper + VERSION from GitHub
+install.sh                 # Installer/updater — downloads script + helpers + VERSION from GitHub
+install.ps1                # Windows PowerShell installer/updater — native JSON settings merge
 .claude-plugin/plugin.json # Plugin manifest for marketplace distribution
 .claude-plugin/marketplace.json # Marketplace catalog (required by /plugin marketplace add)
 commands/setup.md          # Slash command: /claude-code-status-bar:setup
@@ -44,6 +45,7 @@ README.md                  # User-facing docs
 - **Sanitize untrusted strings** — Branch names, paths, and worktree names are stripped of ANSI escapes before output.
 - **Colour themes via CLR_* variables** — All ANSI codes use theme variables set by `apply_theme()`. Seven built-in themes: default, nord, dracula, solarized, mono, tokyo-night, catppuccin. Supports NO_COLOR standard.
 - **Model tier coloring** — Model name colour varies by tier (Haiku=green, Sonnet=yellow, Opus=orange, Fable/Mythos=purple) via a case statement. Respects NO_COLOR and mono theme.
+- **Auto-compact awareness** — Claude Code auto-compacts at (autocompact window - 33000) tokens and warns itself 20000 tokens earlier (constants extracted from CC 2.1.170; display-only, drift is cosmetic). The context bar carries a `│` marker at the compact point and `context_warn_threshold=auto` (default) fires `▲` within 20k tokens of it, using `total_input_tokens`. Resolution order mirrors CC: `CLAUDE_CODE_AUTO_COMPACT_WINDOW` env > settings.json `autoCompactWindow` > full window; `DISABLE_AUTO_COMPACT`/`DISABLE_COMPACT` remove the marker and fall back to a raw 80% rule. The `▲ 200k+` segment was retired in v2.6.0 (long-context premium pricing was abolished March 2026).
 - **Array-based segments** — Segments are built into `seg_vals[]`/`seg_pris[]`/`seg_groups[]` arrays for truncation and grouping support.
 - **set -e safety** — Git commands that may fail (e.g., `rev-list` with no upstream) use `|| fallback` pattern to prevent script death.
 - **Usage limits: stdin-native + OAuth fallback** — Prefers `rate_limits.five_hour` and `rate_limits.seven_day` from stdin (CC >= 2.1, zero-cost, real-time). Falls back to OAuth API (`api.anthropic.com/api/oauth/usage`) for older CC versions. OAuth uses background subshell, Keychain/credentials.json, 10-min cache.
@@ -67,7 +69,7 @@ README.md                  # User-facing docs
 See [ROADMAP.md](ROADMAP.md) for the feature roadmap and competitive landscape.
 See [SPRINTS.md](SPRINTS.md) for the validated sprint plan with dependency ordering and effort estimates.
 
-Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI :white_check_mark: shipped. BATS scaffold (28 tests), three-platform CI matrix, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`) all landed. v2.1.1 followed with the README overhaul, the NO_COLOR/mono progress bar fix, and `.claude-plugin/marketplace.json`. v2.2.0 audited the bar against Claude Code 2.1.170 (Fable 5): Fable/Mythos purple tier colour, effort + fast-mode segments, rate-limit extraction scoped to the `rate_limits` block, ISO `resets_at` tolerance, and `$COLUMNS`-first width detection. v2.3.0 added countdown usage labels (`usage_label`), the PR segment, worktree fallback via `workspace.git_worktree`, and per-session activity caches. v2.4.0 overhauled the live activity line: incremental transcript parsing, 5-minute age-out of finished items, `✗` failure indicator, elapsed time on running tools, `activity_ttl_seconds`, and `$COLUMNS` trimming. v2.5.0 added the subagent panel renderer (`statusline-subagent.js`, wired via the `subagentStatusLine` setting). Next: re-evaluate against user feedback per the post-Sprint-4 plan in SPRINTS.md.
+Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI :white_check_mark: shipped. BATS scaffold (28 tests), three-platform CI matrix, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`) all landed. v2.1.1 followed with the README overhaul, the NO_COLOR/mono progress bar fix, and `.claude-plugin/marketplace.json`. v2.2.0 audited the bar against Claude Code 2.1.170 (Fable 5): Fable/Mythos purple tier colour, effort + fast-mode segments, rate-limit extraction scoped to the `rate_limits` block, ISO `resets_at` tolerance, and `$COLUMNS`-first width detection. v2.3.0 added countdown usage labels (`usage_label`), the PR segment, worktree fallback via `workspace.git_worktree`, and per-session activity caches. v2.4.0 overhauled the live activity line: incremental transcript parsing, 5-minute age-out of finished items, `✗` failure indicator, elapsed time on running tools, `activity_ttl_seconds`, and `$COLUMNS` trimming. v2.5.0 added the subagent panel renderer (`statusline-subagent.js`, wired via the `subagentStatusLine` setting). v2.6.0 rebuilt context warnings around Claude Code's real auto-compact maths (marker + `context_warn_threshold=auto`), retired `▲ 200k+` (premium pricing abolished March 2026), and added `install.ps1` for Windows. Next: re-evaluate against user feedback per the post-Sprint-4 plan in SPRINTS.md.
 
 ## How to release a new version
 
@@ -104,10 +106,16 @@ Test with stdin rate limits (no OAuth needed):
 echo '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":65},"total_cost_usd":0.50,"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":1743019200},"seven_day":{"used_percentage":71,"resets_at":1743278400}}}' | bash statusline-command.sh
 ```
 
-Test with v1.4.0 fields (vim mode, agent, workspace, tokens, 200k warning):
+Test with v1.4.0 fields (vim mode, agent, workspace, tokens):
 
 ```bash
-echo '{"cwd":"/tmp","display_name":"Sonnet","used_percentage":60,"total_cost_usd":0.50,"vim":{"mode":"NORMAL"},"agent":{"name":"my-agent"},"workspace":{"current_dir":"/home/user/project"},"context_window":{"total_input_tokens":45000,"total_output_tokens":12000},"exceeds_200k_tokens":true}' | bash statusline-command.sh
+echo '{"cwd":"/tmp","display_name":"Sonnet","used_percentage":60,"total_cost_usd":0.50,"vim":{"mode":"NORMAL"},"agent":{"name":"my-agent"},"workspace":{"current_dir":"/home/user/project"},"context_window":{"total_input_tokens":45000,"total_output_tokens":12000}}' | bash statusline-command.sh
+```
+
+Test compaction awareness (marker at 83% of a 200k window, ▲ within 20k tokens of the compact point):
+
+```bash
+echo '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":74,"context_window_size":200000,"total_input_tokens":148000}}' | bash statusline-command.sh
 ```
 
 Test live activity (Node.js helper):

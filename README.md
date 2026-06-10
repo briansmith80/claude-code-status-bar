@@ -33,7 +33,7 @@ Pure bash core, no jq, no compiled binaries. One-line install. Seven colour them
 </div>
 
 ```
-~/my-app on ↱ main  ◆ Opus 4.6  ███████░░░ 78% of 200k  5hr (2pm) ███│░░░░░░ 37%  wk (fri,3am) ███████│░░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
+~/my-app on ↱ main  ◆ Opus 4.6  ███████░│░ 78% of 200k  5hr (2pm) ███│░░░░░░ 37%  wk (fri,3am) ███████│░░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
 → Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests
 ```
 
@@ -50,7 +50,8 @@ Pure bash core, no jq, no compiled binaries. One-line install. Seven colour them
 
 ## Highlights
 
-- **22 line-one segments** plus a live activity line, individually toggleable (all except two automatic indicators, the 200k warning and the update notice).
+- **21 line-one segments** plus a live activity line, individually toggleable (all except the automatic update notice).
+- **Auto-compact awareness**: the context bar carries a `│` marker at the point where Claude Code will auto-compact, and the `▲` warning fires when you are within 20k tokens of it, on any window size. No other status line gets this right.
 - **Pacing markers** on the usage bars: a `│` shows where your usage *should* be for even consumption across the window, so "37% used" becomes "37% used and comfortably under pace".
 - **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
 - **Subagent panel rows**: while agents and workflows run, the agent panel shows status icons, elapsed time, token cost, and a live `tok/s` burn rate per task.
@@ -59,39 +60,45 @@ Pure bash core, no jq, no compiled binaries. One-line install. Seven colour them
 - **Never blocks**: update checks, the usage API fallback, and transcript parsing all run in background subshells. The bar renders from caches.
 - **Config survives updates**: your overrides live in `~/.claude/statusline.conf`, which the installer never touches.
 - **Security by default**: restrictive file permissions (`umask 077`), OAuth tokens passed to curl via stdin rather than the command line, and ANSI/control-character sanitisation of branch names, paths, and transcript content.
-- **Tested**: 28 BATS tests run in CI on Linux, macOS, and Windows (MSYS2), plus ShellCheck, on every push to main and every pull request.
+- **Tested**: 69 BATS tests run in CI on Linux, macOS, and Windows (MSYS2), plus ShellCheck and a PowerShell installer check, on every push to main and every pull request.
 
 ## Requirements
 
 | Dependency | Needed for | Required? |
 |------------|-----------|-----------|
-| bash 3.2+ | Everything (stock macOS bash works) | Yes |
-| curl *or* wget | Install, update check, OAuth usage fallback | Yes |
+| bash 3.2+ | Everything (stock macOS bash works; Windows gets it from Git for Windows, which Claude Code requires anyway) | Yes |
+| curl *or* wget | Install, update check, OAuth usage fallback (`curl.exe` ships with Windows 10+) | Yes |
 | git | Branch, dirty count, ahead/behind, and stash segments | Optional |
-| Node.js 14+ | Live activity line (line 2) only | Optional |
+| Node.js 14+ | Live activity line (line 2) and subagent panel rows | Optional |
 | python3 | Pretty-printed `--dump-stdin` output; installer fallback for the `settings.json` merge | Optional |
 
 Claude Code 2.1+ sends usage limits and the transcript path directly to the status bar. On older versions, usage limits fall back to the OAuth API and the activity line is unavailable. Segments whose data Claude Code does not send (vim mode, agent name, token counts) simply stay hidden.
 
 ## Install
 
+**macOS / Linux** (or Git Bash on Windows):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
 ```
 
-The status bar appears after the next Claude Code response.
+**Windows (PowerShell):**
 
-> **Windows:** run the one-liner in Git Bash. From PowerShell, use `curl.exe` instead of `curl` (Git for Windows must be installed so `bash` is on your PATH).
+```powershell
+irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex
+```
 
-The installer is non-interactive and transparent about what it does:
+The status bar appears after the next Claude Code response. Re-running either installer is always safe, and it is also how you update.
 
-1. Downloads `statusline-command.sh`, `statusline-helper.js` (optional, best-effort), and the version file into `~/.claude/`.
-2. Creates `~/.claude/settings.json` with a `statusLine` entry if the file does not exist, or merges the entry into your existing file (using node, python3, or python, whichever is available) **without touching your other settings**.
-3. If `settings.json` already contains a `statusLine` entry, it is left completely untouched. Migrating from another status line? Remove your old entry first, then re-run the installer.
-4. If no JSON-capable interpreter is available, it prints the exact snippet to paste into `settings.json` yourself.
-5. Clears the update-check cache so the new version is picked up immediately.
+> **Windows notes:** the status bar runs through Git for Windows, which Claude Code on Windows already requires; the PowerShell installer checks for `bash` and tells you what to do if it is missing. Avoid piping `curl.exe` output straight into `bash` from PowerShell: PowerShell 5.1 re-encodes pipeline data between native programs and can corrupt the script. If you prefer the bash installer from PowerShell, run it as one unit instead: `bash -c "curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash"`
 
-Re-running the installer is always safe; it is also the update mechanism.
+Both installers are non-interactive and transparent about what they do:
+
+1. Download `statusline-command.sh`, the two optional Node.js helpers (`statusline-helper.js` for the activity line, `statusline-subagent.js` for the agent panel rows), and the version file into `~/.claude/`.
+2. Create `~/.claude/settings.json` with a `statusLine` entry (plus a `subagentStatusLine` entry when Node.js is available), or merge the missing entries into your existing file **without touching your other settings**. The bash installer merges using node, python3, or python; the PowerShell installer does it natively.
+3. Existing `statusLine` and `subagentStatusLine` entries are left completely untouched. Migrating from another status line? Remove your old entry first, then re-run the installer.
+4. If the bash installer finds no JSON-capable interpreter, it prints the exact snippets to paste into `settings.json` yourself.
+5. Clear the update-check cache so the new version is picked up immediately.
 
 ### Plugin install
 
@@ -203,8 +210,7 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Agent name | `▸ my-agent` | `show_agent` | Only when running with an agent |
 | Effort level | `eff:xhigh` | `show_effort` | Reasoning effort, when Claude Code sends `effort.level` (CC 2.1.133+) |
 | Fast mode | `⚡ fast` | `show_fast_mode` | Only when fast mode is on; yellow because it bills at a higher rate |
-| Context bar | `███████░░░ 78% of 200k` | `show_context_bar` | Green under 50%, yellow 50-79%, red 80%+; `▲` warning at `context_warn_threshold` |
-| 200k warning | `▲ 200k+` | *(automatic)* | When Claude Code reports `exceeds_200k_tokens` |
+| Context bar | `███████░│░ 78% of 200k` | `show_context_bar` | Green under 50%, yellow 50-79%, red 80%+. The `│` marker sits at the auto-compact point; `▲` appears within 20k tokens of it (see below) |
 | Token counts | `45k in 12k out` | `show_tokens` *(off)* | Tokens in the current context (cumulative session totals before CC 2.1.132) |
 | 5-hour usage | `5hr (2pm) ███│░░░░░░ 37%` | `show_usage_5h` | Rolling 5-hour window with reset time and pacing marker |
 | Weekly usage | `wk (fri,3am) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with reset day/time and pacing marker |
@@ -310,7 +316,7 @@ use_icons=true              # ↱ ◆ ▸ ● ≡ ⊞ ↑ prefixes and the ▲ c
 auto_hide=true              # hide zero-valued segments
 bar_width=10                # progress bar width in characters
 branch_max_length=          # truncate long branch names with … (empty = no limit)
-context_warn_threshold=80   # context % that triggers the ▲ warning (needs use_icons=true)
+context_warn_threshold=auto # auto = ▲ within 20k tokens of auto-compact; or a raw % like 80
 
 # ── Truncation for narrow terminals ──────────────────────
 enable_truncation=false     # drop low-priority segments when line 1 is too wide
@@ -328,6 +334,7 @@ usage_cache_seconds=600     # OAuth fallback refresh interval (ignored when stdi
 
 A few details worth knowing:
 
+- **Context warnings are compaction-aware**: Claude Code auto-compacts at a fixed reserve below the window (not at a percentage), which lands at roughly 83% of a 200k window but almost 97% of a 1M window. With `context_warn_threshold=auto` (the default), the `│` marker on the context bar shows that point and `▲` appears within 20k tokens of it, matching Claude Code's own context-low timing. The maths honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting from `/autocompact`, and `DISABLE_AUTO_COMPACT` (which removes the marker and falls back to a raw 80% rule). Set a number instead of `auto` to keep the old fixed-percentage behaviour. When `▲` appears, a `/compact` at your next natural stopping point beats letting auto-compact summarize mid-task.
 - **`NO_COLOR`**: when the [`NO_COLOR`](https://no-color.org/) environment variable is set, all colours are disabled regardless of theme.
 - **Truncation order**: with `enable_truncation=true`, segments are dropped tier by tier, least important first: the update notice, then worktree, then duration, then ahead/behind, stash and the PR number, then effort, tokens, lines changed and dirty count, then fast mode, cost and cost rate, then vim mode, model, agent and the usage bars, then the context bar, and last of all directory and branch.
 - **Groups**: with `use_groups=true`, related segments are bracketed: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`. Directory/branch, vim, agent, effort, fast mode, tokens, worktree, and the update notice stay outside groups. Brackets wrap contiguous runs, so an ungrouped segment sitting between group members (an agent name or a worktree) splits the bracket around itself.
@@ -355,7 +362,11 @@ When a new version is available you'll see `↑ update available` in the bar (th
 curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
 ```
 
-It detects the existing installation, updates in place, and leaves `statusline.conf` and your `settings.json` entry alone. To check manually:
+```powershell
+irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex
+```
+
+It detects the existing installation, updates in place, and leaves `statusline.conf` and your `settings.json` entries alone. To check manually (this exact command works in bash and PowerShell alike, as do all the [CLI flags](#cli-flags)):
 
 ```bash
 bash ~/.claude/statusline-command.sh --check-update
@@ -383,6 +394,7 @@ rm -f ~/.claude/.statusline-update-cache
 rm -f ~/.claude/.statusline-usage-cache
 rm -f ~/.claude/.statusline-usage-backoff
 rm -f ~/.claude/.statusline-activity-cache
+rm -f ~/.claude/.statusline-activity-cache.*
 rm -rf ~/.claude/.statusline-transcript-cache
 rm -f ~/.claude/statusline.conf   # your config; skip this line to keep it
 ```
@@ -419,7 +431,7 @@ Files at `~/.claude/` after install:
 | `.statusline-update-cache` | Update check cache | Cleared on update |
 | `.statusline-usage-cache` | OAuth usage cache | Auto-refreshes |
 | `.statusline-usage-backoff` | OAuth failure backoff state | Auto-expires |
-| `.statusline-activity-cache` | Live activity cache | Auto-refreshes |
+| `.statusline-activity-cache.<id>` | Live activity cache (one per session) | Auto-refreshes, swept after a day |
 | `.statusline-transcript-cache/` | Parsed transcript cache | Auto-invalidates |
 
 All caches are created with `umask 077`, so they are readable only by you.
@@ -432,7 +444,8 @@ claude-code-status-bar/
 ├── CHANGELOG.md                  # release history
 ├── LICENSE                       # MIT
 ├── VERSION                       # single source of truth for the version
-├── install.sh                    # one-line installer / updater
+├── install.sh                    # one-line installer / updater (macOS, Linux, Git Bash)
+├── install.ps1                   # one-line installer / updater (Windows PowerShell)
 ├── statusline-command.sh         # the status bar (pure bash, installed to ~/.claude/)
 ├── statusline-helper.js          # optional Node.js transcript parser (live activity line)
 ├── statusline-subagent.js        # optional Node.js renderer for the subagent panel rows
@@ -447,7 +460,7 @@ claude-code-status-bar/
 ├── .github/workflows/
 │   ├── shellcheck.yml            # lint (pushes to main, PRs)
 │   └── tests.yml                 # BATS suite on Linux, macOS, Windows (MSYS2)
-├── tests/                        # 28 BATS tests across 5 files
+├── tests/                        # 69 BATS tests across 9 files
 ├── ROADMAP.md                    # feature roadmap & competitive landscape
 ├── SPRINTS.md                    # sprint plan
 └── CLAUDE.md                     # project guide for working on this repo with Claude Code
@@ -455,7 +468,7 @@ claude-code-status-bar/
 
 ## Testing
 
-A BATS suite under [`tests/`](tests/) covers schema parsing (old flat and new nested formats), segments, all seven themes, `NO_COLOR`, config overrides, and context window formatting. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
+A BATS suite under [`tests/`](tests/) covers schema parsing (old flat, new nested, and the CC 2.1.x shapes), segments, all seven themes, `NO_COLOR`, config overrides, context window formatting and compaction awareness, the live activity helper, and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
 
 To run locally, install [bats-core](https://github.com/bats-core/bats-core):
 
@@ -499,6 +512,7 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.6.0**: Compaction-aware context warnings (a `│` marker at the auto-compact point, `▲` timed to Claude Code's own warning), the `▲ 200k+` segment retired, and a native Windows PowerShell installer.
 - **2.5.0**: Subagent panel renderer: status icons, elapsed time, token cost, and live `tok/s` burn rate for every running agent, workflow, and background task.
 - **2.4.0**: Live activity overhaul: incremental transcript parsing, age-out of finished items, a `✗` failed-tool indicator, elapsed time on running tools, the `activity_ttl_seconds` config, and terminal-width trimming.
 - **2.3.0**: Countdown labels for usage bars (`usage_label=countdown`), a PR segment, worktree detection for any linked worktree, and per-session activity caches.

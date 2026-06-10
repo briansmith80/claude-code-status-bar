@@ -43,8 +43,8 @@ load test_helper
   assert_plain_contains "my-agent"
 }
 
-@test "exceeds_200k_tokens warning shows when true" {
+@test "exceeds_200k_tokens no longer renders a segment (long-context premium pricing was retired)" {
   run_statusline '{"cwd":"/tmp","display_name":"Sonnet","used_percentage":40,"exceeds_200k_tokens":true}'
   [ "$status" -eq 0 ]
-  assert_plain_contains "200k+"
+  assert_plain_not_contains "200k+"
 }

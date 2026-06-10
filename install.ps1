@@ -1,0 +1,125 @@
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+  Claude Code Status Bar - Windows installer / updater.
+
+.DESCRIPTION
+  Downloads the status bar into ~\.claude and wires it into settings.json.
+  Re-running it is always safe and is also the update mechanism.
+
+  One-liner (PowerShell):
+    irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex
+
+.PARAMETER SourceDir
+  Install from a local clone instead of downloading (used by CI and offline installs).
+
+.PARAMETER TargetDir
+  Install destination. Defaults to $env:USERPROFILE\.claude.
+#>
+param(
+  [string]$SourceDir = '',
+  [string]$TargetDir = (Join-Path $env:USERPROFILE '.claude')
+)
+
+$ErrorActionPreference = 'Stop'
+$RepoRaw = 'https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main'
+
+function Get-RepoFile {
+  param([string]$Name, [string]$Dest)
+  if ($SourceDir) {
+    Copy-Item -Path (Join-Path $SourceDir $Name) -Destination $Dest -Force
+  } else {
+    Invoke-WebRequest -UseBasicParsing -Uri "$RepoRaw/$Name" -OutFile $Dest
+  }
+}
+
+# Write JSON without a BOM: a UTF-8 BOM in settings.json breaks JSON parsers
+function Write-NoBomFile {
+  param([string]$Path, [string]$Content)
+  [System.IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding $false))
+}
+
+New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
+
+# ── Download files ────────────────────────────────────────────
+$versionFile = Join-Path $TargetDir '.statusline-version'
+Get-RepoFile -Name 'VERSION' -Dest $versionFile
+$version = (Get-Content $versionFile -Raw).Trim()
+
+$scriptPath = Join-Path $TargetDir 'statusline-command.sh'
+if (Test-Path $scriptPath) {
+  Write-Host "Updating claude-code-status-bar to v$version..."
+} else {
+  Write-Host "Installing claude-code-status-bar v$version..."
+}
+
+Get-RepoFile -Name 'statusline-command.sh' -Dest $scriptPath
+# Node.js helpers (optional): live activity line + subagent panel rows
+foreach ($helper in @('statusline-helper.js', 'statusline-subagent.js')) {
+  try { Get-RepoFile -Name $helper -Dest (Join-Path $TargetDir $helper) } catch { }
+}
+
+Write-Host "  Files installed to: $TargetDir"
+Write-Host "  Version: $version"
+
+# ── Runtime requirement: Git Bash ─────────────────────────────
+if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
+  Write-Warning ("bash was not found on your PATH. The status bar runs via Git for Windows " +
+    "(https://git-scm.com/download/win), which Claude Code on Windows requires anyway. " +
+    "Install it, then restart your terminal.")
+}
+
+# ── Update settings.json ──────────────────────────────────────
+# Forward slashes: Claude Code consumes backslashes in command paths
+$fwdTarget = $TargetDir -replace '\\', '/'
+$statusCmd = "bash $fwdTarget/statusline-command.sh"
+$subagentCmd = $null
+if (Get-Command node -ErrorAction SilentlyContinue) {
+  $subagentCmd = "node $fwdTarget/statusline-subagent.js"
+}
+
+$settingsFile = Join-Path $TargetDir 'settings.json'
+if (-not (Test-Path $settingsFile)) {
+  $settings = [ordered]@{
+    statusLine = [ordered]@{ type = 'command'; command = $statusCmd }
+  }
+  if ($subagentCmd) {
+    $settings['subagentStatusLine'] = [ordered]@{ type = 'command'; command = $subagentCmd }
+  }
+  Write-NoBomFile -Path $settingsFile -Content (($settings | ConvertTo-Json -Depth 5) + "`n")
+  Write-Host "  Created settings: $settingsFile"
+} else {
+  try {
+    $json = Get-Content $settingsFile -Raw | ConvertFrom-Json
+    $added = @()
+    if (-not $json.PSObject.Properties['statusLine']) {
+      $json | Add-Member -NotePropertyName 'statusLine' `
+        -NotePropertyValue ([pscustomobject]@{ type = 'command'; command = $statusCmd })
+      $added += 'statusLine'
+    }
+    if ($subagentCmd -and -not $json.PSObject.Properties['subagentStatusLine']) {
+      $json | Add-Member -NotePropertyName 'subagentStatusLine' `
+        -NotePropertyValue ([pscustomobject]@{ type = 'command'; command = $subagentCmd })
+      $added += 'subagentStatusLine'
+    }
+    if ($added.Count -gt 0) {
+      Write-NoBomFile -Path $settingsFile -Content (($json | ConvertTo-Json -Depth 50) + "`n")
+      Write-Host "  Updated settings ($($added -join ', ')): $settingsFile"
+    } else {
+      Write-Host "  settings.json already configured - skipped."
+    }
+  } catch {
+    Write-Warning "Could not update settings.json automatically: $($_.Exception.Message)"
+    Write-Host '  Add this to settings.json yourself:'
+    Write-Host "    `"statusLine`": { `"type`": `"command`", `"command`": `"$statusCmd`" }"
+    if ($subagentCmd) {
+      Write-Host "    `"subagentStatusLine`": { `"type`": `"command`", `"command`": `"$subagentCmd`" }"
+    }
+  }
+}
+
+# ── Clear update cache ────────────────────────────────────────
+Remove-Item -Path (Join-Path $TargetDir '.statusline-update-cache') -Force -ErrorAction SilentlyContinue
+
+Write-Host ''
+Write-Host 'Done! Your status bar should appear automatically.'

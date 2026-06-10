@@ -214,7 +214,7 @@ show_pr=true
 usage_cache_seconds=600
 auto_hide=true
 use_icons=true
-context_warn_threshold=80
+context_warn_threshold=auto
 enable_truncation=false
 max_width=""
 use_groups=false
@@ -1076,11 +1076,69 @@ fi
 if [ "$show_context_bar" = "true" ]; then
   pct="${used:-0}"
   pct_int="${pct%%.*}"
-  bar_output=$(build_progress_bar "$pct_int")
+
+  # ── Auto-compact awareness ─────────────────────────────────
+  # Claude Code auto-compacts at (autocompact window - 33000) tokens and its
+  # own UI warns 20000 tokens before that. Constants extracted from Claude
+  # Code 2.1.170; display-only, so drift across CC versions is cosmetic.
+  # The autocompact window follows CC's resolution order: env override,
+  # then settings.json autoCompactWindow, then the model's full window.
+  # DISABLE_AUTO_COMPACT / DISABLE_COMPACT turn the marker and auto-warning off.
+  compact_pct="" compact_tokens="" ctx_window=""
+  if [ -n "$context_size" ] && [ "$context_size" != "0" ]; then
+    ctx_window="${context_size%%.*}"
+  fi
+  if [ -n "$ctx_window" ] && [ -z "${DISABLE_AUTO_COMPACT:-}" ] && [ -z "${DISABLE_COMPACT:-}" ]; then
+    acw=""
+    case "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}" in
+      ''|*[!0-9]*) : ;;
+      *)
+        acw="$CLAUDE_CODE_AUTO_COMPACT_WINDOW"
+        [ "$acw" -lt 100000 ] && acw=100000
+        [ "$acw" -gt 1000000 ] && acw=1000000
+        ;;
+    esac
+    if [ -z "$acw" ] && [ -f "${SCRIPT_DIR}/settings.json" ]; then
+      acw_pattern='"autoCompactWindow"[[:space:]]*:[[:space:]]*([0-9]+)'
+      if [[ $(cat "${SCRIPT_DIR}/settings.json" 2>/dev/null) =~ $acw_pattern ]]; then
+        acw="${BASH_REMATCH[1]}"
+      fi
+    fi
+    [ -z "$acw" ] && acw="$ctx_window"
+    [ "$acw" -gt "$ctx_window" ] 2>/dev/null && acw="$ctx_window"
+    if [ "$acw" -gt 33000 ] 2>/dev/null; then
+      compact_tokens=$(( acw - 33000 ))
+      compact_pct=$(( compact_tokens * 100 / ctx_window ))
+      [ "$compact_pct" -ge 100 ] && compact_pct=99
+    fi
+  fi
+
+  bar_output=$(build_progress_bar "$pct_int" "$compact_pct")
   bar_clr="${bar_output%%$'\n'*}"
   progress_bar="${bar_output#*$'\n'}"
+
+  # Warning: "auto" (default) fires within 20000 tokens of the auto-compact
+  # point, matching Claude Code's own context-low timing on any window size.
+  # A numeric context_warn_threshold keeps the legacy raw-percentage rule.
   warn_prefix=""
-  if [ "$pct_int" -ge "${context_warn_threshold:-80}" ] 2>/dev/null; then
+  warn_now=false
+  if [ "${context_warn_threshold:-auto}" = "auto" ]; then
+    if [ -n "$compact_tokens" ]; then
+      used_tokens=""
+      [ -n "$cw_block" ] && used_tokens=$(extract_num_from "$cw_block" "total_input_tokens")
+      used_tokens="${used_tokens%%.*}"
+      [ -z "$used_tokens" ] && used_tokens=$(( pct_int * ctx_window / 100 ))
+      if [ "$used_tokens" -ge $(( compact_tokens - 20000 )) ] 2>/dev/null; then
+        warn_now=true
+      fi
+    elif [ "$pct_int" -ge 80 ] 2>/dev/null; then
+      # No window data (older Claude Code): fall back to the legacy 80% rule
+      warn_now=true
+    fi
+  elif [ "$pct_int" -ge "${context_warn_threshold:-80}" ] 2>/dev/null; then
+    warn_now=true
+  fi
+  if [ "$warn_now" = "true" ]; then
     [ "$use_icons" = "true" ] && warn_prefix="${CLR_WARN}▲${CLR_RESET} "
   fi
   ctx_suffix=""
@@ -1099,12 +1157,6 @@ if [ "$show_context_bar" = "true" ]; then
     fi
   fi
   add_seg "${warn_prefix}${progress_bar} ${bar_clr}${pct_int}%${ctx_suffix}${CLR_RESET}" 2 "ctx"
-fi
-
-# 200k token warning (automatic — no config toggle)
-exceed_pattern='"exceeds_200k_tokens"[[:space:]]*:[[:space:]]*true'
-if [[ $input =~ $exceed_pattern ]]; then
-  add_seg "${CLR_WARN}▲ 200k+${CLR_RESET}" 2 "ctx"
 fi
 
 # Token counts (priority 5) — reuses $cw_block from context window extraction above

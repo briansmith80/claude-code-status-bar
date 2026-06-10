@@ -2,7 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.6.0] - 2026-06-10
+
+Context warnings rebuilt around how Claude Code actually compacts, plus a first-class Windows install experience.
+
+### Added
+
+- **Auto-compact awareness on the context bar**: Claude Code auto-compacts at a fixed token reserve below the window (window minus 33000 tokens, constants extracted from CC 2.1.170), which lands at roughly 83% of a 200k window but almost 97% of a 1M window. The context bar now carries a `│` marker at that point, and the new default `context_warn_threshold=auto` fires the `▲` warning within 20000 tokens of it, matching Claude Code's own context-low timing on any window size. The maths honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting from `/autocompact`, and `DISABLE_AUTO_COMPACT`/`DISABLE_COMPACT` (marker off, raw 80% fallback). A numeric `context_warn_threshold` keeps the legacy fixed-percentage rule. No other status line reads Claude Code's real compaction config.
+- **`install.ps1`**: native Windows PowerShell installer/updater. One-liner: `irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex`. Merges `settings.json` natively (no node/python needed), writes BOM-free JSON with forward-slash paths, checks for Git Bash, wires `subagentStatusLine` when Node.js is present, never touches existing entries, and is idempotent. Supports `-SourceDir`/`-TargetDir` for offline installs and CI.
+- **CI**: the Windows job now parse-checks and smoke-tests `install.ps1` (fresh install plus idempotent re-run against a sandbox).
+- **7 new BATS tests** for compaction awareness (suite now 69).
+
+### Removed
+
+- **The `▲ 200k+` segment**: it signalled long-context premium pricing, which Anthropic abolished on March 13, 2026 (1M context is GA at flat standard pricing). On 1M models the warning just nagged permanently from 200k onwards while signalling nothing actionable. The `exceeds_200k_tokens` stdin field is now ignored.
+
+### Changed
+
+- **README**: install section restructured with separate macOS/Linux and Windows (PowerShell) one-liners; the previous advice to pipe `curl.exe` into `bash` from PowerShell was replaced (PowerShell 5.1 re-encodes pipeline data between native programs and can corrupt the script); PowerShell examples added for updating; doc refresh for current test counts, the v2.5.0 installer behaviour, the Node.js requirements row, the manual uninstall list (per-session activity caches), and `tests/README.md`.
 
 ### Fixed
 
