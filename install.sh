@@ -31,8 +31,9 @@ if command -v curl > /dev/null 2>&1; then
   fi
 
   curl -fsSL "${REPO_RAW}/${SCRIPT_NAME}" -o "$target_file"
-  # Download Node.js helper for live activity (optional)
+  # Download Node.js helpers: live activity line + subagent panel rows (optional)
   curl -fsSL "${REPO_RAW}/statusline-helper.js" -o "${target_dir}/statusline-helper.js" 2>/dev/null || true
+  curl -fsSL "${REPO_RAW}/statusline-subagent.js" -o "${target_dir}/statusline-subagent.js" 2>/dev/null || true
 elif command -v wget > /dev/null 2>&1; then
   wget -qO "$version_file" "${REPO_RAW}/VERSION"
   VERSION=$(tr -d '[:space:]' < "$version_file")
@@ -44,8 +45,9 @@ elif command -v wget > /dev/null 2>&1; then
   fi
 
   wget -qO "$target_file" "${REPO_RAW}/${SCRIPT_NAME}"
-  # Download Node.js helper for live activity (optional)
+  # Download Node.js helpers: live activity line + subagent panel rows (optional)
   wget -qO "${target_dir}/statusline-helper.js" "${REPO_RAW}/statusline-helper.js" 2>/dev/null || true
+  wget -qO "${target_dir}/statusline-subagent.js" "${REPO_RAW}/statusline-subagent.js" 2>/dev/null || true
 else
   echo "Error: curl or wget is required."
   exit 1
@@ -57,9 +59,28 @@ echo "  Version: ${VERSION}"
 
 # ── Update settings.json ─────────────────────────────────────
 command_value="bash ${target_file}"
+# Subagent panel rows need Node.js; only wire them when node is available
+subagent_value=""
+if command -v node > /dev/null 2>&1; then
+  subagent_value="node ${target_dir}/statusline-subagent.js"
+fi
 
 if [ ! -f "$settings_file" ]; then
-  cat > "$settings_file" <<EOF
+  if [ -n "$subagent_value" ]; then
+    cat > "$settings_file" <<EOF
+{
+  "statusLine": {
+    "type": "command",
+    "command": "${command_value}"
+  },
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "${subagent_value}"
+  }
+}
+EOF
+  else
+    cat > "$settings_file" <<EOF
 {
   "statusLine": {
     "type": "command",
@@ -67,17 +88,24 @@ if [ ! -f "$settings_file" ]; then
   }
 }
 EOF
+  fi
   echo "  Created settings: ${settings_file}"
-elif grep -q '"statusLine"' "$settings_file"; then
-  echo "  settings.json already has a statusLine entry — skipped."
+elif grep -q '"statusLine"' "$settings_file" && { [ -z "$subagent_value" ] || grep -q '"subagentStatusLine"' "$settings_file"; }; then
+  echo "  settings.json already configured — skipped."
 elif command -v node > /dev/null 2>&1; then
   node -e "
     const fs = require('fs');
     const data = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-    data.statusLine = { type: 'command', command: process.argv[2] };
-    fs.writeFileSync(process.argv[1], JSON.stringify(data, null, 2) + '\n');
-  " "$settings_file" "$command_value"
-  echo "  Updated settings: ${settings_file}"
+    const added = [];
+    if (!data.statusLine) { data.statusLine = { type: 'command', command: process.argv[2] }; added.push('statusLine'); }
+    if (process.argv[3] && !data.subagentStatusLine) { data.subagentStatusLine = { type: 'command', command: process.argv[3] }; added.push('subagentStatusLine'); }
+    if (added.length) {
+      fs.writeFileSync(process.argv[1], JSON.stringify(data, null, 2) + '\n');
+      console.log('  Updated settings (' + added.join(', ') + '): ' + process.argv[1]);
+    } else {
+      console.log('  settings.json already configured — skipped.');
+    }
+  " "$settings_file" "$command_value" "$subagent_value"
 elif command -v python3 > /dev/null 2>&1; then
   python3 -c "
 import json, sys

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.5.0] - 2026-06-10
+
+### Added
+
+- **Subagent panel renderer** (`statusline-subagent.js`): implements Claude Code's `subagentStatusLine` protocol to restyle the agent panel rows shown while subagents, workflows, and background tasks run. Each row gets a theme-aware status icon (`⚒` running, `✓` done, `✗` failed, `◌` queued), elapsed time, compact token cost, and a live `tok/s` burn rate with sparkline computed from Claude Code's per-tick token samples. Descriptions align into a column across rows; rows trim to the panel width. Any error makes the script print nothing, so Claude Code falls back to its default rows. Disable with `subagent_rows=false` in `statusline.conf`.
+- **Installer wiring**: `install.sh` downloads the renderer and adds a `subagentStatusLine` entry to `settings.json` when Node.js is available, never touching an existing entry. The `/setup` slash command does the same from the plugin cache. `--uninstall` removes the new file.
+- **8 new BATS tests** (`tests/subagent.bats`, suite now 62) covering rendering, status icons, NO_COLOR, width fitting, malformed input, default-row passthrough, the `subagent_rows` toggle, and output validity.
+
 ## [2.4.0] - 2026-06-10
 
 Live activity line overhaul, driven by measurements against a real long-running session.

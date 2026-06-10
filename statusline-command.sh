@@ -295,6 +295,7 @@ case "${1:-}" in
     UNINSTALL_FILES=(
       "${SCRIPT_DIR}/statusline-command.sh"
       "${SCRIPT_DIR}/statusline-helper.js"
+      "${SCRIPT_DIR}/statusline-subagent.js"
       "${SCRIPT_DIR}/.statusline-version"
       "${SCRIPT_DIR}/.statusline-update-cache"
       "${SCRIPT_DIR}/.statusline-usage-cache"

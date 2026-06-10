@@ -38,7 +38,8 @@ Pure bash core, no jq, no compiled binaries. One-line install. Seven colour them
 ```
 
 **Contents:** [Highlights](#highlights) · [Requirements](#requirements) · [Install](#install) ·
-[The two-line layout](#the-two-line-layout) · [Segments](#segments) ·
+[The two-line layout](#the-two-line-layout) · [Subagent status line](#subagent-status-line) ·
+[Segments](#segments) ·
 [Usage limits & pacing](#usage-limits--pacing) · [Configuration](#configuration) ·
 [CLI flags](#cli-flags) · [Updating](#updating) · [Uninstall](#uninstall) ·
 [How it works](#how-it-works) · [Repository layout](#repository-layout) · [Testing](#testing) ·
@@ -52,6 +53,7 @@ Pure bash core, no jq, no compiled binaries. One-line install. Seven colour them
 - **22 line-one segments** plus a live activity line, individually toggleable (all except two automatic indicators, the 200k warning and the update notice).
 - **Pacing markers** on the usage bars: a `│` shows where your usage *should* be for even consumption across the window, so "37% used" becomes "37% used and comfortably under pace".
 - **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
+- **Subagent panel rows**: while agents and workflows run, the agent panel shows status icons, elapsed time, token cost, and a live `tok/s` burn rate per task.
 - **Pure bash core** (bash 3.2+, stock macOS works). JSON is parsed with bash regex, so there is no jq dependency to install on Windows.
 - **Seven colour themes**: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `mono`, plus full [`NO_COLOR`](https://no-color.org/) support.
 - **Never blocks**: update checks, the usage API fallback, and transcript parsing all run in background subshells. The bar renders from caches.
@@ -160,6 +162,33 @@ Good to know:
 - It requires Node.js on your `PATH`, the `statusline-helper.js` file (installed by default), and a Claude Code version that sends `transcript_path` (2.1+). If any of those are missing, line 2 silently stays off and everything else works.
 - Each session gets its own activity cache (keyed by Claude Code's session ID), so parallel Claude Code windows never show each other's activity. Stale per-session caches are swept automatically after a day.
 - Disable it entirely with `show_activity=false` in your config.
+
+## Subagent status line
+
+While subagents, workflows, or background tasks run, Claude Code shows an agent panel below the prompt. The optional `statusline-subagent.js` renderer (installed and wired automatically when Node.js is available) restyles those rows to match the status bar and adds live numbers:
+
+```
+⚒ Audit the usage parsing code  1m24s · 12.4k tok · 354 tok/s ▄▅▆▇▇▆█
+✓ Verify the rate-limit fix     3m2s · 48.1k tok
+✗ security review               41s · 2k tok
+```
+
+- **Status at a glance**: `⚒` running (yellow), `✓` done (green), `✗` failed (red), `◌` queued (dim), using your `colour_theme` and honouring `NO_COLOR`.
+- **Elapsed time** per task, ticking with each panel refresh (roughly every 5 seconds).
+- **Token cost and burn rate**: Claude Code samples each task's token count on every refresh; the renderer turns those samples into a `tok/s` rate plus a small sparkline, so a runaway agent is visible before it finishes.
+- **Aligned and width-aware**: descriptions are padded into a column across rows, and each row is trimmed to the panel width (the sparkline is dropped first, then the rate).
+- **Fail-safe**: on any error or unexpected input the script prints nothing and Claude Code falls back to its default rows. Set `subagent_rows=false` in `statusline.conf` to keep the defaults permanently.
+
+The installer wires this into `settings.json` when Node.js is present, leaving any existing entry untouched:
+
+```json
+{
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "node ~/.claude/statusline-subagent.js"
+  }
+}
+```
 
 ## Segments
 
@@ -347,6 +376,7 @@ It lists what will be deleted and asks for confirmation, prompts **separately** 
 ```bash
 rm -f ~/.claude/statusline-command.sh
 rm -f ~/.claude/statusline-helper.js
+rm -f ~/.claude/statusline-subagent.js
 rm -f ~/.claude/.statusline-version
 rm -f ~/.claude/.statusline-update-cache
 rm -f ~/.claude/.statusline-usage-cache
@@ -382,6 +412,7 @@ Files at `~/.claude/` after install:
 |------|---------|----------------------|
 | `statusline-command.sh` | The script Claude Code runs | Yes |
 | `statusline-helper.js` | Node.js transcript parser (optional) | Yes |
+| `statusline-subagent.js` | Node.js subagent panel renderer (optional) | Yes |
 | `.statusline-version` | Installed version | Yes |
 | `statusline.conf` | Your config overrides | **Never** |
 | `.statusline-update-cache` | Update check cache | Cleared on update |
@@ -403,6 +434,7 @@ claude-code-status-bar/
 ├── install.sh                    # one-line installer / updater
 ├── statusline-command.sh         # the status bar (pure bash, installed to ~/.claude/)
 ├── statusline-helper.js          # optional Node.js transcript parser (live activity line)
+├── statusline-subagent.js        # optional Node.js renderer for the subagent panel rows
 ├── docs/
 │   └── assets/                   # README images (banner, terminal demo)
 ├── commands/
@@ -466,6 +498,7 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.5.0**: Subagent panel renderer: status icons, elapsed time, token cost, and live `tok/s` burn rate for every running agent, workflow, and background task.
 - **2.4.0**: Live activity overhaul: incremental transcript parsing, age-out of finished items, a `✗` failed-tool indicator, elapsed time on running tools, the `activity_ttl_seconds` config, and terminal-width trimming.
 - **2.3.0**: Countdown labels for usage bars (`usage_label=countdown`), a PR segment, worktree detection for any linked worktree, and per-session activity caches.
 - **2.2.0**: Claude Code 2.1.170 audit. Fable/Mythos models get a theme-aware purple tier colour, new effort level and fast mode segments, rate-limit parsing scoped to the `rate_limits` block, and ISO timestamp tolerance.

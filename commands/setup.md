@@ -34,9 +34,13 @@ target_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 cp "${plugin_dir}statusline-command.sh" "${target_dir}/statusline-command.sh"
 chmod +x "${target_dir}/statusline-command.sh"
 
-# Copy Node.js helper for live activity (optional but recommended)
+# Copy Node.js helpers: live activity line + subagent panel rows
+# (optional but recommended)
 if [ -f "${plugin_dir}statusline-helper.js" ]; then
   cp "${plugin_dir}statusline-helper.js" "${target_dir}/statusline-helper.js"
+fi
+if [ -f "${plugin_dir}statusline-subagent.js" ]; then
+  cp "${plugin_dir}statusline-subagent.js" "${target_dir}/statusline-subagent.js"
 fi
 
 # Copy version file
@@ -65,6 +69,16 @@ The statusLine config should be:
   "statusLine": {
     "type": "command",
     "command": "bash ~/.claude/statusline-command.sh"
+  }
+}
+```
+
+When Node.js is available, also merge a subagentStatusLine entry (skip if one already exists, asking the user before replacing). This styles the agent panel rows shown while subagents run:
+```json
+{
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "node ~/.claude/statusline-subagent.js"
   }
 }
 ```

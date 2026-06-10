@@ -10,6 +10,7 @@ A configurable status bar for Claude Code. Pure bash core with optional Node.js 
 VERSION                    # Single source of truth for version (bump ONLY this file for releases)
 statusline-command.sh      # The runtime script — installed to ~/.claude/
 statusline-helper.js       # Optional Node.js transcript parser — installed to ~/.claude/
+statusline-subagent.js     # Optional Node.js subagent panel renderer — installed to ~/.claude/
 install.sh                 # Installer/updater — downloads script + helper + VERSION from GitHub
 .claude-plugin/plugin.json # Plugin manifest for marketplace distribution
 .claude-plugin/marketplace.json # Marketplace catalog (required by /plugin marketplace add)
@@ -25,6 +26,7 @@ README.md                  # User-facing docs
 |------|---------|----------------------|
 | `statusline-command.sh` | The script Claude Code runs | Yes |
 | `statusline-helper.js` | Node.js transcript parser (optional) | Yes |
+| `statusline-subagent.js` | Node.js subagent panel renderer (optional) | Yes |
 | `.statusline-version` | Local copy of VERSION | Yes |
 | `statusline.conf` | User config overrides | **Never** |
 | `.statusline-update-cache` | Update check cache (timestamp + version) | Cleared on update |
@@ -48,6 +50,7 @@ README.md                  # User-facing docs
 - **Live activity via transcript** — Optional Node.js helper (`statusline-helper.js`) parses Claude Code's JSONL transcript for tool calls, subagent status, and todo progress. Runs in background with a SHA256-keyed disk cache that stores the parse state plus a byte offset, so each run parses only newly appended lines (incremental). Completed/failed items age out of the display after 5 minutes; tool counts cover the whole session. Only activates when `transcript_path` is in stdin and Node.js is available.
 - **Two-line layout** — Line 1 is the metrics bar. Line 2 (dim) shows live activity when available. Line 2 only appears when there's data to show. Disable with `show_activity=false`.
 - **Per-session activity cache** — The activity cache is keyed by stdin `session_id` (`.statusline-activity-cache.<id8>`), so parallel sessions never clobber each other's line 2. Stale per-session caches are swept after 24h by the helper-spawn subshell; `--uninstall` removes them.
+- **Subagent panel rows** — `statusline-subagent.js` implements Claude Code's `subagentStatusLine` protocol: stdin `{columns, tasks[]}` per ~5s tick, stdout one `{"id","content"}` JSON line per row. Renders status icon, elapsed, tokens, and a tok/s rate from `tokenSamples` (cumulative counts, one per tick, max 16). Errors exit silently so Claude Code keeps its default rows; `subagent_rows=false` in statusline.conf disables it.
 - **`usage_label` config** — Usage bar labels show the reset moment (`clock`, default) or remaining time (`countdown`, e.g. `2h20m`). Countdown pairs well with the `refreshInterval` statusLine setting (CC re-runs the script on a timer).
 - **Plugin marketplace** — `.claude-plugin/plugin.json` enables `/plugin install`. Slash commands for setup and configuration.
 - **Pacing markers** — Progress bars support an optional `│` marker (CLR_PACE) showing where usage *should* be for even consumption across the window.
@@ -64,7 +67,7 @@ README.md                  # User-facing docs
 See [ROADMAP.md](ROADMAP.md) for the feature roadmap and competitive landscape.
 See [SPRINTS.md](SPRINTS.md) for the validated sprint plan with dependency ordering and effort estimates.
 
-Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI :white_check_mark: shipped. BATS scaffold (28 tests), three-platform CI matrix, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`) all landed. v2.1.1 followed with the README overhaul, the NO_COLOR/mono progress bar fix, and `.claude-plugin/marketplace.json`. v2.2.0 audited the bar against Claude Code 2.1.170 (Fable 5): Fable/Mythos purple tier colour, effort + fast-mode segments, rate-limit extraction scoped to the `rate_limits` block, ISO `resets_at` tolerance, and `$COLUMNS`-first width detection. v2.3.0 added countdown usage labels (`usage_label`), the PR segment, worktree fallback via `workspace.git_worktree`, and per-session activity caches. v2.4.0 overhauled the live activity line: incremental transcript parsing, 5-minute age-out of finished items, `✗` failure indicator, elapsed time on running tools, `activity_ttl_seconds`, and `$COLUMNS` trimming. Next: re-evaluate against user feedback per the post-Sprint-4 plan in SPRINTS.md.
+Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI :white_check_mark: shipped. BATS scaffold (28 tests), three-platform CI matrix, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`) all landed. v2.1.1 followed with the README overhaul, the NO_COLOR/mono progress bar fix, and `.claude-plugin/marketplace.json`. v2.2.0 audited the bar against Claude Code 2.1.170 (Fable 5): Fable/Mythos purple tier colour, effort + fast-mode segments, rate-limit extraction scoped to the `rate_limits` block, ISO `resets_at` tolerance, and `$COLUMNS`-first width detection. v2.3.0 added countdown usage labels (`usage_label`), the PR segment, worktree fallback via `workspace.git_worktree`, and per-session activity caches. v2.4.0 overhauled the live activity line: incremental transcript parsing, 5-minute age-out of finished items, `✗` failure indicator, elapsed time on running tools, `activity_ttl_seconds`, and `$COLUMNS` trimming. v2.5.0 added the subagent panel renderer (`statusline-subagent.js`, wired via the `subagentStatusLine` setting). Next: re-evaluate against user feedback per the post-Sprint-4 plan in SPRINTS.md.
 
 ## How to release a new version
 
