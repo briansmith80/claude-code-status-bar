@@ -49,7 +49,7 @@ Pure bash core, no jq, no compiled binaries. One-line install. Seven colour them
 
 ## Highlights
 
-- **19 line-one segments** plus a live activity line, individually toggleable (all except two automatic indicators, the 200k warning and the update notice).
+- **21 line-one segments** plus a live activity line, individually toggleable (all except two automatic indicators, the 200k warning and the update notice).
 - **Pacing markers** on the usage bars: a `│` shows where your usage *should* be for even consumption across the window, so "37% used" becomes "37% used and comfortably under pace".
 - **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
 - **Pure bash core** (bash 3.2+, stock macOS works). JSON is parsed with bash regex, so there is no jq dependency to install on Windows.
@@ -166,11 +166,13 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Directory | `~/my-app` | `show_directory` | Prefers `workspace.current_dir`, falls back to `cwd`; home shown as `~` |
 | Branch | `on ↱ main` | `show_branch` | Short commit hash when detached; truncate long names with `branch_max_length` |
 | Vim mode | `NORMAL` | `show_vim_mode` | Only when Claude Code sends `vim.mode` |
-| Model | `◆ Opus 4.6` | `show_model` | Tier colours: Haiku green, Sonnet yellow, Opus orange (theme-aware) |
+| Model | `◆ Opus 4.6` | `show_model` | Tier colours: Haiku green, Sonnet yellow, Opus orange, Fable purple (theme-aware) |
 | Agent name | `▸ my-agent` | `show_agent` | Only when running with an agent |
+| Effort level | `eff:xhigh` | `show_effort` | Reasoning effort, when Claude Code sends `effort.level` (CC 2.1.133+) |
+| Fast mode | `⚡ fast` | `show_fast_mode` | Only when fast mode is on; yellow because it bills at a higher rate |
 | Context bar | `███████░░░ 78% of 200k` | `show_context_bar` | Green under 50%, yellow 50-79%, red 80%+; `▲` warning at `context_warn_threshold` |
 | 200k warning | `▲ 200k+` | *(automatic)* | When Claude Code reports `exceeds_200k_tokens` |
-| Token counts | `45k in 12k out` | `show_tokens` *(off)* | Cumulative input/output tokens; needs the nested `context_window` schema |
+| Token counts | `45k in 12k out` | `show_tokens` *(off)* | Tokens in the current context (cumulative session totals before CC 2.1.132) |
 | 5-hour usage | `5hr (2pm) ███│░░░░░░ 37%` | `show_usage_5h` | Rolling 5-hour window with reset time and pacing marker |
 | Weekly usage | `wk (fri,3am) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with reset day/time and pacing marker |
 | Lines changed | `+42 -7` | `show_lines_changed` | Session lines added (green) and removed (red) |
@@ -236,6 +238,8 @@ show_model=true
 show_agent=true
 show_context_bar=true
 show_tokens=false           # opt-in
+show_effort=true            # reasoning effort, e.g. eff:xhigh (needs CC 2.1.133+)
+show_fast_mode=true         # ⚡ fast indicator while fast mode is on
 show_usage_5h=true
 show_usage_7d=true
 show_lines_changed=true
@@ -271,8 +275,8 @@ usage_cache_seconds=600     # OAuth fallback refresh interval (ignored when stdi
 A few details worth knowing:
 
 - **`NO_COLOR`**: when the [`NO_COLOR`](https://no-color.org/) environment variable is set, all colours are disabled regardless of theme.
-- **Truncation order**: with `enable_truncation=true`, segments are dropped tier by tier, least important first: the update notice, then worktree, then duration, then ahead/behind and stash, then tokens, lines changed and dirty count, then cost and cost rate, then vim mode, model, agent and the usage bars, then the context bar, and last of all directory and branch.
-- **Groups**: with `use_groups=true`, related segments are bracketed: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`. Directory/branch, vim, agent, tokens, worktree, and the update notice stay outside groups. Brackets wrap contiguous runs, so an ungrouped segment sitting between group members (an agent name or a worktree) splits the bracket around itself.
+- **Truncation order**: with `enable_truncation=true`, segments are dropped tier by tier, least important first: the update notice, then worktree, then duration, then ahead/behind and stash, then effort, tokens, lines changed and dirty count, then fast mode, cost and cost rate, then vim mode, model, agent and the usage bars, then the context bar, and last of all directory and branch.
+- **Groups**: with `use_groups=true`, related segments are bracketed: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`. Directory/branch, vim, agent, effort, fast mode, tokens, worktree, and the update notice stay outside groups. Brackets wrap contiguous runs, so an ungrouped segment sitting between group members (an agent name or a worktree) splits the bracket around itself.
 - **Legacy alias**: `show_usage_weekly` from older configs still works as an alias for `show_usage_7d`.
 - **Trust level**: the config is sourced as bash, so treat it like your `.bashrc`: only put your own settings in it.
 
@@ -438,6 +442,7 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.2.0**: Claude Code 2.1.170 audit. Fable/Mythos models get a theme-aware purple tier colour, new effort level and fast mode segments, rate-limit parsing scoped to the `rate_limits` block, and ISO timestamp tolerance.
 - **2.1.1**: README overhaul with verified examples, a fix for doubled progress bars under `NO_COLOR`/mono, and the marketplace manifest for `/plugin marketplace add`.
 - **2.1.0**: BATS test suite, three-platform CI, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`).
 - **2.0.x**: theme-aware Opus colouring, `of 1M` formatting for million-token context windows, nested-JSON parsing fixes.

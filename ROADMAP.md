@@ -142,12 +142,21 @@ Open issues in [anthropics/claude-code](https://github.com/anthropics/claude-cod
 
 | Issue | Impact |
 |-------|--------|
-| [#31415](https://github.com/anthropics/claude-code/issues/31415) Effort level not in JSON | Can't show thinking effort level |
+| [#31415](https://github.com/anthropics/claude-code/issues/31415) Effort level not in JSON | ~~Can't show thinking effort level~~ **Resolved**: `effort.level` is in stdin since CC 2.1.133; effort segment shipped in v2.2.0 |
 | [#30189](https://github.com/anthropics/claude-code/issues/30189) Expose plan_mode/sandbox | Can't show plan mode or sandbox status |
 | [#30266](https://github.com/anthropics/claude-code/issues/30266) Invoke on session start | Status bar blank until first response |
 | [#27929](https://github.com/anthropics/claude-code/issues/27929) Disable built-in content | "Context low" compresses custom statuslines |
 | [#29411](https://github.com/anthropics/claude-code/issues/29411) Not rendered on resume | Status bar missing on resumed sessions |
 | [#32406](https://github.com/anthropics/claude-code/issues/32406) Expand hook data | Missing model, effort, context in hooks |
+
+### Newly available stdin fields (CC 2.1.145+, unbuilt ideas)
+
+The statusline stdin JSON now also carries fields with no segment yet; promote on user demand:
+
+- `pr.number` / `pr.url` / `pr.review_state`: a PR segment without shelling out to `gh` (CC 2.1.145+).
+- `workspace.repo.{host,owner,name}`: repo identity without parsing `git remote`.
+- `session_name`, `output_style.name`, `thinking.enabled`, `cost.total_api_duration_ms`: minor candidates.
+- `COLUMNS`/`LINES` env vars (CC 2.1.153+): already used for truncation width since v2.2.0; could drive adaptive layouts.
 
 ---
 

@@ -1,0 +1,70 @@
+#!/usr/bin/env bats
+#
+# Claude Code 2.1.x schema — nested cost block, current_usage, Fable tier
+# colour, effort / fast-mode segments, rate-limits scoping, ISO resets_at.
+
+load test_helper
+
+@test "nested cost block: cost, duration and line counts parse" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40},"cost":{"total_cost_usd":1.25,"total_duration_ms":720000,"total_lines_added":10,"total_lines_removed":3}}'
+  assert_plain_contains "\$1.25"
+  assert_plain_contains "12m"
+  assert_plain_contains "+10"
+  assert_plain_contains "-3"
+}
+
+@test "context_window with nested current_usage still renders percentage" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"total_input_tokens":241334,"total_output_tokens":194,"context_window_size":1000000,"current_usage":{"input_tokens":2,"output_tokens":194,"cache_creation_input_tokens":3205,"cache_read_input_tokens":238127},"used_percentage":24,"remaining_percentage":76}}'
+  assert_plain_contains "24% of 1M"
+}
+
+@test "Fable gets the theme-aware purple tier colour" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"used_percentage":40}}'
+  [[ "$output" == *$'\x1b[38;5;141m'* ]]
+}
+
+@test "Mythos maps to the Fable tier colour" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Mythos 5"},"context_window":{"used_percentage":40}}'
+  [[ "$output" == *$'\x1b[38;5;141m'* ]]
+}
+
+@test "model.id with [1m] suffix never leaks into output" {
+  run_statusline '{"cwd":"/tmp","model":{"id":"claude-fable-5[1m]","display_name":"Fable 5"},"context_window":{"used_percentage":40}}'
+  assert_plain_contains "Fable 5"
+  assert_plain_not_contains "claude-fable-5"
+  assert_plain_not_contains "[1m]"
+}
+
+@test "effort level renders as eff:<level>" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"used_percentage":40},"effort":{"level":"xhigh"}}'
+  assert_plain_contains "eff:xhigh"
+}
+
+@test "show_effort=false hides the effort segment" {
+  write_conf "show_effort=false"
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"used_percentage":40},"effort":{"level":"xhigh"}}'
+  assert_plain_not_contains "eff:xhigh"
+}
+
+@test "fast_mode true shows the fast indicator" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"used_percentage":40},"fast_mode":true}'
+  assert_plain_contains "⚡ fast"
+}
+
+@test "fast_mode false shows no fast indicator" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"used_percentage":40},"fast_mode":false}'
+  assert_plain_not_contains "fast"
+}
+
+@test "five_hour outside rate_limits is ignored" {
+  now=$(date +%s)
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"debug\":{\"five_hour\":{\"used_percentage\":99,\"resets_at\":$((now+3600))}},\"rate_limits\":{\"five_hour\":{\"used_percentage\":42,\"resets_at\":$((now+3600))}}}"
+  assert_plain_contains "42%"
+  assert_plain_not_contains "99%"
+}
+
+@test "ISO-8601 resets_at still yields a reset label" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40},"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":"2099-01-01T12:00:00Z"}}}'
+  assert_plain_contains "42%"
+  assert_plain_contains "5hr ("
+}

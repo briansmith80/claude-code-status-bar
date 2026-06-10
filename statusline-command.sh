@@ -222,6 +222,8 @@ colour_theme="default"
 show_vim_mode=true
 show_agent=true
 show_tokens=false
+show_effort=true
+show_fast_mode=true
 bar_width=10
 branch_max_length=""
 show_activity=true
@@ -264,6 +266,8 @@ case "${1:-}" in
       printf 'show_directory=%s\n'         "${show_directory}"
       printf 'show_dirty_count=%s\n'       "${show_dirty_count}"
       printf 'show_duration=%s\n'          "${show_duration}"
+      printf 'show_effort=%s\n'            "${show_effort}"
+      printf 'show_fast_mode=%s\n'         "${show_fast_mode}"
       printf 'show_lines_changed=%s\n'     "${show_lines_changed}"
       printf 'show_model=%s\n'             "${show_model}"
       printf 'show_stash=%s\n'             "${show_stash}"
@@ -352,6 +356,7 @@ apply_theme() {
       CLR_BRANCH="\033[38;5;139m"  # aurora purple
       CLR_MODEL="\033[38;5;111m"   # frost lighter blue
       CLR_MODEL_OPUS="\033[38;5;173m" # aurora orange (Opus tier)
+      CLR_MODEL_FABLE="\033[38;5;139m" # aurora purple (Fable tier)
       CLR_ADD="\033[38;5;108m"     # aurora green
       CLR_DEL="\033[38;5;174m"     # aurora red
       CLR_WARN="\033[38;5;179m"    # aurora yellow
@@ -368,6 +373,7 @@ apply_theme() {
       CLR_BRANCH="\033[38;5;212m"  # pink
       CLR_MODEL="\033[38;5;117m"   # cyan
       CLR_MODEL_OPUS="\033[38;5;215m" # orange #ffb86c (Opus tier)
+      CLR_MODEL_FABLE="\033[38;5;141m" # purple #bd93f9 (Fable tier)
       CLR_ADD="\033[38;5;84m"      # green
       CLR_DEL="\033[38;5;210m"     # red
       CLR_WARN="\033[38;5;228m"    # yellow
@@ -384,6 +390,7 @@ apply_theme() {
       CLR_BRANCH="\033[38;5;61m"  # violet
       CLR_MODEL="\033[38;5;33m"   # blue
       CLR_MODEL_OPUS="\033[38;5;166m" # solarized orange (Opus tier)
+      CLR_MODEL_FABLE="\033[38;5;61m" # solarized violet (Fable tier)
       CLR_ADD="\033[38;5;64m"     # green
       CLR_DEL="\033[38;5;160m"    # red
       CLR_WARN="\033[38;5;136m"   # yellow
@@ -400,6 +407,7 @@ apply_theme() {
       CLR_BRANCH="\033[38;5;141m" # purple #bb9af7
       CLR_MODEL="\033[38;5;117m"  # cyan #7dcfff
       CLR_MODEL_OPUS="\033[38;5;215m" # orange #ff9e64 (Opus tier)
+      CLR_MODEL_FABLE="\033[38;5;141m" # purple #bb9af7 (Fable tier)
       CLR_ADD="\033[38;5;149m"    # green #9ece6a
       CLR_DEL="\033[38;5;204m"    # red #f7768e
       CLR_WARN="\033[38;5;179m"   # yellow #e0af68
@@ -416,6 +424,7 @@ apply_theme() {
       CLR_BRANCH="\033[38;5;183m" # mauve #cba6f7
       CLR_MODEL="\033[38;5;116m"  # sapphire #74c7ec
       CLR_MODEL_OPUS="\033[38;5;216m" # peach #fab387 (Opus tier)
+      CLR_MODEL_FABLE="\033[38;5;183m" # mauve #cba6f7 (Fable tier)
       CLR_ADD="\033[38;5;150m"    # green #a6e3a1
       CLR_DEL="\033[38;5;211m"    # red #f38ba8
       CLR_WARN="\033[38;5;223m"   # yellow #f9e2af
@@ -428,7 +437,7 @@ apply_theme() {
       CLR_RESET="\033[0m"
       ;;
     mono)
-      CLR_DIR="" CLR_BRANCH="" CLR_MODEL="" CLR_MODEL_OPUS=""
+      CLR_DIR="" CLR_BRANCH="" CLR_MODEL="" CLR_MODEL_OPUS="" CLR_MODEL_FABLE=""
       CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO="" CLR_DIM=""
       CLR_BAR_OK="" CLR_BAR_MED="" CLR_BAR_HIGH="" CLR_PACE=""
       CLR_RESET=""
@@ -438,6 +447,7 @@ apply_theme() {
       CLR_BRANCH="\033[0;35m"  # magenta
       CLR_MODEL="\033[0;34m"   # blue
       CLR_MODEL_OPUS="\033[38;5;208m" # orange (Opus tier)
+      CLR_MODEL_FABLE="\033[38;5;141m" # purple (Fable tier)
       CLR_ADD="\033[0;32m"     # green
       CLR_DEL="\033[0;31m"     # red
       CLR_WARN="\033[0;33m"    # yellow
@@ -661,7 +671,12 @@ usage_5h="" usage_5h_resets="" usage_7d="" usage_7d_resets=""
 stdin_usage=false
 rl_guard='"rate_limits"[[:space:]]*:[[:space:]]*\{'
 if [[ $input =~ $rl_guard ]]; then
-  fh_stdin_block=$(extract_block "$input" "five_hour")
+  # Scope extraction to the rate_limits block so a five_hour/seven_day object
+  # elsewhere in the payload is never mistaken for rate-limit data. Falls back
+  # to the whole input if the block itself cannot be captured.
+  rl_block=$(extract_block "$input" "rate_limits")
+  [ -z "$rl_block" ] && rl_block="$input"
+  fh_stdin_block=$(extract_block "$rl_block" "five_hour")
   if [ -n "$fh_stdin_block" ]; then
     stdin_5h=$(extract_num_from "$fh_stdin_block" "used_percentage")
     stdin_5h_resets=$(extract_num_from "$fh_stdin_block" "resets_at")
@@ -675,11 +690,15 @@ if [[ $input =~ $rl_guard ]]; then
         else
           usage_5h_resets=$(date -ud "@$stdin_5h_resets_int" '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_5h_resets=""
         fi
+      else
+        # Tolerate an ISO-8601 string resets_at (downstream handles ISO natively)
+        usage_5h_resets=$(extract_from "$fh_stdin_block" "resets_at")
+        usage_5h_resets="${usage_5h_resets/Z/+00:00}"
       fi
       stdin_usage=true
     fi
   fi
-  sd_stdin_block=$(extract_block "$input" "seven_day")
+  sd_stdin_block=$(extract_block "$rl_block" "seven_day")
   if [ -n "$sd_stdin_block" ]; then
     stdin_7d=$(extract_num_from "$sd_stdin_block" "used_percentage")
     stdin_7d_resets=$(extract_num_from "$sd_stdin_block" "resets_at")
@@ -692,6 +711,10 @@ if [[ $input =~ $rl_guard ]]; then
         else
           usage_7d_resets=$(date -ud "@$stdin_7d_resets_int" '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_7d_resets=""
         fi
+      else
+        # Tolerate an ISO-8601 string resets_at (downstream handles ISO natively)
+        usage_7d_resets=$(extract_from "$sd_stdin_block" "resets_at")
+        usage_7d_resets="${usage_7d_resets/Z/+00:00}"
       fi
       stdin_usage=true
     fi
@@ -950,7 +973,7 @@ if [ "$show_vim_mode" = "true" ]; then
   fi
 fi
 
-# Model (priority 3) — coloured by tier: Haiku=green, Sonnet=yellow, Opus=orange
+# Model (priority 3) — coloured by tier: Haiku=green, Sonnet=yellow, Opus=orange, Fable=purple
 if [ "$show_model" = "true" ]; then
   model_icon=""
   [ "$use_icons" = "true" ] && model_icon="◆ "
@@ -958,6 +981,7 @@ if [ "$show_model" = "true" ]; then
     *Haiku*)  model_clr="$CLR_ADD" ;;                # green (cheap)
     *Sonnet*) model_clr="$CLR_WARN" ;;               # yellow (mid)
     *Opus*)   model_clr="$CLR_MODEL_OPUS" ;;          # theme-aware orange (premium)
+    *Fable*|*Mythos*) model_clr="$CLR_MODEL_FABLE" ;; # theme-aware purple (frontier)
     *)        model_clr="$CLR_MODEL" ;;               # default blue
   esac
   # Respect NO_COLOR / mono theme
@@ -976,6 +1000,30 @@ if [ "$show_agent" = "true" ]; then
       [ "$use_icons" = "true" ] && agent_icon="▸ "
       add_seg "${CLR_MODEL}${agent_icon}${agent_name}${CLR_RESET}" 3
     fi
+  fi
+fi
+
+# Effort level (priority 5) — sent by Claude Code when the model supports
+# /effort. Shown as e.g. "eff:xhigh"; absent field hides the segment.
+if [ "$show_effort" = "true" ]; then
+  effort_block=$(extract_block "$input" "effort")
+  if [ -n "$effort_block" ]; then
+    effort_level=$(extract_from "$effort_block" "level")
+    if [ -n "$effort_level" ]; then
+      effort_level=$(sanitize "$effort_level")
+      add_seg "${CLR_INFO}eff:${effort_level}${CLR_RESET}" 5
+    fi
+  fi
+fi
+
+# Fast mode indicator (priority 4) — only when stdin reports fast_mode true.
+# Yellow because fast mode bills at a higher rate.
+if [ "$show_fast_mode" = "true" ]; then
+  fm_guard='"fast_mode"[[:space:]]*:[[:space:]]*true'
+  if [[ $input =~ $fm_guard ]]; then
+    fast_icon=""
+    [ "$use_icons" = "true" ] && fast_icon="⚡ "
+    add_seg "${CLR_WARN}${fast_icon}fast${CLR_RESET}" 4
   fi
 fi
 
@@ -1189,8 +1237,11 @@ if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
   if [ -n "$max_width" ]; then
     term_width="$max_width"
   else
-    term_width=$(tput cols 2>/dev/null) || true
-    [ -z "$term_width" ] && term_width="${COLUMNS:-120}"
+    # Claude Code >= 2.1.153 sets COLUMNS for statusline commands; prefer it
+    # because tput cols is unreliable when output is captured (no tty).
+    term_width="${COLUMNS:-}"
+    [ -z "$term_width" ] && { term_width=$(tput cols 2>/dev/null) || true; }
+    [ -z "$term_width" ] && term_width=120
   fi
 
   # Mark segments as active (1) or dropped (0)

@@ -42,6 +42,8 @@ Available: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin
 - `show_usage_5h` — 5-hour usage limit
 - `show_usage_7d` — 7-day usage limit
 - `show_tokens` — Token counts (off by default)
+- `show_effort` — Reasoning effort level, e.g. eff:xhigh (needs Claude Code 2.1.133+)
+- `show_fast_mode` — Fast mode indicator while fast mode is on
 - `show_vim_mode` — Vim mode indicator
 - `show_agent` — Agent name
 - `show_activity` — Live activity line (tools, agents, todos)

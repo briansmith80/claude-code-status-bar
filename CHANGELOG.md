@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-06-10
+
+Audited against Claude Code 2.1.170 (the Fable 5 release) using a live captured stdin payload, the current statusline docs, and the Claude Code changelog. Rate limits, the nested `cost` block, `context_window.current_usage`, and 1M context all verified working; the items below are what needed fixing or was newly possible.
+
+### Added
+
+- **Fable/Mythos tier colour**: the new flagship model family now gets a theme-aware purple in all 7 themes (default/dracula/tokyo-night 141, nord 139, solarized 61, catppuccin 183), matching how Opus gets theme-aware orange. Previously Fable 5 rendered in the generic blue used for unknown models.
+- **Effort level segment** (`show_effort`, on by default): shows the live reasoning effort as `eff:low|medium|high|xhigh|max` from the `effort.level` stdin field (Claude Code 2.1.133+). Closes the roadmap item that was blocked on anthropics/claude-code#31415.
+- **Fast mode indicator** (`show_fast_mode`, on by default): `⚡ fast` in yellow while `fast_mode` is true, since fast mode bills at a higher rate.
+- **11 new BATS tests** (`tests/cc21.bats`, suite now 39) covering the CC 2.1.x schema: nested `cost` block, `current_usage`, Fable/Mythos colours, `model.id` `[1m]` suffix containment, effort and fast-mode segments, rate-limits scoping, and ISO `resets_at`.
+
+### Fixed
+
+- **Rate-limit extraction scoped to the `rate_limits` block**: previously a `five_hour`/`seven_day` object anywhere in the stdin JSON was honoured as rate-limit data as long as a `rate_limits` key existed somewhere. Schema additions elsewhere in the payload can no longer corrupt the usage bars.
+- **ISO-8601 `resets_at` tolerated**: a quoted timestamp now keeps the reset label and pacing marker instead of silently dropping both. Claude Code currently sends epoch seconds; this is future-proofing against a format change.
+- **Truncation width prefers `$COLUMNS`**: Claude Code 2.1.153+ sets `COLUMNS` for statusline commands, and `tput cols` is unreliable when output is captured, so the detection order is now `max_width`, then `$COLUMNS`, then `tput cols`, then 120.
+
+### Changed
+
+- Token-count segment documentation now reflects Claude Code 2.1.132 semantics: `total_input_tokens`/`total_output_tokens` are tokens currently in context, not cumulative session totals, on CC >= 2.1.132.
+- ROADMAP: marked the effort-level idea shipped and catalogued newly available stdin fields (`pr.*`, `workspace.repo.*`, `session_name`, `thinking.enabled`) as candidate segments.
+
 ## [2.1.1] - 2026-06-10
 
 ### Added
