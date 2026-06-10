@@ -303,6 +303,7 @@ show_cost=true
 show_cost_rate=false        # opt-in; shows after the session is a minute old
 show_activity=true          # the live line 2 (requires Node.js)
 activity_ttl_seconds=120    # hide line 2 when its cache is older than this
+subagent_rows=true          # styled subagent panel rows (requires Node.js)
 
 # ── Display ──────────────────────────────────────────────
 use_icons=true              # ↱ ◆ ▸ ● ≡ ⊞ ↑ prefixes and the ▲ context warning

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Config docs consistency**: `subagent_rows` is now declared in the script's defaults block so it shows up in `--dump-config` (it is consumed by `statusline-subagent.js`); `colour_theme` and `usage_cache_seconds` are now documented in the `/configure` command; the README config example includes `subagent_rows`.
+
 ## [2.5.0] - 2026-06-10
 
 ### Added

@@ -24,7 +24,7 @@ fi
 Ask the user what they'd like to customize. Present these categories:
 
 ### Themes
-Available: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `mono`
+- `colour_theme` — Pick one of: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `mono` (default: default)
 
 ### Segments (toggle on/off)
 - `show_directory` — Working directory
@@ -55,6 +55,7 @@ Available: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin
 - `usage_label` — Usage bar reset label: clock, e.g. 2pm (default), or countdown, e.g. 2h20m
 - `activity_ttl_seconds` — Hide the live activity line when its cache is older than this (default: 120)
 - `subagent_rows` — Set to false to keep Claude Code's default subagent panel rows (default: true)
+- `usage_cache_seconds` — OAuth fallback refresh interval in seconds; ignored when stdin provides rate limits (default: 600)
 - `bar_width` — Progress bar width in characters (default: 10)
 - `branch_max_length` — Truncate long branch names (default: unlimited)
 - `context_warn_threshold` — Warn at this % context usage (default: 80)

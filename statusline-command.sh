@@ -230,6 +230,9 @@ bar_width=10
 branch_max_length=""
 show_activity=true
 activity_ttl_seconds=120
+# Consumed by statusline-subagent.js (the subagent panel renderer); declared
+# here so it appears in --dump-config alongside everything else
+subagent_rows=true
 
 # Load user overrides (if any).
 # Note: this file has the same trust level as .bashrc — it can contain
@@ -281,6 +284,7 @@ case "${1:-}" in
       printf 'show_usage_7d=%s\n'          "${show_usage_7d}"
       printf 'show_vim_mode=%s\n'          "${show_vim_mode}"
       printf 'show_worktree=%s\n'          "${show_worktree}"
+      printf 'subagent_rows=%s\n'          "${subagent_rows}"
       printf 'usage_cache_seconds=%s\n'    "${usage_cache_seconds}"
       printf 'usage_label=%s\n'            "${usage_label}"
       printf 'use_groups=%s\n'             "${use_groups}"
