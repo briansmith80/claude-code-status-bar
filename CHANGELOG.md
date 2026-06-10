@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.0] - 2026-06-10
+
+Live activity line overhaul, driven by measurements against a real long-running session.
+
+### Added
+
+- **Incremental transcript parsing**: the per-transcript cache now stores the parse state plus a byte offset, so each helper run parses only the lines appended since the last run instead of re-reading the whole transcript. Long sessions stay constant-cost; old-format caches upgrade transparently via a one-time full parse.
+- **Failed-tool indicator**: the most recent tool failure shows as `✗ Bash npm test` for five minutes. Errors were already tracked internally but never displayed.
+- **Elapsed time on running tools**: a tool running longer than 5 seconds shows its duration, e.g. `▶ Bash npm run build 1m20s` (previously only subagents had elapsed time).
+- **`activity_ttl_seconds` config** (default 120): how old the activity cache may be before line 2 hides. The old hardcoded 30 seconds meant idle timer refreshes (`refreshInterval: 60`) hid line 2 exactly when you were idle-watching a long subagent run.
+- **Terminal-width trimming**: line 2 is trimmed to `$COLUMNS` so it never wraps and pushes line 1 out of view.
+- **8 new BATS tests** (`tests/activity.bats`, suite now 54), exercising the helper directly plus the bash-side TTL and trimming.
+
+### Fixed
+
+- **Completed items no longer linger forever**: the last completed tool, failures, and finished subagents (`⚒ desc ✓`) age out of the display five minutes after finishing. Previously a subagent that completed hours earlier stayed on line 2 for the rest of the session. Tool counts still cover the whole session.
+- **Stale helper header comment**: the usage comment described a cache format (including a token-speed feature) that never existed; it now documents the real format.
+
 ## [2.3.0] - 2026-06-10
 
 Leverages Claude Code capabilities surfaced during the 2.2.0 audit: countdown labels, the stdin `pr` block, broader worktree detection, and session IDs for cache keying.

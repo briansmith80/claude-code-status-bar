@@ -229,6 +229,7 @@ show_fast_mode=true
 bar_width=10
 branch_max_length=""
 show_activity=true
+activity_ttl_seconds=120
 
 # Load user overrides (if any).
 # Note: this file has the same trust level as .bashrc — it can contain
@@ -258,6 +259,7 @@ case "${1:-}" in
       printf 'group_close=%s\n'            "${group_close}"
       printf 'group_open=%s\n'             "${group_open}"
       printf 'max_width=%s\n'              "${max_width}"
+      printf 'activity_ttl_seconds=%s\n'   "${activity_ttl_seconds}"
       printf 'show_activity=%s\n'          "${show_activity}"
       printf 'show_agent=%s\n'             "${show_agent}"
       printf 'show_ahead_behind=%s\n'      "${show_ahead_behind}"
@@ -668,8 +670,11 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
       cached_act_ts="" cached_act_json=""
       { read -r cached_act_ts cached_act_json; } < "$ACTIVITY_CACHE_FILE" 2>/dev/null || true
       case "$cached_act_ts" in *[!0-9]*) cached_act_ts=0 ;; esac
-      # Expire after 30 seconds (activity becomes stale quickly)
-      if [ -n "$cached_act_ts" ] && [ $(( NOW_EPOCH - cached_act_ts )) -le 30 ] 2>/dev/null; then
+      # Expire after activity_ttl_seconds. The default (120) stays comfortably
+      # above typical refreshInterval values so line 2 survives idle timer
+      # refreshes while a long subagent or workflow is running.
+      case "$activity_ttl_seconds" in ''|*[!0-9]*) activity_ttl_seconds=120 ;; esac
+      if [ -n "$cached_act_ts" ] && [ $(( NOW_EPOCH - cached_act_ts )) -le "$activity_ttl_seconds" ] 2>/dev/null; then
         # Extract "activity" value from simple JSON {"activity":"..."}
         act_pattern='"activity"[[:space:]]*:[[:space:]]*"([^"]*)"'
         if [[ ${cached_act_json:-} =~ $act_pattern ]]; then
@@ -1409,6 +1414,16 @@ printf "%b" "$output"
 
 # ── Line 2: Live activity (optional) ────────────────────────
 if [ -n "$activity_line" ]; then
+  # Trim to the terminal width (Claude Code >= 2.1.153 sets COLUMNS) so a
+  # long activity line never wraps and pushes line 1 out of view
+  case "${COLUMNS:-}" in
+    ''|*[!0-9]*) : ;;
+    *)
+      if [ "$COLUMNS" -gt 1 ] && [ "${#activity_line}" -gt "$COLUMNS" ]; then
+        activity_line="${activity_line:0:$((COLUMNS - 1))}…"
+      fi
+      ;;
+  esac
   printf '\n'
   printf "%b" "${CLR_DIM}${activity_line}${CLR_RESET}"
 fi

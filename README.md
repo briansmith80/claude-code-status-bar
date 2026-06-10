@@ -143,8 +143,9 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 
 | You see | It means |
 |---------|----------|
-| `▶ Edit main.ts...` | Tools running right now (up to the last two) |
+| `▶ Edit main.ts...` | Tools running right now (up to the last two); elapsed time appears once a tool runs over 5 seconds, e.g. `▶ Bash npm test 45s` |
 | `→ Edit main.ts` | The last completed tool, shown when nothing is running |
+| `✗ Bash npm test` | The most recent tool failure, shown for five minutes |
 | `[Edit 5 · Read 4 · Bash 2]` | The top three tool counts for the session |
 | `⚒ research 12s` | A running subagent with its elapsed time |
 | `⚒ research ✓ (2)` | Finished subagents (and how many) |
@@ -152,7 +153,9 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 
 Good to know:
 
-- The line appears only when there is activity to show. It hides when the cached activity is more than 30 seconds old (typically the first refresh after a long pause) and reappears once the helper has re-parsed the transcript.
+- The line appears only when there is activity to show. It hides when the cached activity is older than `activity_ttl_seconds` (default 120, chosen to stay above typical `refreshInterval` values) and reappears once the helper has re-parsed the transcript.
+- Completed tools, failures, and finished subagents stop being displayed five minutes after they finish; the tool counts cover the whole session.
+- Transcript parsing is incremental: each run parses only the lines appended since the last one, so even very long sessions stay cheap. The line is also trimmed to your terminal width (via `$COLUMNS`) so it never wraps.
 - Parsing happens in a background process, so the line runs one status bar refresh behind the transcript. That keeps the bar itself instant.
 - It requires Node.js on your `PATH`, the `statusline-helper.js` file (installed by default), and a Claude Code version that sends `transcript_path` (2.1+). If any of those are missing, line 2 silently stays off and everything else works.
 - Each session gets its own activity cache (keyed by Claude Code's session ID), so parallel Claude Code windows never show each other's activity. Stale per-session caches are swept automatically after a day.
@@ -270,6 +273,7 @@ show_worktree=true
 show_cost=true
 show_cost_rate=false        # opt-in; shows after the session is a minute old
 show_activity=true          # the live line 2 (requires Node.js)
+activity_ttl_seconds=120    # hide line 2 when its cache is older than this
 
 # ── Display ──────────────────────────────────────────────
 use_icons=true              # ↱ ◆ ▸ ● ≡ ⊞ ↑ prefixes and the ▲ context warning
@@ -445,7 +449,7 @@ See [`tests/README.md`](tests/README.md) for layout details.
 - **A segment I enabled isn't showing.** Most segments auto-hide when their value is zero or their data is missing. Run `bash ~/.claude/statusline-command.sh --dump-config` to confirm your override took effect, and `--dump-stdin` to see which fields your Claude Code version actually sends.
 - **Usage segments are missing.** On Claude Code 2.1+ they should appear automatically from stdin. For the OAuth fallback: check credentials exist (see [Credentials](#credentials-oauth-fallback-only)), then clear the caches and let them refresh: `rm -f ~/.claude/.statusline-usage-cache ~/.claude/.statusline-usage-backoff`. The backoff file matters: after repeated failures the script waits up to 30 minutes before retrying.
 - **Usage shows `~` after the percentage.** The OAuth data is stale. Usually transient; if it persists, clear the two cache files above.
-- **The activity line never appears.** It needs Node.js on `PATH`, `~/.claude/statusline-helper.js`, and a Claude Code version that sends `transcript_path` (`--dump-stdin` reports this as YES/NO). Also note it lags one refresh behind and hides when its cache is more than 30 seconds old.
+- **The activity line never appears.** It needs Node.js on `PATH`, `~/.claude/statusline-helper.js`, and a Claude Code version that sends `transcript_path` (`--dump-stdin` reports this as YES/NO). Also note it lags one refresh behind and hides when its cache is older than `activity_ttl_seconds` (default 120).
 - **`--check-update` shows an old version right after a release.** GitHub's raw CDN caches for a few minutes. Try again shortly.
 
 ## Security
@@ -462,6 +466,7 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.4.0**: Live activity overhaul: incremental transcript parsing, age-out of finished items, a `✗` failed-tool indicator, elapsed time on running tools, the `activity_ttl_seconds` config, and terminal-width trimming.
 - **2.3.0**: Countdown labels for usage bars (`usage_label=countdown`), a PR segment, worktree detection for any linked worktree, and per-session activity caches.
 - **2.2.0**: Claude Code 2.1.170 audit. Fable/Mythos models get a theme-aware purple tier colour, new effort level and fast mode segments, rate-limit parsing scoped to the `rate_limits` block, and ISO timestamp tolerance.
 - **2.1.1**: README overhaul with verified examples, a fix for doubled progress bars under `NO_COLOR`/mono, and the marketplace manifest for `/plugin marketplace add`.

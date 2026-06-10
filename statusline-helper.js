@@ -9,7 +9,10 @@
 // Usage: node statusline-helper.js <transcript_path> <cache_path>
 //
 // Cache format (one line): <epoch> <json>
-//   json: {"tools":"Read x3 | Edit x2","agents":"research 12s","todos":"3/7","speed":"42 tok/s"}
+//   json: {"activity":"→ Edit main.ts  [Edit 5 · Read 4]  │  ⚒ research 12s"}
+//
+// Parsing is incremental: a per-transcript cache stores the parse state plus
+// a byte offset, so each run only parses lines appended since the last one.
 //
 // Security: all output is sanitized — no ANSI escapes, no control characters.
 
@@ -18,6 +21,11 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+
+// Completed/failed items older than this stop being displayed (counts remain)
+const RECENT_MS = 5 * 60 * 1000;
+// Running tools show elapsed time once they run at least this long
+const TOOL_ELAPSED_MIN_S = 5;
 
 // ── CLI args ────────────────────────────────────────────────
 const transcriptPath = process.argv[2];
@@ -31,26 +39,23 @@ if (!fs.existsSync(transcriptPath)) {
   process.exit(0);
 }
 
-// ── Transcript cache (avoid re-parsing unchanged files) ─────
+// ── Transcript cache (parse state + byte offset per transcript) ─
 const PARSED_CACHE_DIR = path.join(path.dirname(cachePath), '.statusline-transcript-cache');
 
 function getCacheKey(filePath) {
   return crypto.createHash('sha256').update(path.resolve(filePath)).digest('hex').slice(0, 16);
 }
 
-function readParsedCache(transcriptPath, stat) {
+function readParsedCache(transcriptPath) {
   try {
     const cacheFile = path.join(PARSED_CACHE_DIR, getCacheKey(transcriptPath) + '.json');
     if (!fs.existsSync(cacheFile)) return null;
-    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-    if (cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
-      return cached.data;
-    }
+    return JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
   } catch { /* cache miss */ }
   return null;
 }
 
-function writeParsedCache(transcriptPath, stat, data) {
+function writeParsedCache(transcriptPath, stat, offset, state) {
   try {
     if (!fs.existsSync(PARSED_CACHE_DIR)) {
       fs.mkdirSync(PARSED_CACHE_DIR, { recursive: true, mode: 0o700 });
@@ -59,7 +64,8 @@ function writeParsedCache(transcriptPath, stat, data) {
     fs.writeFileSync(cacheFile, JSON.stringify({
       mtimeMs: stat.mtimeMs,
       size: stat.size,
-      data
+      offset,
+      state: serializeState(state)
     }), { mode: 0o600 });
   } catch { /* non-fatal */ }
 }
@@ -76,21 +82,89 @@ function sanitize(str) {
     .slice(0, 200);                                // hard length limit
 }
 
-// ── Parse transcript ────────────────────────────────────────
-function parseTranscript(filePath) {
-  const rawContent = fs.readFileSync(filePath, 'utf8');
-  const lines = rawContent.split('\n').filter(l => l.trim());
+// ── Parse state ─────────────────────────────────────────────
+// Tool entries:  Map<id, {name, target, status, startTime, endTime}>
+// Agent entries: Map<id, {type, model, description, status, startTime, endTime}>
+function newState() {
+  return {
+    toolMap: new Map(),
+    agentMap: new Map(),
+    todos: [],
+    taskIdToIndex: new Map(),
+    sessionStart: null,
+    sessionName: null
+  };
+}
 
-  // Tool tracking: Map<id, {name, target, status, startTime}>
-  const toolMap = new Map();
-  // Agent tracking: Map<id, {type, model, description, status, startTime}>
-  const agentMap = new Map();
-  // Todo tracking
-  let todos = [];
-  const taskIdToIndex = new Map();
-  // Session info
-  let sessionStart = null;
-  let sessionName = null;
+function serializeState(state) {
+  pruneMap(state.toolMap, 60);
+  pruneMap(state.agentMap, 20);
+  return {
+    tools: Array.from(state.toolMap.entries()),
+    agents: Array.from(state.agentMap.entries()),
+    todos: state.todos,
+    taskIdToIndex: Array.from(state.taskIdToIndex.entries()),
+    sessionStart: state.sessionStart,
+    sessionName: state.sessionName
+  };
+}
+
+function reviveState(s) {
+  const state = newState();
+  try {
+    state.toolMap = new Map(s.tools || []);
+    state.agentMap = new Map(s.agents || []);
+    state.todos = Array.isArray(s.todos) ? s.todos : [];
+    state.taskIdToIndex = new Map(s.taskIdToIndex || []);
+    state.sessionStart = s.sessionStart || null;
+    state.sessionName = s.sessionName || null;
+  } catch {
+    return newState();
+  }
+  return state;
+}
+
+// Drop oldest non-running entries once a map outgrows `keep`. Running entries
+// survive so a tool_result arriving in a later chunk can still be correlated.
+function pruneMap(map, keep) {
+  if (map.size <= keep) return;
+  for (const [id, v] of map) {
+    if (map.size <= keep) break;
+    if (v.status !== 'running') map.delete(id);
+  }
+}
+
+// ── Incremental reading ─────────────────────────────────────
+// Read bytes [start, end) and return {text, consumed} covering whole lines
+// (through the last newline). A trailing line with no newline is included
+// only when it parses as standalone JSON (a complete entry that just lacks
+// its terminator); a genuinely partial write is left for the next run.
+function readChunk(filePath, start, end) {
+  const len = end - start;
+  if (len <= 0) return { text: '', consumed: 0 };
+  const fd = fs.openSync(filePath, 'r');
+  let buf;
+  try {
+    buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, start);
+  } finally {
+    fs.closeSync(fd);
+  }
+  let cut = buf.lastIndexOf(0x0a) + 1;
+  if (cut < len) {
+    const tail = buf.slice(cut).toString('utf8').trim();
+    if (!tail) {
+      cut = len;
+    } else {
+      try { JSON.parse(tail); cut = len; } catch { /* partial write — wait */ }
+    }
+  }
+  return { text: buf.slice(0, cut).toString('utf8'), consumed: cut };
+}
+
+// ── Parse transcript lines into the state ───────────────────
+function parseChunk(state, rawText) {
+  const lines = rawText.split('\n').filter(l => l.trim());
 
   for (const line of lines) {
     let entry;
@@ -101,16 +175,16 @@ function parseTranscript(filePath) {
     }
 
     // Track session start time (validate to avoid Invalid Date)
-    if (!sessionStart && entry.timestamp) {
+    if (!state.sessionStart && entry.timestamp) {
       const d = new Date(entry.timestamp);
-      if (!isNaN(d.getTime())) sessionStart = d;
+      if (!isNaN(d.getTime())) state.sessionStart = d;
     }
 
     // Track session name
     if (entry.type === 'custom-title' && entry.customTitle) {
-      sessionName = entry.customTitle;
-    } else if (entry.slug && !sessionName) {
-      sessionName = entry.slug;
+      state.sessionName = entry.customTitle;
+    } else if (entry.slug && !state.sessionName) {
+      state.sessionName = entry.slug;
     }
 
     // Process message content blocks
@@ -128,7 +202,7 @@ function parseTranscript(filePath) {
         // Special handling for Agent/Task tools
         if (name === 'Agent' || name === 'Task') {
           const input = block.input || {};
-          agentMap.set(block.id, {
+          state.agentMap.set(block.id, {
             type: String(input.subagent_type || input.type || 'general'),
             model: input.model ? String(input.model) : undefined,
             description: input.description ? sanitize(String(input.description)).slice(0, 50) : undefined,
@@ -136,7 +210,7 @@ function parseTranscript(filePath) {
             startTime: timestamp
           });
         } else {
-          toolMap.set(block.id, {
+          state.toolMap.set(block.id, {
             name,
             target: target ? sanitize(target).slice(0, 40) : null,
             status: 'running',
@@ -145,13 +219,13 @@ function parseTranscript(filePath) {
         }
       } else if (block.type === 'tool_result') {
         const id = block.tool_use_id;
-        if (toolMap.has(id)) {
-          toolMap.get(id).status = block.is_error ? 'error' : 'completed';
-          toolMap.get(id).endTime = timestamp;
+        if (state.toolMap.has(id)) {
+          state.toolMap.get(id).status = block.is_error ? 'error' : 'completed';
+          state.toolMap.get(id).endTime = timestamp;
         }
-        if (agentMap.has(id)) {
-          agentMap.get(id).status = block.is_error ? 'error' : 'completed';
-          agentMap.get(id).endTime = timestamp;
+        if (state.agentMap.has(id)) {
+          state.agentMap.get(id).status = block.is_error ? 'error' : 'completed';
+          state.agentMap.get(id).endTime = timestamp;
         }
       }
 
@@ -159,34 +233,28 @@ function parseTranscript(filePath) {
       if (block.type === 'tool_use' && block.name === 'TodoWrite') {
         const input = block.input || {};
         if (Array.isArray(input.todos)) {
-          todos = input.todos.map(t => ({
+          state.todos = input.todos.map(t => ({
             content: sanitize(String(t.content || '')).slice(0, 50),
             status: normalizeStatus(t.status)
           }));
-          taskIdToIndex.clear();
+          state.taskIdToIndex.clear();
         }
       } else if (block.type === 'tool_use' && block.name === 'TaskCreate') {
         const input = block.input || {};
         const content = sanitize(String(input.subject || input.description || 'Task')).slice(0, 50);
         const status = normalizeStatus(input.status) || 'pending';
-        todos.push({ content, status });
-        if (block.id) taskIdToIndex.set(block.id, todos.length - 1);
+        state.todos.push({ content, status });
+        if (block.id) state.taskIdToIndex.set(block.id, state.todos.length - 1);
       } else if (block.type === 'tool_use' && block.name === 'TaskUpdate') {
         const input = block.input || {};
-        const index = resolveTaskIndex(input.taskId, taskIdToIndex, todos);
+        const index = resolveTaskIndex(input.taskId, state.taskIdToIndex, state.todos);
         if (index !== null) {
-          if (input.status) todos[index].status = normalizeStatus(input.status);
-          if (input.content) todos[index].content = sanitize(String(input.content)).slice(0, 50);
+          if (input.status) state.todos[index].status = normalizeStatus(input.status);
+          if (input.content) state.todos[index].content = sanitize(String(input.content)).slice(0, 50);
         }
       }
     }
   }
-
-  // Build results from last N entries
-  const tools = Array.from(toolMap.values()).slice(-30);
-  const agents = Array.from(agentMap.values()).slice(-10);
-
-  return { tools, agents, todos, sessionStart, sessionName };
 }
 
 function extractTarget(name, input) {
@@ -230,74 +298,97 @@ function resolveTaskIndex(taskId, idMap, todos) {
 }
 
 // ── Format output ───────────────────────────────────────────
+function isRecent(t, now) {
+  if (!t) return false;
+  const ms = new Date(t).getTime();
+  return !isNaN(ms) && (now - ms) <= RECENT_MS;
+}
+
 function formatActivity(data) {
   const parts = [];
   const now = Date.now();
 
-  // Tool activity: count completed by name, track running + last completed
+  // Tool activity: count completed by name, track running + last completed/failed
   const toolCounts = {};
   const runningTools = [];
   let lastCompleted = null;
+  let lastError = null;
 
   for (const t of data.tools) {
     if (t.status === 'running') {
-      const label = t.target ? `${t.name} ${t.target}` : t.name;
-      runningTools.push(label);
+      runningTools.push(t);
     } else if (t.status === 'completed') {
       toolCounts[t.name] = (toolCounts[t.name] || 0) + 1;
       lastCompleted = t;
+    } else if (t.status === 'error') {
+      lastError = t;
     }
+  }
+
+  // Running tools — elapsed time appears once a tool runs a few seconds
+  if (runningTools.length > 0) {
+    let anyElapsed = false;
+    const labels = runningTools.slice(-2).map(t => {
+      let label = t.target ? `${t.name} ${t.target}` : t.name;
+      const started = t.startTime ? new Date(t.startTime).getTime() : NaN;
+      const elapsed = isNaN(started) ? 0 : Math.round((now - started) / 1000);
+      if (elapsed >= TOOL_ELAPSED_MIN_S) {
+        label += ` ${formatDuration(elapsed)}`;
+        anyElapsed = true;
+      }
+      return label;
+    });
+    parts.push(`▶ ${labels.join(', ')}${anyElapsed ? '' : '...'}`);
   }
 
   const totalTools = Object.values(toolCounts).reduce((a, b) => a + b, 0);
 
-  // Running tools — show with spinner-style indicator
-  if (runningTools.length > 0) {
-    const label = runningTools.slice(-2).join(', ');
-    parts.push(`\u25B6 ${label}...`);
-  }
-
-  // Last completed tool + compact total count
+  // Last completed tool (only while recent) + compact total count
   if (totalTools > 0) {
-    // Show what just happened (last tool + target)
     let lastLabel = '';
-    if (lastCompleted) {
+    if (lastCompleted && isRecent(lastCompleted.endTime, now)) {
       lastLabel = lastCompleted.target
         ? `${lastCompleted.name} ${lastCompleted.target}`
         : lastCompleted.name;
     }
 
-    // Compact summary: "last tool | 30 calls (Edit 13, Read 4, ...)"
     const sorted = Object.entries(toolCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([name, count]) => `${name} ${count}`)
-      .join(' \u00B7 ');
+      .join(' · ');
 
     if (runningTools.length === 0 && lastLabel) {
       // Nothing running — lead with the last action
-      parts.push(`\u2192 ${lastLabel}  [${sorted}]`);
+      parts.push(`→ ${lastLabel}  [${sorted}]`);
     } else {
       // Something running — just show the summary
       parts.push(`[${sorted}]`);
     }
   }
 
-  // Agent activity
+  // Most recent tool failure, shown briefly so errors don't pass unnoticed
+  if (lastError && isRecent(lastError.endTime, now)) {
+    const label = lastError.target ? `${lastError.name} ${lastError.target}` : lastError.name;
+    parts.push(`✗ ${label}`);
+  }
+
+  // Agent activity: running agents, else recently completed ones
   const runningAgents = data.agents.filter(a => a.status === 'running');
-  const completedAgents = data.agents.filter(a => a.status === 'completed');
+  const recentDoneAgents = data.agents.filter(a => a.status === 'completed' && isRecent(a.endTime, now));
   if (runningAgents.length > 0) {
     for (const a of runningAgents.slice(-2)) {
-      const elapsed = a.startTime ? Math.round((now - new Date(a.startTime).getTime()) / 1000) : 0;
+      const started = a.startTime ? new Date(a.startTime).getTime() : NaN;
+      const elapsed = isNaN(started) ? 0 : Math.round((now - started) / 1000);
       const time = elapsed > 0 ? ` ${formatDuration(elapsed)}` : '';
       const desc = a.description || a.type;
-      parts.push(`\u2692 ${desc}${time}`);
+      parts.push(`⚒ ${desc}${time}`);
     }
-  } else if (completedAgents.length > 0) {
-    const count = completedAgents.length;
-    const last = completedAgents[completedAgents.length - 1];
+  } else if (recentDoneAgents.length > 0) {
+    const count = recentDoneAgents.length;
+    const last = recentDoneAgents[recentDoneAgents.length - 1];
     const desc = last.description || last.type;
-    parts.push(`\u2692 ${desc} \u2713${count > 1 ? ` (${count})` : ''}`);
+    parts.push(`⚒ ${desc} ✓${count > 1 ? ` (${count})` : ''}`);
   }
 
   // Todo progress
@@ -308,7 +399,7 @@ function formatActivity(data) {
     // Mini progress bar: ██░░ 2/5
     const barW = Math.min(total, 8);
     const filled = Math.round((done / total) * barW);
-    const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barW - filled);
+    const bar = '█'.repeat(filled) + '░'.repeat(barW - filled);
     let todoText = `${bar} ${done}/${total}`;
     if (inProgress) {
       todoText += ` ${inProgress.content}`;
@@ -316,7 +407,7 @@ function formatActivity(data) {
     parts.push(todoText);
   }
 
-  return parts.join('  \u2502  ');
+  return parts.join('  │  ');
 }
 
 function formatDuration(secs) {
@@ -337,13 +428,32 @@ function formatDuration(secs) {
 function main() {
   try {
     const stat = fs.statSync(transcriptPath);
+    const cached = readParsedCache(transcriptPath);
 
-    // Check parsed cache first
-    let data = readParsedCache(transcriptPath, stat);
-    if (!data) {
-      data = parseTranscript(transcriptPath);
-      writeParsedCache(transcriptPath, stat, data);
+    let state;
+    if (cached && cached.state && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      // Unchanged file — reuse the parsed state as-is
+      state = reviveState(cached.state);
+    } else if (cached && cached.state && typeof cached.offset === 'number' &&
+               cached.offset > 0 && cached.offset <= stat.size && stat.size > cached.size) {
+      // File grew — parse only the appended bytes
+      state = reviveState(cached.state);
+      const { text, consumed } = readChunk(transcriptPath, cached.offset, stat.size);
+      parseChunk(state, text);
+      writeParsedCache(transcriptPath, stat, cached.offset + consumed, state);
+    } else {
+      // New, truncated, or rewritten file — full parse
+      state = newState();
+      const { text, consumed } = readChunk(transcriptPath, 0, stat.size);
+      parseChunk(state, text);
+      writeParsedCache(transcriptPath, stat, consumed, state);
     }
+
+    const data = {
+      tools: Array.from(state.toolMap.values()).slice(-30),
+      agents: Array.from(state.agentMap.values()).slice(-10),
+      todos: state.todos
+    };
 
     const activity = sanitize(formatActivity(data));
 
