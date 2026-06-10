@@ -9,7 +9,7 @@
 [![ShellCheck](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml)
 [![Tests](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/tests.yml/badge.svg)](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/tests.yml)
 [![Version](https://img.shields.io/github/v/release/briansmith80/claude-code-status-bar?label=version&color=blue)](https://github.com/briansmith80/claude-code-status-bar/releases)
-[![License: MIT](https://img.shields.io/github/license/briansmith80/claude-code-status-bar?color=green)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555)
 [![Made for Claude Code](https://img.shields.io/badge/made%20for-Claude%20Code-d97757)](https://code.claude.com)
 
