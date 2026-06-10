@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.1] - 2026-06-10
+
+### Added
+
+- **`.claude-plugin/marketplace.json`**: marketplace catalog so `/plugin marketplace add briansmith80/claude-code-status-bar` works as documented. The command requires a `marketplace.json`; `plugin.json` alone is not enough.
+- **README banner and terminal demo images** (`docs/assets/`): dark/light banner SVGs and a colour terminal demo. `docs/` was removed from `.gitignore` so the images actually ship.
+
+### Changed
+
+- **README rewritten**: banner with dark/light variants, CI badges, table of contents, requirements table, line-2 symbol legend, truncation and grouping documentation, expanded troubleshooting, security notes, and a how-it-works diagram. Every example and default was verified against real script output.
+
+### Fixed
+
+- **Progress bars rendered twice under `NO_COLOR` and the mono theme**: `build_progress_bar()` returned `bar\ncolour`, and with an empty colour string the command substitution stripped the trailing newline, so callers extracted the whole bar again in place of the colour and printed it twice. The function now returns `colour\nbar` so the separator survives. Coloured output is byte-identical to before.
+
 ## [2.1.0] - 2026-04-30
 
 ### Added

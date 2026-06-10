@@ -12,8 +12,10 @@ statusline-command.sh      # The runtime script — installed to ~/.claude/
 statusline-helper.js       # Optional Node.js transcript parser — installed to ~/.claude/
 install.sh                 # Installer/updater — downloads script + helper + VERSION from GitHub
 .claude-plugin/plugin.json # Plugin manifest for marketplace distribution
+.claude-plugin/marketplace.json # Marketplace catalog (required by /plugin marketplace add)
 commands/setup.md          # Slash command: /claude-code-status-bar:setup
 commands/configure.md      # Slash command: /claude-code-status-bar:configure
+docs/assets/               # README images (banner dark/light, terminal demo SVGs)
 README.md                  # User-facing docs
 ```
 
@@ -60,7 +62,7 @@ README.md                  # User-facing docs
 See [ROADMAP.md](ROADMAP.md) for the feature roadmap and competitive landscape.
 See [SPRINTS.md](SPRINTS.md) for the validated sprint plan with dependency ordering and effort estimates.
 
-Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI :white_check_mark: shipped. BATS scaffold (28 tests), three-platform CI matrix, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`) all landed. Next: re-evaluate against user feedback per the post-Sprint-4 plan in SPRINTS.md.
+Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI :white_check_mark: shipped. BATS scaffold (28 tests), three-platform CI matrix, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`) all landed. v2.1.1 followed with the README overhaul, the NO_COLOR/mono progress bar fix, and `.claude-plugin/marketplace.json`. Next: re-evaluate against user feedback per the post-Sprint-4 plan in SPRINTS.md.
 
 ## How to release a new version
 
@@ -75,7 +77,7 @@ Current milestone: **Sprint 4 (v2.1.0)** — Testing & CLI :white_check_mark: sh
 7. Create GitHub release with notes from CHANGELOG: `gh release create v1.5.0 --title "v1.5.0" --notes "..."`
 8. Copy files to local install: `cp statusline-command.sh ~/.claude/statusline-command.sh && cp statusline-helper.js ~/.claude/statusline-helper.js`
 
-Users with the update check will see `⬆ update available` within 6 hours.
+Users with the update check will see `↑ update available` within 6 hours.
 
 ## Testing
 

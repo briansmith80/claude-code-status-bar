@@ -902,8 +902,9 @@ build_progress_bar() {
   done
   bar+="$CLR_RESET"
 
-  # Output: bar\ncolour (caller can read second line for percentage colouring)
-  printf '%s\n%s' "$bar" "$colour"
+  # Output: colour\nbar — colour first so the newline survives command
+  # substitution even when colour is empty (mono theme / NO_COLOR)
+  printf '%s\n%s' "$colour" "$bar"
 }
 
 # ── Build Output Segments ─────────────────────────────────────
@@ -983,8 +984,8 @@ if [ "$show_context_bar" = "true" ]; then
   pct="${used:-0}"
   pct_int="${pct%%.*}"
   bar_output=$(build_progress_bar "$pct_int")
-  progress_bar="${bar_output%%$'\n'*}"
-  bar_clr="${bar_output#*$'\n'}"
+  bar_clr="${bar_output%%$'\n'*}"
+  progress_bar="${bar_output#*$'\n'}"
   warn_prefix=""
   if [ "$pct_int" -ge "${context_warn_threshold:-80}" ] 2>/dev/null; then
     [ "$use_icons" = "true" ] && warn_prefix="${CLR_WARN}▲${CLR_RESET} "
@@ -1042,8 +1043,8 @@ if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
     [ -n "$u5_reset_label" ] && u5_label="(${u5_reset_label})"
   fi
   u5_bar_output=$(build_progress_bar "$u5_int" "$u5_target")
-  u5_bar="${u5_bar_output%%$'\n'*}"
-  u5_bar_clr="${u5_bar_output#*$'\n'}"
+  u5_bar_clr="${u5_bar_output%%$'\n'*}"
+  u5_bar="${u5_bar_output#*$'\n'}"
   add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_bar_clr}${u5_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage"
 fi
 
@@ -1058,8 +1059,8 @@ if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
     [ -n "$u7_reset_label" ] && u7_label="(${u7_reset_label})"
   fi
   u7_bar_output=$(build_progress_bar "$u7_int" "$u7_target")
-  u7_bar="${u7_bar_output%%$'\n'*}"
-  u7_bar_clr="${u7_bar_output#*$'\n'}"
+  u7_bar_clr="${u7_bar_output%%$'\n'*}"
+  u7_bar="${u7_bar_output#*$'\n'}"
   add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_bar_clr}${u7_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage"
 fi
 
