@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.0] - 2026-06-10
+
+Leverages Claude Code capabilities surfaced during the 2.2.0 audit: countdown labels, the stdin `pr` block, broader worktree detection, and session IDs for cache keying.
+
+### Added
+
+- **Countdown usage labels** (`usage_label=countdown`): the usage bars can show time remaining until reset (`5hr (2h20m)`, `wk (3d4h)`) instead of the reset moment (`5hr (2pm)`, default `clock`). Pairs well with Claude Code's `refreshInterval` statusLine setting (documented in the README) so the countdown stays fresh while idle.
+- **Pull request segment** (`show_pr`, on by default): shows `PR #N` for the current branch from the stdin `pr` block (Claude Code 2.1.145+), no `gh` calls. Coloured by review state: green approved, yellow pending, red changes requested, dim draft. Disappears when the PR merges or closes.
+- **Worktree fallback**: the worktree segment now also reads `workspace.git_worktree`, so it works in any linked git worktree, not only `--worktree` sessions.
+- **8 new BATS tests** (suite now 46) covering countdown labels, the clock default, the PR segment and its toggle, and worktree fallback precedence.
+
+### Fixed
+
+- **Per-session activity cache**: line 2 was read from a single global cache, so two Claude Code sessions running in parallel overwrote each other and could show the other session's activity. The cache is now keyed by the stdin `session_id` (`.statusline-activity-cache.<id>`); stale per-session caches are swept after 24 hours and `--uninstall` removes them.
+
 ## [2.2.0] - 2026-06-10
 
 Audited against Claude Code 2.1.170 (the Fable 5 release) using a live captured stdin payload, the current statusline docs, and the Claude Code changelog. Rate limits, the nested `cost` block, `context_window.current_usage`, and 1M context all verified working; the items below are what needed fixing or was newly possible.

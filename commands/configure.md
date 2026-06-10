@@ -41,6 +41,7 @@ Available: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin
 - `show_cost_rate` — Cost per hour (off by default)
 - `show_usage_5h` — 5-hour usage limit
 - `show_usage_7d` — 7-day usage limit
+- `show_pr` — Open pull request number, coloured by review state (needs Claude Code 2.1.145+)
 - `show_tokens` — Token counts (off by default)
 - `show_effort` — Reasoning effort level, e.g. eff:xhigh (needs Claude Code 2.1.133+)
 - `show_fast_mode` — Fast mode indicator while fast mode is on
@@ -51,6 +52,7 @@ Available: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin
 ### Display Options
 - `use_icons` — Unicode icons before segments (default: true)
 - `auto_hide` — Hide zero/empty values (default: true)
+- `usage_label` — Usage bar reset label: clock, e.g. 2pm (default), or countdown, e.g. 2h20m
 - `bar_width` — Progress bar width in characters (default: 10)
 - `branch_max_length` — Truncate long branch names (default: unlimited)
 - `context_warn_threshold` — Warn at this % context usage (default: 80)

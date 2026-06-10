@@ -153,7 +153,7 @@ Open issues in [anthropics/claude-code](https://github.com/anthropics/claude-cod
 
 The statusline stdin JSON now also carries fields with no segment yet; promote on user demand:
 
-- `pr.number` / `pr.url` / `pr.review_state`: a PR segment without shelling out to `gh` (CC 2.1.145+).
+- `pr.number` / `pr.url` / `pr.review_state`: ~~a PR segment without shelling out to `gh`~~ **shipped in v2.3.0** (`show_pr`).
 - `workspace.repo.{host,owner,name}`: repo identity without parsing `git remote`.
 - `session_name`, `output_style.name`, `thinking.enabled`, `cost.total_api_duration_ms`: minor candidates.
 - `COLUMNS`/`LINES` env vars (CC 2.1.153+): already used for truncation width since v2.2.0; could drive adaptive layouts.

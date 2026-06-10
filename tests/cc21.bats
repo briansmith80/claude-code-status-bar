@@ -68,3 +68,49 @@ load test_helper
   assert_plain_contains "42%"
   assert_plain_contains "5hr ("
 }
+
+@test "usage_label=countdown shows remaining time on the 5hr bar" {
+  write_conf "usage_label=countdown"
+  now=$(date +%s)
+  # 2h20m plus a 45s buffer so the label stays 2h20m while the test runs
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"rate_limits\":{\"five_hour\":{\"used_percentage\":42,\"resets_at\":$((now + 2*3600 + 20*60 + 45))}}}"
+  assert_plain_contains "5hr (2h20m)"
+}
+
+@test "usage_label=countdown shows days and hours on the weekly bar" {
+  write_conf "usage_label=countdown"
+  now=$(date +%s)
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"rate_limits\":{\"seven_day\":{\"used_percentage\":71,\"resets_at\":$((now + 3*86400 + 4*3600 + 600))}}}"
+  assert_plain_contains "wk (3d4h)"
+}
+
+@test "default clock label is unchanged when usage_label is unset" {
+  now=$(date +%s)
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"rate_limits\":{\"five_hour\":{\"used_percentage\":42,\"resets_at\":$((now + 2*3600 + 20*60))}}}"
+  assert_plain_contains "5hr ("
+  assert_plain_not_contains "2h20m"
+}
+
+@test "PR segment renders number from the pr block" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40},"pr":{"number":1234,"url":"https://github.com/x/y/pull/1234","review_state":"approved"}}'
+  assert_plain_contains "PR #1234"
+}
+
+@test "PR segment hidden without a pr block and via show_pr=false" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40}}'
+  assert_plain_not_contains "PR #"
+  write_conf "show_pr=false"
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40},"pr":{"number":1234,"review_state":"pending"}}'
+  assert_plain_not_contains "PR #"
+}
+
+@test "workspace.git_worktree drives the worktree segment as a fallback" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40},"workspace":{"current_dir":"/tmp","git_worktree":"feature-x"}}'
+  assert_plain_contains "feature-x"
+}
+
+@test "worktree block still wins over workspace.git_worktree" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40},"worktree":{"name":"hotfix"},"workspace":{"current_dir":"/tmp","git_worktree":"feature-x"}}'
+  assert_plain_contains "hotfix"
+  assert_plain_not_contains "feature-x"
+}

@@ -209,6 +209,8 @@ show_cost=true
 show_cost_rate=false
 show_usage_5h=true
 show_usage_7d=true
+usage_label="clock"
+show_pr=true
 usage_cache_seconds=600
 auto_hide=true
 use_icons=true
@@ -270,6 +272,7 @@ case "${1:-}" in
       printf 'show_fast_mode=%s\n'         "${show_fast_mode}"
       printf 'show_lines_changed=%s\n'     "${show_lines_changed}"
       printf 'show_model=%s\n'             "${show_model}"
+      printf 'show_pr=%s\n'                "${show_pr}"
       printf 'show_stash=%s\n'             "${show_stash}"
       printf 'show_tokens=%s\n'            "${show_tokens}"
       printf 'show_usage_5h=%s\n'          "${show_usage_5h}"
@@ -277,6 +280,7 @@ case "${1:-}" in
       printf 'show_vim_mode=%s\n'          "${show_vim_mode}"
       printf 'show_worktree=%s\n'          "${show_worktree}"
       printf 'usage_cache_seconds=%s\n'    "${usage_cache_seconds}"
+      printf 'usage_label=%s\n'            "${usage_label}"
       printf 'use_groups=%s\n'             "${use_groups}"
       printf 'use_icons=%s\n'              "${use_icons}"
     } | LC_ALL=C sort
@@ -316,6 +320,8 @@ case "${1:-}" in
         for f in "${UNINSTALL_FILES[@]}"; do
           rm -f "$f"
         done
+        # Per-session activity caches (.statusline-activity-cache.<id>)
+        rm -f "${SCRIPT_DIR}"/.statusline-activity-cache.* 2>/dev/null || true
         for d in "${UNINSTALL_DIRS[@]}"; do
           rm -rf "$d"
         done
@@ -542,6 +548,11 @@ ws_block=$(extract_block "$input" "workspace")
 # Sanitize cwd before using it in git commands (defends against directory traversal)
 cwd=$(sanitize "$cwd")
 
+# Session ID: keys the activity cache so parallel sessions never clobber
+# each other's line 2 (Claude Code sends a stable per-session UUID)
+session_id=$(extract "session_id")
+session_id="${session_id//[^a-zA-Z0-9-]/}"
+
 # Model display name: prefer model.display_name (new schema), fall back to top-level
 model=""
 model_block=$(extract_block "$input" "model")
@@ -582,6 +593,11 @@ worktree=""
 wt_block=$(extract_block "$input" "worktree")
 if [ -n "$wt_block" ]; then
   worktree=$(sanitize "$(extract_from "$wt_block" "name")")
+fi
+# Fallback: workspace.git_worktree covers ANY linked git worktree (CC 2.1.145+),
+# not just --worktree sessions
+if [ -z "$worktree" ] && [ -n "$ws_block" ]; then
+  worktree=$(sanitize "$(extract_from "$ws_block" "git_worktree")")
 fi
 
 # ── Working Directory ─────────────────────────────────────────
@@ -635,13 +651,17 @@ fi
 # Reads Claude Code's JSONL transcript for tool/agent/todo activity.
 # Runs in background; uses cached result from previous invocation.
 ACTIVITY_CACHE_FILE="${SCRIPT_DIR}/.statusline-activity-cache"
+# Key the cache by session so parallel sessions each get their own line 2
+[ -n "$session_id" ] && ACTIVITY_CACHE_FILE="${SCRIPT_DIR}/.statusline-activity-cache.${session_id:0:8}"
 HELPER_SCRIPT="${SCRIPT_DIR}/statusline-helper.js"
 activity_line=""
 
 if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
   if command -v node > /dev/null 2>&1 && [ -f "$HELPER_SCRIPT" ]; then
-    # Spawn helper in background (non-blocking)
-    ( node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null ) &
+    # Spawn helper in background (non-blocking); the same subshell sweeps
+    # per-session caches older than a day so they never accumulate
+    ( find "$SCRIPT_DIR" -maxdepth 1 -name '.statusline-activity-cache.*' -mmin +1440 -delete 2>/dev/null
+      node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null ) &
 
     # Read cached activity from previous run
     if [ -f "$ACTIVITY_CACHE_FILE" ]; then
@@ -883,6 +903,21 @@ format_reset_label() {
       h=$(date -d "@$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
     fi
     echo "${d},${h}"
+  elif [ "$style" = "countdown" ]; then
+    # Time remaining until reset, like "2h20m", "3d4h", or "45m".
+    # Uses the exact timestamp, not the hour-rounded one.
+    local diff=$(( reset_ts - NOW_EPOCH ))
+    [ "$diff" -lt 0 ] && diff=0
+    local dd=$(( diff / 86400 ))
+    local hh=$(( (diff % 86400) / 3600 ))
+    local mm=$(( (diff % 3600) / 60 ))
+    if [ "$dd" -gt 0 ]; then
+      echo "${dd}d${hh}h"
+    elif [ "$hh" -gt 0 ]; then
+      echo "${hh}h${mm}m"
+    else
+      echo "${mm}m"
+    fi
   fi
 }
 
@@ -1087,7 +1122,9 @@ if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
   u5_label=""
   if [ -n "$usage_5h_resets" ]; then
     u5_target=$(calc_pacing_target "$usage_5h_resets" $((5 * 3600))) || u5_target=""
-    u5_reset_label=$(format_reset_label "$usage_5h_resets" "time") || u5_reset_label=""
+    u5_label_style="time"
+    [ "$usage_label" = "countdown" ] && u5_label_style="countdown"
+    u5_reset_label=$(format_reset_label "$usage_5h_resets" "$u5_label_style") || u5_reset_label=""
     [ -n "$u5_reset_label" ] && u5_label="(${u5_reset_label})"
   fi
   u5_bar_output=$(build_progress_bar "$u5_int" "$u5_target")
@@ -1103,7 +1140,9 @@ if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
   u7_label=""
   if [ -n "$usage_7d_resets" ]; then
     u7_target=$(calc_pacing_target "$usage_7d_resets" $((7 * 86400))) || u7_target=""
-    u7_reset_label=$(format_reset_label "$usage_7d_resets" "day") || u7_reset_label=""
+    u7_label_style="day"
+    [ "$usage_label" = "countdown" ] && u7_label_style="countdown"
+    u7_reset_label=$(format_reset_label "$usage_7d_resets" "$u7_label_style") || u7_reset_label=""
     [ -n "$u7_reset_label" ] && u7_label="(${u7_reset_label})"
   fi
   u7_bar_output=$(build_progress_bar "$u7_int" "$u7_target")
@@ -1151,6 +1190,27 @@ if [ "$show_stash" = "true" ]; then
     stash_icon=""
     [ "$use_icons" = "true" ] && stash_icon="≡ "
     add_seg "${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}" 6 "git"
+  fi
+fi
+
+# Pull request (priority 6) — from the stdin pr block (CC 2.1.145+), so no
+# gh calls needed. Coloured by review state; vanishes when the PR closes.
+if [ "$show_pr" = "true" ]; then
+  pr_block=$(extract_block "$input" "pr")
+  if [ -n "$pr_block" ]; then
+    pr_number=$(extract_num_from "$pr_block" "number")
+    if [ -n "$pr_number" ]; then
+      pr_number="${pr_number%%.*}"
+      pr_state=$(extract_from "$pr_block" "review_state")
+      case "$pr_state" in
+        approved)          pr_clr="$CLR_ADD" ;;
+        changes_requested) pr_clr="$CLR_DEL" ;;
+        draft)             pr_clr="$CLR_DIM" ;;
+        pending)           pr_clr="$CLR_WARN" ;;
+        *)                 pr_clr="$CLR_INFO" ;;
+      esac
+      add_seg "${pr_clr}PR #${pr_number}${CLR_RESET}" 6 "git"
+    fi
   fi
 fi
 

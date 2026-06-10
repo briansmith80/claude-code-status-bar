@@ -49,7 +49,7 @@ Pure bash core, no jq, no compiled binaries. One-line install. Seven colour them
 
 ## Highlights
 
-- **21 line-one segments** plus a live activity line, individually toggleable (all except two automatic indicators, the 200k warning and the update notice).
+- **22 line-one segments** plus a live activity line, individually toggleable (all except two automatic indicators, the 200k warning and the update notice).
 - **Pacing markers** on the usage bars: a `│` shows where your usage *should* be for even consumption across the window, so "37% used" becomes "37% used and comfortably under pace".
 - **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
 - **Pure bash core** (bash 3.2+, stock macOS works). JSON is parsed with bash regex, so there is no jq dependency to install on Windows.
@@ -155,6 +155,7 @@ Good to know:
 - The line appears only when there is activity to show. It hides when the cached activity is more than 30 seconds old (typically the first refresh after a long pause) and reappears once the helper has re-parsed the transcript.
 - Parsing happens in a background process, so the line runs one status bar refresh behind the transcript. That keeps the bar itself instant.
 - It requires Node.js on your `PATH`, the `statusline-helper.js` file (installed by default), and a Claude Code version that sends `transcript_path` (2.1+). If any of those are missing, line 2 silently stays off and everything else works.
+- Each session gets its own activity cache (keyed by Claude Code's session ID), so parallel Claude Code windows never show each other's activity. Stale per-session caches are swept automatically after a day.
 - Disable it entirely with `show_activity=false` in your config.
 
 ## Segments
@@ -179,8 +180,9 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Dirty count | `● 3 dirty` | `show_dirty_count` | Staged + unstaged + untracked files |
 | Ahead/behind | `↓2 ↑1` | `show_ahead_behind` | Commits behind/ahead of upstream; hidden when there is no upstream |
 | Stash count | `≡ stash:2` | `show_stash` | Git stash entries |
+| Pull request | `PR #1234` | `show_pr` | Open PR for the branch (CC 2.1.145+); colour = review state: green approved, yellow pending, red changes requested, dim draft |
 | Duration | `12m` / `1h23m` | `show_duration` | Session duration |
-| Worktree | `⊞ hotfix` | `show_worktree` | Worktree name when active |
+| Worktree | `⊞ hotfix` | `show_worktree` | Worktree name; covers `--worktree` sessions and any linked git worktree (CC 2.1.145+) |
 | Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
 | Cost rate | `$2.10/hr` | `show_cost_rate` *(off)* | Burn rate; appears once the session is over a minute old |
 | Update notice | `↑ update available` | *(automatic)* | Background version check against GitHub every 6 hours |
@@ -200,6 +202,22 @@ The bar shows your Anthropic usage limits as colour-coded progress bars with res
 - **wk**: the rolling 7-day window, with its reset day and time (`fri,3am`).
 - **`│` pacing marker**: where your usage *should* be for even consumption across the window. Bar past the marker means you are ahead of pace and may hit the limit early; behind it means you have headroom.
 - **`~` suffix** (e.g. `37%~`): the data came from the OAuth fallback and is stale (more than two refresh intervals old).
+
+### Label style: reset time or countdown
+
+By default the label shows the reset moment: `5hr (2pm)`, `wk (fri,3am)`. Set `usage_label=countdown` in your config to show the time remaining instead: `5hr (2h20m)`, `wk (3d4h)`.
+
+The status bar re-renders when Claude Code triggers it (after responses and state changes), so a countdown can sit stale while you are away. Claude Code can also re-run the status bar on a timer: add `refreshInterval` (seconds) to the `statusLine` block in `~/.claude/settings.json` and the countdown stays fresh, and the activity line's elapsed times keep moving too:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline-command.sh",
+    "refreshInterval": 60
+  }
+}
+```
 
 ### Where the data comes from
 
@@ -246,6 +264,7 @@ show_lines_changed=true
 show_dirty_count=true
 show_ahead_behind=true
 show_stash=true
+show_pr=true
 show_duration=true
 show_worktree=true
 show_cost=true
@@ -269,13 +288,14 @@ group_open="["
 group_close="]"
 
 # ── Usage limits ─────────────────────────────────────────
+usage_label=clock           # clock = reset moment (2pm); countdown = time remaining (2h20m)
 usage_cache_seconds=600     # OAuth fallback refresh interval (ignored when stdin provides limits)
 ```
 
 A few details worth knowing:
 
 - **`NO_COLOR`**: when the [`NO_COLOR`](https://no-color.org/) environment variable is set, all colours are disabled regardless of theme.
-- **Truncation order**: with `enable_truncation=true`, segments are dropped tier by tier, least important first: the update notice, then worktree, then duration, then ahead/behind and stash, then effort, tokens, lines changed and dirty count, then fast mode, cost and cost rate, then vim mode, model, agent and the usage bars, then the context bar, and last of all directory and branch.
+- **Truncation order**: with `enable_truncation=true`, segments are dropped tier by tier, least important first: the update notice, then worktree, then duration, then ahead/behind, stash and the PR number, then effort, tokens, lines changed and dirty count, then fast mode, cost and cost rate, then vim mode, model, agent and the usage bars, then the context bar, and last of all directory and branch.
 - **Groups**: with `use_groups=true`, related segments are bracketed: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`. Directory/branch, vim, agent, effort, fast mode, tokens, worktree, and the update notice stay outside groups. Brackets wrap contiguous runs, so an ungrouped segment sitting between group members (an agent name or a worktree) splits the bracket around itself.
 - **Legacy alias**: `show_usage_weekly` from older configs still works as an alias for `show_usage_7d`.
 - **Trust level**: the config is sourced as bash, so treat it like your `.bashrc`: only put your own settings in it.
@@ -442,6 +462,7 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.3.0**: Countdown labels for usage bars (`usage_label=countdown`), a PR segment, worktree detection for any linked worktree, and per-session activity caches.
 - **2.2.0**: Claude Code 2.1.170 audit. Fable/Mythos models get a theme-aware purple tier colour, new effort level and fast mode segments, rate-limit parsing scoped to the `rate_limits` block, and ISO timestamp tolerance.
 - **2.1.1**: README overhaul with verified examples, a fix for doubled progress bars under `NO_COLOR`/mono, and the marketplace manifest for `/plugin marketplace add`.
 - **2.1.0**: BATS test suite, three-platform CI, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`).
