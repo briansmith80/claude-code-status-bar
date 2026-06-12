@@ -20,12 +20,16 @@ Feature roadmap for claude-code-status-bar. Focused on high-value additions that
 - **Pure bash core** — no jq, no compiled binaries; optional Node.js helper for live activity
 - **Stdin-native rate limits** — reads usage data directly from Claude Code stdin (zero network requests)
 - **Pacing markers** on usage progress bars (unique to us)
-- **Live activity line** — tool counts, agent status, todo progress (via transcript parsing)
+- **Colourful live activity line** — running tools/agents with a spinner, heat-coloured elapsed times, completion flash, gradient todo bar, stale fade; all theme-aware and NO_COLOR-safe (v2.7.0)
+- **Compaction-aware context warnings** — mirrors Claude Code's real auto-compact maths, not a guessed percentage (v2.6.0)
+- **Subagent panel renderer** — Task-tool agent rows with elapsed, tokens, and tok/s (v2.5.0)
+- **Clickable PR segment** — OSC 8 hyperlink to the pull request (v2.9.0)
+- **Fast everywhere** — ~285ms/render on Windows after the v2.8.0 fork overhaul, sub-100ms elsewhere; `--benchmark` to verify locally
 - **Plugin marketplace** — installable via `/plugin install`, with setup/configure slash commands
-- **One-line installer** with background update checks
+- **One-line installers** (bash + native PowerShell) with background update checks
 - **External config file** that survives updates
 - **Priority-based truncation** for narrow terminals
-- **Security hardening** — umask 077, stdin token passing, ANSI sanitization
+- **Security hardening** — umask 077, stdin token passing, ANSI sanitization, %s-only printing of transcript-derived text
 
 ---
 
@@ -78,20 +82,39 @@ Major feature release closing the gap with claude-hud while keeping our pure-bas
 
 ---
 
-## v2.1.0 — Testing & CLI
+## v2.1.0 — Testing & CLI :white_check_mark:
 
 Protect what we've built and add practical CLI features.
 
+**Status**: Complete.
+
 | Item | Type | Description |
 |------|------|-------------|
-| BATS test scaffold — #25 | testing | Core tests for JSON parsing, progress bars, sanitization |
-| CI matrix — #26 | ci | Add macOS and Windows (MSYS2) to GitHub Actions |
-| `--dump-config` — #32 | cli | Print merged config (defaults + overrides) for debugging |
-| `--uninstall` — #37 | cli | Clean removal of all installed files |
+| ~~BATS test scaffold — #25~~ | testing | Core tests for JSON parsing, progress bars, sanitization |
+| ~~CI matrix — #26~~ | ci | Add macOS and Windows (MSYS2) to GitHub Actions |
+| ~~`--dump-config` — #32~~ | cli | Print merged config (defaults + overrides) for debugging |
+| ~~`--uninstall` — #37~~ | cli | Clean removal of all installed files |
 
 ---
 
-## After v2.1.0
+## v2.2.0 – v2.9.0 — Continuous releases :white_check_mark:
+
+Shipped after Sprint 4, driven by Claude Code audits and user-visible polish. Full detail in [SPRINTS.md](SPRINTS.md) and [CHANGELOG.md](CHANGELOG.md):
+
+| Version | Highlights |
+|---------|-----------|
+| v2.2.0 | Claude Code 2.1.170 audit: Fable/Mythos tier colour, effort + fast-mode segments, scoped rate-limit parsing |
+| v2.3.0 | Countdown usage labels (#31), PR segment, worktree fallback, per-session activity caches |
+| v2.4.0 | Live activity overhaul: incremental transcript parsing, age-out, `✗` failures, elapsed times |
+| v2.5.0 | Subagent panel renderer (`subagentStatusLine`, Task-tool rows) |
+| v2.6.x | Compaction-aware context warnings, `install.ps1` + installer CI (#41), Windows install hardening |
+| v2.7.0 | Colourful activity line: tokens, spinner, heat colours, completion flash, gradient todo bar, stale fade |
+| v2.8.0 | Windows performance overhaul (#45-#49): 1286ms → 285ms per render, `--benchmark`, first git-segment tests |
+| v2.9.0 | Clickable PR links (#40), opt-in pulse/scanner effects, tag-driven release automation (#52) |
+
+---
+
+## Parked ideas (promote on demand)
 
 Re-evaluate based on actual user feedback. The following ideas are parked — not planned, not promised. If users ask for them, we'll prioritize:
 
@@ -101,7 +124,7 @@ Re-evaluate based on actual user feedback. The following ideas are parked — no
 | API wait time segment | #5 |
 | Cache hit ratio segment | #7 |
 | Separator config/styles | #11, #20 |
-| Compact countdown (tokens before auto-compact) | #58 |
+| Compact countdown (tokens before auto-compact) | #58 (largely addressed in v2.6.0: compact marker + `context_warn_threshold=auto`; a numeric countdown segment remains unbuilt) |
 | Time-to-limit estimate for usage bars | #59 |
 | ~~CLR_DIM modifier for secondary info~~ | ~~#14~~ (shipped in v1.5.1) |
 | Display workspace.project_dir | #15 |
@@ -116,18 +139,18 @@ Re-evaluate based on actual user feedback. The following ideas are parked — no
 | Session budget bar | #28 |
 | Cost velocity indicator | #29 |
 | Alert-only usage mode | #30 |
-| Rate limit countdown | #31 |
+| ~~Rate limit countdown~~ | ~~#31~~ (shipped in v2.3.0: `usage_label=countdown`) |
 | --preview CLI flag | #33 |
 | Session history / --stats | #34, #36 |
 | Today's totals | #35 |
 | --test CLI flag | #38 |
 | Plan-aware limits | #39 |
 | ~~OSC 8 clickable links~~ | ~~#40~~ (shipped in v2.9.0: clickable PR segment) |
-| Install script CI | #41 |
+| ~~Install script CI~~ | ~~#41~~ (shipped in v2.6.0: CI parse-checks and smoke-tests install.ps1) |
 | Modular segment architecture | #42-#44 |
 | ~~Performance optimizations~~ | ~~#45-#48~~ (shipped in v2.8.0: 4.5x faster on Windows) |
 | ~~--benchmark CLI flag~~ | ~~#49~~ (shipped in v2.8.0, plus STATUSLINE_PROFILE) |
-| Comprehensive BATS coverage | #50 |
+| ~~Comprehensive BATS coverage~~ | ~~#50~~ (suite grew 28 → 93 across v2.7.0-v2.9.0, incl. first git-segment tests) |
 | CONTRIBUTING.md / JSON schema docs | #51 |
 | ~~Automated release workflow~~ | ~~#52~~ (shipped in v2.9.0: tag-driven release.yml) |
 | Compact buffer zone | #61 |
