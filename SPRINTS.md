@@ -134,6 +134,30 @@ Bug-fix and doc-cleanup releases shipped between v2.0.0 and the next milestone:
 
 Stop and re-evaluate. See what users are actually asking for before building more. The [ROADMAP.md](ROADMAP.md) has a full list of parked ideas that can be promoted based on demand.
 
+Releases between Sprint 4 and Sprint 5: v2.2.0 (CC 2.1.170 audit), v2.3.0 (countdown labels, PR segment, per-session caches), v2.4.0 (live activity overhaul), v2.5.0 (subagent panel renderer), v2.6.0 (compaction-aware context warnings, install.ps1), v2.6.1 (Windows install hardening), v2.7.0 (colourful activity line).
+
+---
+
+## Sprint 5: v2.8.0 — Windows Performance & Benchmark :white_check_mark:
+
+**Theme**: Make the script fast enough on Windows that the v2.7.0 spinner animation is actually viable there.
+
+**Status**: Complete. Measured 1286ms → 285ms per render on Windows (4.5x), byte-identical output.
+
+| | # | Item | Type | Effort |
+|---|---|------|------|--------|
+| [x] | 5.1 | `--benchmark` CLI flag + `STATUSLINE_PROFILE=1` — #49 | cli | ~70 lines |
+| [x] | 5.2 | REPLY return convention (kill ~50 `$(fn)` subshell forks) — #45-#48 | perf | ~120 lines |
+| [x] | 5.3 | Git consolidation: porcelain v2 + stash reflog (5 forks + 6 pipelines → 2 forks) | perf | ~60 lines |
+| [x] | 5.4 | Pure-bash sanitize/visible_width; fork-free countdown labels; epoch passthrough | perf | ~80 lines |
+| [x] | 5.5 | First git-segment BATS coverage (`tests/git_states.bats`, suite 87) | testing | ~100 lines |
+
+### Notes
+
+- Profiling first paid off: the assumed culprits (git, date) were only half the cost; the other half was `$(fn)` command substitutions of *pure-bash* functions — every substitution forks, and MSYS forks cost 15-25ms.
+- Output verified byte-identical against the previous release across all documented stdin schemas and a git state matrix (diverged upstream, stash, detached HEAD, no upstream).
+- `refreshInterval` guidance on Windows relaxed from `5`+ to `2`+.
+
 ---
 
 ## Summary
@@ -145,4 +169,5 @@ Stop and re-evaluate. See what users are actually asking for before building mor
 | 2 | v1.5.0 | ~52 | 2 |
 | 3 | v2.0.0 | ~455 | 8 |
 | 4 | v2.1.0 | ~240 | 4 |
-| **Total** | | **~862** | **27** |
+| 5 | v2.8.0 | ~430 | 5 |
+| **Total** | | **~1292** | **32** |

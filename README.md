@@ -160,7 +160,7 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 | `⚒ research ✓ (2)` | Finished subagents (and how many) |
 | `██░░░ 2/5 Add tests` | Todo progress; filled cells shade through a per-theme gradient |
 
-The spinner picks its frame from the clock, so it advances at whatever rate Claude Code re-runs the script: each event-driven re-render, plus the `refreshInterval` statusLine setting if you set one. **Pick a `refreshInterval` comfortably above the script's runtime on your machine.** Claude Code aborts an in-flight run when the next one starts, and an aborted run blanks the whole bar, so an interval that's too low erases the status line entirely. On macOS/Linux the script runs in well under 200ms and `1` is fine; on Windows (MSYS bash) a run takes 1-3 seconds, so use `5` or higher there. When the cached activity ages past `activity_fresh_seconds` (default 45) the colours drop back to all-dim, so stale data reads as stale, powerlevel10k style. Set `activity_colour=false` to keep the classic all-dim line permanently; `NO_COLOR` and the mono theme degrade to plain text automatically.
+The spinner picks its frame from the clock, so it advances at whatever rate Claude Code re-runs the script: each event-driven re-render, plus the `refreshInterval` statusLine setting if you set one. **Pick a `refreshInterval` comfortably above the script's runtime on your machine** (`bash ~/.claude/statusline-command.sh --benchmark` measures it). Claude Code aborts an in-flight run when the next one starts, and an aborted run blanks the whole bar, so an interval that's too low erases the status line entirely. On macOS/Linux the script runs in well under 100ms and `1` is fine; on Windows (MSYS bash) a run takes ~300ms since v2.8.0, so `2` is comfortable there. When the cached activity ages past `activity_fresh_seconds` (default 45) the colours drop back to all-dim, so stale data reads as stale, powerlevel10k style. Set `activity_colour=false` to keep the classic all-dim line permanently; `NO_COLOR` and the mono theme degrade to plain text automatically.
 
 Good to know:
 
@@ -359,6 +359,7 @@ The script normally runs with no arguments, fed JSON on stdin by Claude Code. Th
 | `--check-update` | Clear the update cache and synchronously check GitHub for a newer version. Prints current and latest, plus the install one-liner if an update exists. |
 | `--dump-config` | Print the resolved configuration (defaults merged with your `statusline.conf`) as sorted `key=value` lines. The fastest answer to "why isn't my override taking effect?" |
 | `--dump-stdin` | Echo the JSON Claude Code sends (pretty-printed when a working python3 is on PATH) plus a YES/NO report of detected fields: `rate_limits`, `transcript_path`, nested `model`, nested `context_window`. Pipe JSON in: `echo '<json>' \| bash ~/.claude/statusline-command.sh --dump-stdin` |
+| `--benchmark [N]` | Time N end-to-end runs (default 5) against a realistic canned payload and report min/avg/max, for picking a safe `refreshInterval`. Needs GNU date `%N` (Linux/MSYS2). Add `STATUSLINE_PROFILE=1` to any run for a per-phase breakdown on stderr. |
 | `--uninstall` | Interactively remove all installed files. See [Uninstall](#uninstall). |
 
 ## Updating
@@ -475,7 +476,7 @@ claude-code-status-bar/
 
 ## Testing
 
-A BATS suite under [`tests/`](tests/) covers schema parsing (old flat, new nested, and the CC 2.1.x shapes), segments, all seven themes, `NO_COLOR`, config overrides, context window formatting and compaction awareness, the live activity helper, the colourful activity line (token mapping, stale fade, injection safety, width trim), and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
+A BATS suite under [`tests/`](tests/) covers schema parsing (old flat, new nested, and the CC 2.1.x shapes), segments, all seven themes, `NO_COLOR`, config overrides, context window formatting and compaction awareness, the live activity helper, the colourful activity line (token mapping, stale fade, injection safety, width trim), the git segments (branch, dirty, ahead/behind, stash, detached HEAD), and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
 
 To run locally, install [bats-core](https://github.com/bats-core/bats-core):
 
@@ -498,7 +499,7 @@ See [`tests/README.md`](tests/README.md) for layout details.
 ## Troubleshooting
 
 - **The bar doesn't appear at all.** Check that `~/.claude/settings.json` has the `statusLine` entry (the installer skips this step if any `statusLine` entry already exists, including one from a different status line). Then wait for the next Claude Code response; the bar renders after responses, not on launch.
-- **The bar disappeared after setting a low `refreshInterval`.** Claude Code aborts an in-flight statusLine run when the next one starts, and an aborted run blanks the bar. If the interval is below the script's runtime (1-3 seconds on Windows under MSYS bash, ~100ms on macOS/Linux), every run is aborted and nothing ever renders. Raise the interval (`5`+ on Windows) or remove it.
+- **The bar disappeared after setting a low `refreshInterval`.** Claude Code aborts an in-flight statusLine run when the next one starts, and an aborted run blanks the bar. If the interval is below the script's runtime, every run is aborted and nothing ever renders. Measure with `--benchmark` (since v2.8.0: ~300ms on Windows under MSYS bash, well under 100ms on macOS/Linux), then pick an interval comfortably above it: `2`+ on Windows, `1` elsewhere.
 - **The bar just says `Starting...`** Normal. It means Claude Code hasn't sent model or context data yet, which happens at the start of every session.
 - **A segment I enabled isn't showing.** Most segments auto-hide when their value is zero or their data is missing. Run `bash ~/.claude/statusline-command.sh --dump-config` to confirm your override took effect, and `--dump-stdin` to see which fields your Claude Code version actually sends.
 - **Usage segments are missing.** On Claude Code 2.1+ they should appear automatically from stdin. For the OAuth fallback: check credentials exist (see [Credentials](#credentials-oauth-fallback-only)), then clear the caches and let them refresh: `rm -f ~/.claude/.statusline-usage-cache ~/.claude/.statusline-usage-backoff`. The backoff file matters: after repeated failures the script waits up to 30 minutes before retrying.
@@ -520,6 +521,7 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.8.0**: 4.5x faster on Windows (~285ms per run, was ~1286ms): internal helpers return via globals instead of forked command substitutions, git work consolidated to two calls via porcelain v2, pure-bash sanitize and width maths, and fork-free countdown labels. New `--benchmark` flag and `STATUSLINE_PROFILE=1` per-phase profiling; first direct git-segment test coverage.
 - **2.7.0**: Colourful activity line: per-segment theme colours, a clock-driven spinner on running tools, heat-coloured elapsed times, completion flash, gradient todo bar, and stale-fade, with `activity_colour=false` restoring the classic all-dim look. Plus ANSI-aware width trimming and four long-standing fixes (quote truncation, `NO_COLOR` leak, BSD sed, non-UTF-8 locales).
 - **2.6.1**: Windows install hardening: settings.json gets quoted Windows-native paths (the MSYS `/c/...` form broke the subagent renderer under PowerShell/cmd spawns), both installers migrate their own older commands on re-run, and docs now state the renderer's real scope (Task-tool subagent rows only).
 - **2.6.0**: Compaction-aware context warnings (a `│` marker at the auto-compact point, `▲` timed to Claude Code's own warning), the `▲ 200k+` segment retired, and a native Windows PowerShell installer.

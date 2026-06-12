@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.0] - 2026-06-12
+
+4.5x faster on Windows: the script now renders in ~285ms there (down from ~1286ms), making `refreshInterval: 2` comfortable on Windows and keeping macOS/Linux well under 100ms.
+
+### Added
+
+- **`--benchmark [N]` CLI flag**: times N end-to-end runs (default 5) against a realistic canned payload (current directory as cwd, stdin rate limits, a tiny transcript) and reports min/avg/max. Requires GNU date `%N`; degrades with a clear message elsewhere.
+- **`STATUSLINE_PROFILE=1`**: per-phase wall-clock breakdown (startup+config, stdin+fields, git, activity, usage, segments+render) to stderr on any run, for finding where time goes on a given machine.
+- **6 new BATS tests** (`tests/git_states.bats`, suite now 87): the first direct coverage of the git segments — branch/dirty/ahead-behind from the porcelain parser, stash reflog counting, detached HEAD, no-upstream repos — plus `--help`/`--benchmark` checks.
+
+### Changed
+
+- **Fork-count overhaul** (the entire speedup; output is byte-identical across all documented stdin schemas):
+  - Internal helpers return via a `REPLY` global instead of `$(fn)` command substitution — every substitution forks a subshell, which costs 15-25ms under MSYS process emulation, and ~50 of them ran per render.
+  - **Git work consolidated**: one `rev-parse --git-dir --git-common-dir` plus one `status --porcelain=v2 --branch` now provide the branch name, ahead/behind, and dirty count (parsed in pure bash, entry count via line arithmetic so huge dirty trees stay cheap). The stash count reads the stash reflog (`logs/refs/stash` in the common dir, correct in linked worktrees) instead of forking `git stash list | wc -l`. Five git forks and six pipeline forks became two git forks.
+  - **`sanitize()` and `visible_width()` are pure bash** (no sed/tr/printf pipelines).
+  - **Stdin `resets_at` epochs stay epochs**: previously they were converted epoch→ISO with a date fork only for `iso_to_epoch` to convert them straight back with another. Pacing targets and countdown labels are now fork-free; clock/day labels cost one date fork instead of 3-6 (bash-native lowercasing of day/AM-PM vocab).
+  - The stale activity-cache sweep (`find`) runs on ~1 in 37 refreshes instead of every run, and the `autoCompactWindow` settings probe reads the file without a `$(cat ...)` fork.
+- **Windows `refreshInterval` guidance relaxed**: with ~285ms runs, `2` is comfortable on Windows (was "5 or higher"); `1` is fine on macOS/Linux.
+
 ## [2.7.0] - 2026-06-12
 
 The activity line gets colour: active work pops in theme colours while history stays dim.

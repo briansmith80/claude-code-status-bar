@@ -44,6 +44,24 @@ VERSION="${VERSION//[[:space:]]/}"
 # Capture current epoch once — reused throughout to avoid repeated date forks
 NOW_EPOCH=$(date +%s)
 
+# ── Profiling (STATUSLINE_PROFILE=1) ──────────────────────────
+# Per-phase wall-clock to stderr. Each checkpoint costs one date fork, so
+# absolute numbers are inflated on Windows; the relative ranking is what
+# matters. Zero overhead when unset (no-op function).
+if [ -n "${STATUSLINE_PROFILE:-}" ]; then
+  SL_PROF_LAST=$(date +%s%N 2>/dev/null || echo "")
+  sl_profile() {
+    local now
+    now=$(date +%s%N 2>/dev/null || echo "")
+    case "$now" in ''|*[!0-9]*) return 0 ;; esac
+    case "$SL_PROF_LAST" in ''|*[!0-9]*) SL_PROF_LAST=$now; return 0 ;; esac
+    printf 'profile: %-22s %5d ms\n' "$1" $(( (now - SL_PROF_LAST) / 1000000 )) >&2
+    SL_PROF_LAST=$now
+  }
+else
+  sl_profile() { :; }
+fi
+
 UPDATE_CHECK_INTERVAL=21600  # seconds between update checks (6 hours)
 UPDATE_CACHE_FILE="${SCRIPT_DIR}/.statusline-update-cache"
 REPO_RAW="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
@@ -81,19 +99,28 @@ EOF
   fi
 }
 
-# Parse an ISO 8601 timestamp to epoch seconds.
-# Usage: iso_to_epoch "2026-03-10T13:59:59.654957+00:00"
+# Parse an ISO 8601 timestamp (or pass through a raw epoch) to epoch
+# seconds in REPLY. Raw epochs short-circuit with zero forks — that is the
+# stdin rate-limits path, the common case since Claude Code 2.1.
+# Usage: iso_to_epoch "2026-03-10T13:59:59.654957+00:00"; epoch=$REPLY
 iso_to_epoch() {
   local ts="$1"
+  REPLY=""
+  case "$ts" in
+    '') return 1 ;;
+    *[!0-9]*) ;;          # not a plain epoch — fall through to date parsing
+    *) REPLY="$ts"; return 0 ;;
+  esac
   # Strip fractional seconds and timezone offset
   local clean="${ts%%.*}"
   clean="${clean%%+*}"
   if [[ "${OSTYPE:-}" == darwin* ]]; then
-    date -juf "%Y-%m-%dT%H:%M:%S" "$clean" +%s 2>/dev/null
+    REPLY=$(date -juf "%Y-%m-%dT%H:%M:%S" "$clean" +%s 2>/dev/null) || { REPLY=""; return 1; }
   else
     # GNU date (Linux & MSYS2/Windows)
-    date -ud "${clean}" +%s 2>/dev/null
+    REPLY=$(date -ud "${clean}" +%s 2>/dev/null) || { REPLY=""; return 1; }
   fi
+  [ -n "$REPLY" ]
 }
 
 # ── CLI Flags ─────────────────────────────────────────────────
@@ -120,6 +147,9 @@ case "${1:-}" in
     echo "                     bash statusline-command.sh --dump-config"
     echo "  --uninstall      Interactively remove installed files (prompts before deleting)"
     echo "                     bash statusline-command.sh --uninstall"
+    echo "  --benchmark [N]  Time N end-to-end runs (default 5) against a canned payload"
+    echo "                     bash statusline-command.sh --benchmark"
+    echo "                     STATUSLINE_PROFILE=1 adds a per-phase breakdown to any run"
     echo ""
     echo "Version: ${VERSION}"
     exit 0
@@ -193,7 +223,7 @@ check_for_update() {
 # Skip the background update check for diagnostic / management flags
 # (they would race with cache deletion or pollute --dump-config output).
 case "${1:-}" in
-  --dump-config|--uninstall) ;;
+  --dump-config|--uninstall|--benchmark) ;;
   *) check_for_update ;;
 esac
 
@@ -375,6 +405,42 @@ case "${1:-}" in
         ;;
     esac
     ;;
+  --benchmark)
+    # Time N end-to-end runs (default 5) against a realistic canned payload:
+    # current directory as cwd (so git work is included when run in a repo),
+    # stdin rate limits, and a tiny transcript so the activity path executes.
+    # Usage: statusline-command.sh --benchmark [runs]
+    # Set STATUSLINE_PROFILE=1 for a per-phase breakdown of a single run.
+    bench_runs="${2:-5}"
+    case "$bench_runs" in ''|*[!0-9]*|0) bench_runs=5 ;; esac
+    bench_t0=$(date +%s%N 2>/dev/null) || bench_t0=""
+    case "$bench_t0" in
+      ''|*[!0-9]*)
+        echo "--benchmark needs GNU date with %N (millisecond) support." >&2
+        exit 1
+        ;;
+    esac
+    # Fixed path (not $$) so repeat benchmarks reuse one transcript-cache entry
+    bench_tr="${TMPDIR:-/tmp}/.statusline-bench.jsonl"
+    printf '%s\n' '{"timestamp":"2026-01-01T00:00:00Z","message":{"content":[{"type":"tool_use","id":"b1","name":"Read","input":{"file_path":"/tmp/bench.ts"}}]}}' > "$bench_tr"
+    bench_json="{\"cwd\":\"$PWD\",\"session_id\":\"benchmark00\",\"transcript_path\":\"$bench_tr\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":42,\"context_window_size\":200000,\"total_input_tokens\":84000},\"total_cost_usd\":1.23,\"rate_limits\":{\"five_hour\":{\"used_percentage\":42,\"resets_at\":$(( NOW_EPOCH + 7200 ))},\"seven_day\":{\"used_percentage\":71,\"resets_at\":$(( NOW_EPOCH + 86400 ))}}}"
+    echo "Benchmarking ${bench_runs} runs (cwd: $PWD)..."
+    bench_i=0 bench_total=0 bench_min="" bench_max=""
+    while [ "$bench_i" -lt "$bench_runs" ]; do
+      bench_t0=$(date +%s%N)
+      printf '%s' "$bench_json" | bash "$0" > /dev/null 2>&1 || true
+      bench_t1=$(date +%s%N)
+      bench_ms=$(( (bench_t1 - bench_t0) / 1000000 ))
+      echo "  run $(( bench_i + 1 )): ${bench_ms} ms"
+      bench_total=$(( bench_total + bench_ms ))
+      if [ -z "$bench_min" ] || [ "$bench_ms" -lt "$bench_min" ]; then bench_min=$bench_ms; fi
+      if [ -z "$bench_max" ] || [ "$bench_ms" -gt "$bench_max" ]; then bench_max=$bench_ms; fi
+      bench_i=$(( bench_i + 1 ))
+    done
+    echo "min ${bench_min} ms · avg $(( bench_total / bench_runs )) ms · max ${bench_max} ms"
+    rm -f "$bench_tr" "${SCRIPT_DIR}/.statusline-activity-cache.benchmar" 2>/dev/null
+    exit 0
+    ;;
 esac
 
 # ── Colour Themes ────────────────────────────────────────────
@@ -512,41 +578,47 @@ apply_theme
 # ── End Configuration ─────────────────────────────────────────
 
 input=$(cat)
+sl_profile "startup+config"
 
 # ── JSON Parsing Helpers ──────────────────────────────────────
 # These extract values from the JSON input using bash regex since
 # jq is not available in MSYS2/Git Bash on Windows by default.
 # All four variants share common regex logic. The _from variants
 # accept an explicit JSON string; the plain variants use $input.
+# Results return via the REPLY global: $(fn) command substitutions
+# fork a subshell (15-25ms each under MSYS), and these run ~40x/render.
 
 # Extract a string value by key from a JSON string
-# Usage: extract_from "$json" "key"
+# Usage: extract_from "$json" "key"; value=$REPLY
 extract_from() {
   local json="$1" key="$2"
   local pattern="\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
+  REPLY=""
   if [[ $json =~ $pattern ]]; then
-    echo "${BASH_REMATCH[1]}"
+    REPLY="${BASH_REMATCH[1]}"
   fi
 }
 
 # Extract a numeric value by key from a JSON string
-# Usage: extract_num_from "$json" "key"
+# Usage: extract_num_from "$json" "key"; value=$REPLY
 extract_num_from() {
   local json="$1" key="$2"
   local pattern="\"$key\"[[:space:]]*:[[:space:]]*([0-9]+\.?[0-9]*)"
+  REPLY=""
   if [[ $json =~ $pattern ]]; then
-    echo "${BASH_REMATCH[1]}"
+    REPLY="${BASH_REMATCH[1]}"
   fi
 }
 
 # Extract a JSON object block by key, returning content between { }
 # Handles one level of nested braces (e.g., inner objects within the block).
-# Usage: extract_block "$json" "key"
+# Usage: extract_block "$json" "key"; value=$REPLY
 extract_block() {
   local json="$1" key="$2"
   local pattern="\"$key\"[[:space:]]*:[[:space:]]*\{(([^{}]|\{[^}]*\})+)\}"
+  REPLY=""
   if [[ $json =~ $pattern ]]; then
-    echo "${BASH_REMATCH[1]}"
+    REPLY="${BASH_REMATCH[1]}"
   fi
 }
 
@@ -554,102 +626,118 @@ extract_block() {
 extract()     { extract_from "$input" "$1"; }
 extract_num() { extract_num_from "$input" "$1"; }
 
-# Real ESC/BEL bytes for sed patterns: BSD sed (stock macOS) does not
-# interpret \x1b hex escapes, so the bytes are interpolated from bash instead.
+# Real ESC/BEL bytes for patterns: BSD sed (stock macOS) does not interpret
+# \x1b hex escapes, so the bytes are interpolated from bash instead.
 ESC_CH=$'\x1b'
 BEL_CH=$'\x07'
 
 # Strip ANSI escape sequences and control characters from untrusted strings.
 # Handles CSI (ESC[...), OSC terminated by BEL or ST (ESC\), and DCS/APC.
+# Pure bash, result in REPLY: the old sed|tr pipeline cost ~4 forks per call
+# and this runs up to 8 times per render.
 sanitize() {
-  local val="$1"
-  # Remove ANSI escape sequences (CSI, OSC with BEL, OSC with ST)
-  val=$(printf '%s' "$val" | sed "s/${ESC_CH}\[[0-9;]*[a-zA-Z]//g; s/${ESC_CH}\][^${BEL_CH}]*${BEL_CH}//g; s/${ESC_CH}\][^${ESC_CH}]*${ESC_CH}\\\\//g; s/${ESC_CH}[PX_^][^${ESC_CH}]*${ESC_CH}\\\\//g")
-  # Remove remaining control characters (except space)
-  val=$(printf '%s' "$val" | tr -d '\000-\037\177')
-  echo "$val"
+  local val="$1" pat
+  # CSI sequences (ESC [ ... letter)
+  pat="${ESC_CH}\[[0-9;]*[a-zA-Z]"
+  while [[ $val =~ $pat ]]; do val="${val//"${BASH_REMATCH[0]}"/}"; done
+  # OSC terminated by BEL (ESC ] ... BEL)
+  pat="${ESC_CH}\][^${BEL_CH}]*${BEL_CH}"
+  while [[ $val =~ $pat ]]; do val="${val//"${BASH_REMATCH[0]}"/}"; done
+  # OSC terminated by ST (ESC ] ... ESC \)
+  pat="${ESC_CH}\][^${ESC_CH}]*${ESC_CH}\\\\"
+  while [[ $val =~ $pat ]]; do val="${val//"${BASH_REMATCH[0]}"/}"; done
+  # DCS/SOS/PM/APC (ESC P/X/_/^ ... ESC \)
+  pat="${ESC_CH}[PX_^][^${ESC_CH}]*${ESC_CH}\\\\"
+  while [[ $val =~ $pat ]]; do val="${val//"${BASH_REMATCH[0]}"/}"; done
+  # Remaining control characters (C0 + DEL), including stray ESC bytes
+  val="${val//[[:cntrl:]]/}"
+  REPLY="$val"
 }
 
-# Strip ANSI escapes for width measurement (used by truncation)
-strip_ansi() {
-  printf '%b' "$1" | sed "s/${ESC_CH}\[[0-9;]*[a-zA-Z]//g; s/${ESC_CH}\][^${BEL_CH}]*${BEL_CH}//g; s/${ESC_CH}\][^${ESC_CH}]*${ESC_CH}\\\\//g"
-}
-
+# Visible width of a segment for truncation (in REPLY). Segments carry
+# theme colours as literal \033[..m text, so strip that pattern (plus any
+# raw ESC SGR, defensively) in pure bash — the old printf|sed pipeline
+# cost 3 forks per segment.
 visible_width() {
-  local stripped
-  stripped=$(strip_ansi "$1")
-  echo ${#stripped}
+  local s="$1" pat='\\033\[[0-9;]*[a-zA-Z]'
+  while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
+  pat="${ESC_CH}\[[0-9;]*[a-zA-Z]"
+  while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
+  REPLY=${#s}
 }
 
 # ── Extract Fields ────────────────────────────────────────────
 
 # Working directory: prefer workspace.current_dir, fall back to top-level cwd
 cwd=""
-ws_block=$(extract_block "$input" "workspace")
-[ -n "$ws_block" ] && cwd=$(extract_from "$ws_block" "current_dir")
-[ -z "$cwd" ] && cwd=$(extract "cwd")
+extract_block "$input" "workspace"; ws_block=$REPLY
+if [ -n "$ws_block" ]; then extract_from "$ws_block" "current_dir"; cwd=$REPLY; fi
+if [ -z "$cwd" ]; then extract "cwd"; cwd=$REPLY; fi
 
 # Sanitize cwd before using it in git commands (defends against directory traversal)
-cwd=$(sanitize "$cwd")
+sanitize "$cwd"; cwd=$REPLY
 
 # Session ID: keys the activity cache so parallel sessions never clobber
 # each other's line 2 (Claude Code sends a stable per-session UUID)
-session_id=$(extract "session_id")
+extract "session_id"; session_id=$REPLY
 session_id="${session_id//[^a-zA-Z0-9-]/}"
 
 # Model display name: prefer model.display_name (new schema), fall back to top-level
 model=""
-model_block=$(extract_block "$input" "model")
-[ -n "$model_block" ] && model=$(extract_from "$model_block" "display_name")
-[ -z "$model" ] && model=$(extract "display_name")
+extract_block "$input" "model"; model_block=$REPLY
+if [ -n "$model_block" ]; then extract_from "$model_block" "display_name"; model=$REPLY; fi
+if [ -z "$model" ]; then extract "display_name"; model=$REPLY; fi
 
 # Context window usage: prefer context_window.used_percentage (new schema), fall back.
 # The fallback only runs when rate_limits is absent (old flat schema) to avoid
 # matching rate_limits.five_hour.used_percentage by accident.
 used=""
-cw_block=$(extract_block "$input" "context_window")
-[ -n "$cw_block" ] && used=$(extract_num_from "$cw_block" "used_percentage")
+extract_block "$input" "context_window"; cw_block=$REPLY
+if [ -n "$cw_block" ]; then extract_num_from "$cw_block" "used_percentage"; used=$REPLY; fi
 if [ -z "$used" ]; then
   rl_check='"rate_limits"[[:space:]]*:'
-  [[ ! $input =~ $rl_check ]] && used=$(extract_num "used_percentage")
+  if [[ ! $input =~ $rl_check ]]; then extract_num "used_percentage"; used=$REPLY; fi
 fi
 
 # Context window total size in tokens
 context_size=""
-[ -n "$cw_block" ] && context_size=$(extract_num_from "$cw_block" "context_window_size")
-[ -z "$context_size" ] && context_size=$(extract_num "context_window_size")
+if [ -n "$cw_block" ]; then extract_num_from "$cw_block" "context_window_size"; context_size=$REPLY; fi
+if [ -z "$context_size" ]; then extract_num "context_window_size"; context_size=$REPLY; fi
 
 # Transcript path (for live activity — new in CC 2.1+)
-transcript_path=$(extract "transcript_path")
+extract "transcript_path"; transcript_path=$REPLY
 
 # Cumulative session cost in USD
-total_cost=$(extract_num "total_cost_usd")
+extract_num "total_cost_usd"; total_cost=$REPLY
 
 # Lines changed during this session
-lines_added=$(extract_num "total_lines_added")
-lines_removed=$(extract_num "total_lines_removed")
+extract_num "total_lines_added"; lines_added=$REPLY
+extract_num "total_lines_removed"; lines_removed=$REPLY
 
 # Session duration in milliseconds
-duration_ms=$(extract_num "total_duration_ms")
+extract_num "total_duration_ms"; duration_ms=$REPLY
 
 # Worktree name — extract from worktree block to avoid collision with agent.name
 worktree=""
-wt_block=$(extract_block "$input" "worktree")
+extract_block "$input" "worktree"; wt_block=$REPLY
 if [ -n "$wt_block" ]; then
-  worktree=$(sanitize "$(extract_from "$wt_block" "name")")
+  extract_from "$wt_block" "name"
+  sanitize "$REPLY"; worktree=$REPLY
 fi
 # Fallback: workspace.git_worktree covers ANY linked git worktree (CC 2.1.145+),
 # not just --worktree sessions
 if [ -z "$worktree" ] && [ -n "$ws_block" ]; then
-  worktree=$(sanitize "$(extract_from "$ws_block" "git_worktree")")
+  extract_from "$ws_block" "git_worktree"
+  sanitize "$REPLY"; worktree=$REPLY
 fi
 
 # ── Working Directory ─────────────────────────────────────────
 # Replace home directory prefix with ~ for a shorter display
 home_dir="$HOME"
 short_cwd="${cwd/#$home_dir/\~}"
-short_cwd=$(sanitize "$short_cwd")
+sanitize "$short_cwd"; short_cwd=$REPLY
 
+sl_profile "stdin+fields"
 # ── Git Info ──────────────────────────────────────────────────
 # Detect branch, dirty count, ahead/behind, and stash count.
 # Uses -c core.fsmonitor=false to skip filesystem monitoring overhead.
@@ -659,38 +747,79 @@ dirty_count=""
 ahead_count=""
 behind_count=""
 stash_count=""
-if [ -n "$cwd" ] && [ -d "$cwd" ] && git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-parse --git-dir > /dev/null 2>&1; then
-  if [ "$show_branch" = "true" ]; then
-    branch=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false symbolic-ref --short HEAD 2>/dev/null \
-      || git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-parse --short HEAD 2>/dev/null)
-    branch=$(sanitize "$branch")
-    if [ -n "$branch_max_length" ] && [ "${#branch}" -gt "$branch_max_length" ] 2>/dev/null; then
-      branch="${branch:0:$branch_max_length}…"
+# Repo gate doubles as git-dir discovery: --git-dir for the gate itself,
+# --git-common-dir for the stash log (linked worktrees share the stash in
+# the common dir). One fork for both.
+git_dirs=""
+if [ -n "$cwd" ] && [ -d "$cwd" ]; then
+  git_dirs=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-parse --git-dir --git-common-dir 2>/dev/null) || git_dirs=""
+fi
+if [ -n "$git_dirs" ]; then
+  git_common="${git_dirs##*$'\n'}"
+
+  # One `status --porcelain=v2 --branch` call provides the branch name,
+  # ahead/behind, and the dirty count — replacing three git forks plus
+  # their wc/tr/cut pipelines. Header lines are parsed in pure bash; the
+  # entry count comes from line arithmetic so huge dirty trees stay cheap.
+  if [ "$show_branch" = "true" ] || [ "$show_dirty_count" = "true" ] || [ "$show_ahead_behind" = "true" ]; then
+    git_status=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false status --porcelain=v2 --branch 2>/dev/null) || git_status=""
+    git_oid="" git_head="" git_headers=0 git_rest="$git_status"
+    while [ -n "$git_rest" ]; do
+      git_line="${git_rest%%$'\n'*}"
+      case "$git_line" in
+        "# branch.oid "*)  git_oid="${git_line#"# branch.oid "}" ;;
+        "# branch.head "*) git_head="${git_line#"# branch.head "}" ;;
+        "# branch.ab "*)
+          if [ "$show_ahead_behind" = "true" ]; then
+            git_ab="${git_line#"# branch.ab "}"        # "+A -B"
+            ahead_count="${git_ab%% *}"; ahead_count="${ahead_count#+}"
+            behind_count="${git_ab##* }"; behind_count="${behind_count#-}"
+          fi
+          ;;
+        "#"*) ;;
+        *) break ;;
+      esac
+      git_headers=$(( git_headers + 1 ))
+      case "$git_rest" in
+        *$'\n'*) git_rest="${git_rest#*$'\n'}" ;;
+        *) git_rest="" ;;
+      esac
+    done
+    if [ "$show_dirty_count" = "true" ] && [ -n "$git_status" ]; then
+      git_nl="${git_status//[!$'\n']/}"
+      dirty_count=$(( ${#git_nl} + 1 - git_headers ))
+      [ "$dirty_count" -lt 0 ] && dirty_count=0
+    fi
+    if [ "$show_branch" = "true" ]; then
+      if [ "$git_head" = "(detached)" ]; then
+        branch="${git_oid:0:7}"
+      else
+        branch="$git_head"
+      fi
+      sanitize "$branch"; branch=$REPLY
+      if [ -n "$branch_max_length" ] && [ "${#branch}" -gt "$branch_max_length" ] 2>/dev/null; then
+        branch="${branch:0:$branch_max_length}…"
+      fi
     fi
   fi
 
-  # Count uncommitted files (staged + unstaged + untracked).
-  if [ "$show_dirty_count" = "true" ]; then
-    dirty_count=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false status --porcelain 2>/dev/null | wc -l | tr -d ' ')
-  fi
-
-  # Ahead/behind remote — silently hidden when no upstream or detached HEAD.
-  # The || ab_output="" is critical: without it, set -e kills the script.
-  if [ "$show_ahead_behind" = "true" ]; then
-    # shellcheck disable=SC1083
-    ab_output=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-list --left-right --count HEAD...@{upstream} 2>/dev/null) || ab_output=""
-    if [ -n "$ab_output" ]; then
-      ahead_count=$(echo "$ab_output" | cut -f1)
-      behind_count=$(echo "$ab_output" | cut -f2)
-    fi
-  fi
-
-  # Stash count
+  # Stash count: the reflog at logs/refs/stash holds one line per stash,
+  # so a pure-bash line count replaces `git stash list | wc -l`.
   if [ "$show_stash" = "true" ]; then
-    stash_count=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false stash list 2>/dev/null | wc -l | tr -d ' ')
+    stash_count=0
+    case "$git_common" in
+      /*|[A-Za-z]:*) stash_log="$git_common/logs/refs/stash" ;;
+      *)             stash_log="$cwd/$git_common/logs/refs/stash" ;;
+    esac
+    if [ -f "$stash_log" ]; then
+      while IFS= read -r stash_line || [ -n "$stash_line" ]; do
+        stash_count=$(( stash_count + 1 ))
+      done < "$stash_log"
+    fi
   fi
 fi
 
+sl_profile "git"
 # ── Live Activity (transcript parsing via Node.js helper) ────
 # Reads Claude Code's JSONL transcript for tool/agent/todo activity.
 # Runs in background; uses cached result from previous invocation.
@@ -763,7 +892,12 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
   if command -v node > /dev/null 2>&1 && [ -f "$HELPER_SCRIPT" ]; then
     # Spawn helper in background (non-blocking); the same subshell sweeps
     # per-session caches older than a day so they never accumulate
-    ( find "$SCRIPT_DIR" -maxdepth 1 -name '.statusline-activity-cache.*' -mmin +1440 -delete 2>/dev/null
+    # The stale-cache sweep runs on ~1 in 37 refreshes: it only needs to
+    # happen occasionally, and skipping the find fork the rest of the time
+    # keeps the helper subshell cheap
+    ( if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then
+        find "$SCRIPT_DIR" -maxdepth 1 -name '.statusline-activity-cache.*' -mmin +1440 -delete 2>/dev/null
+      fi
       if [ "$activity_colour" = "true" ]; then
         node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null
       else
@@ -792,7 +926,7 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
           # printed with %s, never %b, so it can't decode into controls
           activity_line="${activity_line//\\\"/\"}"
           activity_line="${activity_line//\\\\/\\}"
-          activity_line=$(sanitize "$activity_line")
+          sanitize "$activity_line"; activity_line=$REPLY
           apply_activity_tokens
         fi
       fi
@@ -800,6 +934,7 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
   fi
 fi
 
+sl_profile "activity"
 # ── Usage Limits (5-hour and 7-day) ─────────────────────────
 # Preferred: read rate_limits from stdin (Claude Code >= 2.1).
 # Fallback:  fetch from Anthropic OAuth API with background caching.
@@ -813,46 +948,37 @@ if [[ $input =~ $rl_guard ]]; then
   # Scope extraction to the rate_limits block so a five_hour/seven_day object
   # elsewhere in the payload is never mistaken for rate-limit data. Falls back
   # to the whole input if the block itself cannot be captured.
-  rl_block=$(extract_block "$input" "rate_limits")
+  extract_block "$input" "rate_limits"; rl_block=$REPLY
   [ -z "$rl_block" ] && rl_block="$input"
-  fh_stdin_block=$(extract_block "$rl_block" "five_hour")
+  extract_block "$rl_block" "five_hour"; fh_stdin_block=$REPLY
   if [ -n "$fh_stdin_block" ]; then
-    stdin_5h=$(extract_num_from "$fh_stdin_block" "used_percentage")
-    stdin_5h_resets=$(extract_num_from "$fh_stdin_block" "resets_at")
+    extract_num_from "$fh_stdin_block" "used_percentage"; stdin_5h=$REPLY
+    extract_num_from "$fh_stdin_block" "resets_at"; stdin_5h_resets=$REPLY
     if [ -n "$stdin_5h" ]; then
       usage_5h="$stdin_5h"
-      # resets_at from stdin is epoch seconds — convert to ISO for pacing compat
+      # resets_at from stdin is epoch seconds — keep it raw; iso_to_epoch
+      # passes epochs through, so no date forks on this (the common) path
       if [ -n "$stdin_5h_resets" ]; then
-        stdin_5h_resets_int="${stdin_5h_resets%%.*}"
-        if [[ "${OSTYPE:-}" == darwin* ]]; then
-          usage_5h_resets=$(date -r "$stdin_5h_resets_int" -u '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_5h_resets=""
-        else
-          usage_5h_resets=$(date -ud "@$stdin_5h_resets_int" '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_5h_resets=""
-        fi
+        usage_5h_resets="${stdin_5h_resets%%.*}"
       else
         # Tolerate an ISO-8601 string resets_at (downstream handles ISO natively)
-        usage_5h_resets=$(extract_from "$fh_stdin_block" "resets_at")
+        extract_from "$fh_stdin_block" "resets_at"; usage_5h_resets=$REPLY
         usage_5h_resets="${usage_5h_resets/Z/+00:00}"
       fi
       stdin_usage=true
     fi
   fi
-  sd_stdin_block=$(extract_block "$rl_block" "seven_day")
+  extract_block "$rl_block" "seven_day"; sd_stdin_block=$REPLY
   if [ -n "$sd_stdin_block" ]; then
-    stdin_7d=$(extract_num_from "$sd_stdin_block" "used_percentage")
-    stdin_7d_resets=$(extract_num_from "$sd_stdin_block" "resets_at")
+    extract_num_from "$sd_stdin_block" "used_percentage"; stdin_7d=$REPLY
+    extract_num_from "$sd_stdin_block" "resets_at"; stdin_7d_resets=$REPLY
     if [ -n "$stdin_7d" ]; then
       usage_7d="$stdin_7d"
       if [ -n "$stdin_7d_resets" ]; then
-        stdin_7d_resets_int="${stdin_7d_resets%%.*}"
-        if [[ "${OSTYPE:-}" == darwin* ]]; then
-          usage_7d_resets=$(date -r "$stdin_7d_resets_int" -u '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_7d_resets=""
-        else
-          usage_7d_resets=$(date -ud "@$stdin_7d_resets_int" '+%Y-%m-%dT%H:%M:%S+00:00' 2>/dev/null) || usage_7d_resets=""
-        fi
+        usage_7d_resets="${stdin_7d_resets%%.*}"
       else
         # Tolerate an ISO-8601 string resets_at (downstream handles ISO natively)
-        usage_7d_resets=$(extract_from "$sd_stdin_block" "resets_at")
+        extract_from "$sd_stdin_block" "resets_at"; usage_7d_resets=$REPLY
         usage_7d_resets="${usage_7d_resets/Z/+00:00}"
       fi
       stdin_usage=true
@@ -877,7 +1003,7 @@ fetch_usage_token() {
     creds=$(cat "${SCRIPT_DIR}/.credentials.json" 2>/dev/null) || creds=""
   fi
   [ -z "$creds" ] && return 1
-  token=$(extract_from "$creds" "accessToken")
+  extract_from "$creds" "accessToken"; token=$REPLY
   [ -z "$token" ] && return 1
   echo "$token"
 }
@@ -967,15 +1093,15 @@ if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
       fh_pattern='"five_hour"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
       if [[ $usage_json =~ $fh_pattern ]]; then
         fh_block="${BASH_REMATCH[1]}"
-        usage_5h=$(extract_num_from "$fh_block" "utilization")
-        usage_5h_resets=$(extract_from "$fh_block" "resets_at")
+        extract_num_from "$fh_block" "utilization"; usage_5h=$REPLY
+        extract_from "$fh_block" "resets_at"; usage_5h_resets=$REPLY
       fi
       # Extract seven_day block
       sd_pattern='"seven_day"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
       if [[ $usage_json =~ $sd_pattern ]]; then
         sd_block="${BASH_REMATCH[1]}"
-        usage_7d=$(extract_num_from "$sd_block" "utilization")
-        usage_7d_resets=$(extract_from "$sd_block" "resets_at")
+        extract_num_from "$sd_block" "utilization"; usage_7d=$REPLY
+        extract_from "$sd_block" "resets_at"; usage_7d_resets=$REPLY
       fi
     fi
   fi
@@ -984,44 +1110,64 @@ fi
 fi  # end OAuth fallback (stdin_usage=false)
 
 # Calculate pacing targets — what percentage you *should* have used
-# for even consumption across the rolling window.
+# for even consumption across the rolling window. Result in REPLY.
 calc_pacing_target() {
   local resets_at="$1" window_secs="$2"
-  local reset_ts start_ts elapsed target
-  reset_ts=$(iso_to_epoch "$resets_at") || return 1
+  local reset_ts start_ts elapsed
+  REPLY=""
+  iso_to_epoch "$resets_at" || return 1
+  reset_ts=$REPLY
   start_ts=$(( reset_ts - window_secs ))
   elapsed=$(( NOW_EPOCH - start_ts ))
   [ "$elapsed" -lt 0 ] && elapsed=0
   [ "$elapsed" -gt "$window_secs" ] && elapsed=$window_secs
-  target=$(( (elapsed * 100 + window_secs / 2) / window_secs ))
-  echo "$target"
+  REPLY=$(( (elapsed * 100 + window_secs / 2) / window_secs ))
 }
 
-# Format a reset timestamp into a short human-readable label
+# Lowercase the fixed vocab date emits (day abbreviations, AM/PM) without
+# tr forks. bash 3.2 has no ${var,,}, so map the known values directly.
+lower_day() {
+  case "$1" in
+    Mon) REPLY=mon ;; Tue) REPLY=tue ;; Wed) REPLY=wed ;; Thu) REPLY=thu ;;
+    Fri) REPLY=fri ;; Sat) REPLY=sat ;; Sun) REPLY=sun ;; *) REPLY="$1" ;;
+  esac
+}
+lower_ampm() {
+  case "$1" in
+    *AM) REPLY="${1%AM}am" ;; *PM) REPLY="${1%PM}pm" ;; *) REPLY="$1" ;;
+  esac
+}
+
+# Format a reset timestamp into a short human-readable label (in REPLY).
+# countdown style is pure arithmetic (zero forks on the stdin epoch path);
+# time/day styles cost one date fork (down from 3-6 date+tr forks).
 format_reset_label() {
   local resets_at="$1" style="$2"
-  local reset_ts
-  reset_ts=$(iso_to_epoch "$resets_at") || return 1
+  local reset_ts out d h
+  REPLY=""
+  iso_to_epoch "$resets_at" || return 1
+  reset_ts=$REPLY
+  REPLY=""
   # Round to nearest hour for cleaner display
   local rounded_ts=$(( (reset_ts + 1800) / 3600 * 3600 ))
   if [ "$style" = "time" ]; then
     # Short time like "11pm" or "3am"
     if [[ "${OSTYPE:-}" == darwin* ]]; then
-      date -r "$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' '
+      out=$(date -r "$rounded_ts" '+%-l%p' 2>/dev/null) || return 1
     else
-      date -d "@$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' '
+      out=$(date -d "@$rounded_ts" '+%-l%p' 2>/dev/null) || return 1
     fi
+    lower_ampm "${out// /}"
   elif [ "$style" = "day" ]; then
-    # Day + time like "Thu,3pm"
-    local d h
+    # Day + time like "thu,3pm" — both fields from one date call
     if [[ "${OSTYPE:-}" == darwin* ]]; then
-      d=$(date -r "$rounded_ts" '+%a' 2>/dev/null | tr '[:upper:]' '[:lower:]')
-      h=$(date -r "$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+      out=$(date -r "$rounded_ts" '+%a %-l%p' 2>/dev/null) || return 1
     else
-      d=$(date -d "@$rounded_ts" '+%a' 2>/dev/null | tr '[:upper:]' '[:lower:]')
-      h=$(date -d "@$rounded_ts" '+%-l%p' 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+      out=$(date -d "@$rounded_ts" '+%a %-l%p' 2>/dev/null) || return 1
     fi
-    echo "${d},${h}"
+    lower_day "${out%% *}"; d=$REPLY
+    lower_ampm "${out##* }"; h=$REPLY
+    REPLY="${d},${h}"
   elif [ "$style" = "countdown" ]; then
     # Time remaining until reset, like "2h20m", "3d4h", or "45m".
     # Uses the exact timestamp, not the hour-rounded one.
@@ -1031,15 +1177,16 @@ format_reset_label() {
     local hh=$(( (diff % 86400) / 3600 ))
     local mm=$(( (diff % 3600) / 60 ))
     if [ "$dd" -gt 0 ]; then
-      echo "${dd}d${hh}h"
+      REPLY="${dd}d${hh}h"
     elif [ "$hh" -gt 0 ]; then
-      echo "${hh}h${mm}m"
+      REPLY="${hh}h${mm}m"
     else
-      echo "${mm}m"
+      REPLY="${mm}m"
     fi
   fi
 }
 
+sl_profile "usage"
 # ── Context Window Progress Bar ───────────────────────────────
 # Visual bar showing how much of the context window has been consumed.
 # Colour shifts from green → yellow → red as usage increases.
@@ -1079,9 +1226,9 @@ build_progress_bar() {
   done
   bar+="$CLR_RESET"
 
-  # Output: colour\nbar — colour first so the newline survives command
-  # substitution even when colour is empty (mono theme / NO_COLOR)
-  printf '%s\n%s' "$colour" "$bar"
+  # Results via globals — a $(fn) substitution would fork a subshell
+  REPLY="$bar"
+  REPLY_COLOUR="$colour"
 }
 
 # ── Build Output Segments ─────────────────────────────────────
@@ -1122,9 +1269,9 @@ fi
 
 # Vim mode indicator (priority 3)
 if [ "$show_vim_mode" = "true" ]; then
-  vim_block=$(extract_block "$input" "vim")
+  extract_block "$input" "vim"; vim_block=$REPLY
   if [ -n "$vim_block" ]; then
-    vim_mode=$(extract_from "$vim_block" "mode")
+    extract_from "$vim_block" "mode"; vim_mode=$REPLY
     [ -n "$vim_mode" ] && add_seg "${CLR_INFO}${vim_mode}${CLR_RESET}" 3
   fi
 fi
@@ -1147,11 +1294,11 @@ fi
 
 # Agent name (priority 3)
 if [ "$show_agent" = "true" ]; then
-  agent_block=$(extract_block "$input" "agent")
+  extract_block "$input" "agent"; agent_block=$REPLY
   if [ -n "$agent_block" ]; then
-    agent_name=$(extract_from "$agent_block" "name")
+    extract_from "$agent_block" "name"; agent_name=$REPLY
     if [ -n "$agent_name" ]; then
-      agent_name=$(sanitize "$agent_name")
+      sanitize "$agent_name"; agent_name=$REPLY
       agent_icon=""
       [ "$use_icons" = "true" ] && agent_icon="▸ "
       add_seg "${CLR_MODEL}${agent_icon}${agent_name}${CLR_RESET}" 3
@@ -1162,11 +1309,11 @@ fi
 # Effort level (priority 5) — sent by Claude Code when the model supports
 # /effort. Shown as e.g. "eff:xhigh"; absent field hides the segment.
 if [ "$show_effort" = "true" ]; then
-  effort_block=$(extract_block "$input" "effort")
+  extract_block "$input" "effort"; effort_block=$REPLY
   if [ -n "$effort_block" ]; then
-    effort_level=$(extract_from "$effort_block" "level")
+    extract_from "$effort_block" "level"; effort_level=$REPLY
     if [ -n "$effort_level" ]; then
-      effort_level=$(sanitize "$effort_level")
+      sanitize "$effort_level"; effort_level=$REPLY
       add_seg "${CLR_INFO}eff:${effort_level}${CLR_RESET}" 5
     fi
   fi
@@ -1211,7 +1358,12 @@ if [ "$show_context_bar" = "true" ]; then
     esac
     if [ -z "$acw" ] && [ -f "${SCRIPT_DIR}/settings.json" ]; then
       acw_pattern='"autoCompactWindow"[[:space:]]*:[[:space:]]*([0-9]+)'
-      if [[ $(cat "${SCRIPT_DIR}/settings.json" 2>/dev/null) =~ $acw_pattern ]]; then
+      # Fork-free file read (a $(cat ...) substitution costs a subshell)
+      acw_settings=""
+      while IFS= read -r acw_line || [ -n "$acw_line" ]; do
+        acw_settings+="$acw_line"
+      done < "${SCRIPT_DIR}/settings.json" 2>/dev/null || acw_settings=""
+      if [[ $acw_settings =~ $acw_pattern ]]; then
         acw="${BASH_REMATCH[1]}"
       fi
     fi
@@ -1224,9 +1376,9 @@ if [ "$show_context_bar" = "true" ]; then
     fi
   fi
 
-  bar_output=$(build_progress_bar "$pct_int" "$compact_pct")
-  bar_clr="${bar_output%%$'\n'*}"
-  progress_bar="${bar_output#*$'\n'}"
+  build_progress_bar "$pct_int" "$compact_pct"
+  bar_clr="$REPLY_COLOUR"
+  progress_bar="$REPLY"
 
   # Warning: "auto" (default) fires within 20000 tokens of the auto-compact
   # point, matching Claude Code's own context-low timing on any window size.
@@ -1236,7 +1388,7 @@ if [ "$show_context_bar" = "true" ]; then
   if [ "${context_warn_threshold:-auto}" = "auto" ]; then
     if [ -n "$compact_tokens" ]; then
       used_tokens=""
-      [ -n "$cw_block" ] && used_tokens=$(extract_num_from "$cw_block" "total_input_tokens")
+      if [ -n "$cw_block" ]; then extract_num_from "$cw_block" "total_input_tokens"; used_tokens=$REPLY; fi
       used_tokens="${used_tokens%%.*}"
       [ -z "$used_tokens" ] && used_tokens=$(( pct_int * ctx_window / 100 ))
       if [ "$used_tokens" -ge $(( compact_tokens - 20000 )) ] 2>/dev/null; then
@@ -1273,8 +1425,8 @@ fi
 # Token counts (priority 5) — reuses $cw_block from context window extraction above
 if [ "$show_tokens" = "true" ]; then
   if [ -n "$cw_block" ]; then
-    tok_in=$(extract_num_from "$cw_block" "total_input_tokens")
-    tok_out=$(extract_num_from "$cw_block" "total_output_tokens")
+    extract_num_from "$cw_block" "total_input_tokens"; tok_in=$REPLY
+    extract_num_from "$cw_block" "total_output_tokens"; tok_out=$REPLY
     tok_in_k=$(( ${tok_in:-0} / 1000 ))
     tok_out_k=$(( ${tok_out:-0} / 1000 ))
     if [ "$auto_hide" != "true" ] || [ "$tok_in_k" -gt 0 ] || [ "$tok_out_k" -gt 0 ]; then
@@ -1294,13 +1446,13 @@ if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
   u5_target=""
   u5_label=""
   if [ -n "$usage_5h_resets" ]; then
-    u5_target=$(calc_pacing_target "$usage_5h_resets" $((5 * 3600))) || u5_target=""
+    calc_pacing_target "$usage_5h_resets" $((5 * 3600)) || true; u5_target=$REPLY
     u5_label_style="time"
     [ "$usage_label" = "countdown" ] && u5_label_style="countdown"
-    u5_reset_label=$(format_reset_label "$usage_5h_resets" "$u5_label_style") || u5_reset_label=""
+    format_reset_label "$usage_5h_resets" "$u5_label_style" || true; u5_reset_label=$REPLY
     [ -n "$u5_reset_label" ] && u5_label="(${u5_reset_label})"
   fi
-  u5_bar_output=$(build_progress_bar "$u5_int" "$u5_target")
+  build_progress_bar "$u5_int" "$u5_target"; u5_bar_output="$REPLY_COLOUR"$'\n'"$REPLY"
   u5_bar_clr="${u5_bar_output%%$'\n'*}"
   u5_bar="${u5_bar_output#*$'\n'}"
   add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_bar_clr}${u5_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage"
@@ -1312,13 +1464,13 @@ if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
   u7_target=""
   u7_label=""
   if [ -n "$usage_7d_resets" ]; then
-    u7_target=$(calc_pacing_target "$usage_7d_resets" $((7 * 86400))) || u7_target=""
+    calc_pacing_target "$usage_7d_resets" $((7 * 86400)) || true; u7_target=$REPLY
     u7_label_style="day"
     [ "$usage_label" = "countdown" ] && u7_label_style="countdown"
-    u7_reset_label=$(format_reset_label "$usage_7d_resets" "$u7_label_style") || u7_reset_label=""
+    format_reset_label "$usage_7d_resets" "$u7_label_style" || true; u7_reset_label=$REPLY
     [ -n "$u7_reset_label" ] && u7_label="(${u7_reset_label})"
   fi
-  u7_bar_output=$(build_progress_bar "$u7_int" "$u7_target")
+  build_progress_bar "$u7_int" "$u7_target"; u7_bar_output="$REPLY_COLOUR"$'\n'"$REPLY"
   u7_bar_clr="${u7_bar_output%%$'\n'*}"
   u7_bar="${u7_bar_output#*$'\n'}"
   add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_bar_clr}${u7_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage"
@@ -1369,12 +1521,12 @@ fi
 # Pull request (priority 6) — from the stdin pr block (CC 2.1.145+), so no
 # gh calls needed. Coloured by review state; vanishes when the PR closes.
 if [ "$show_pr" = "true" ]; then
-  pr_block=$(extract_block "$input" "pr")
+  extract_block "$input" "pr"; pr_block=$REPLY
   if [ -n "$pr_block" ]; then
-    pr_number=$(extract_num_from "$pr_block" "number")
+    extract_num_from "$pr_block" "number"; pr_number=$REPLY
     if [ -n "$pr_number" ]; then
       pr_number="${pr_number%%.*}"
-      pr_state=$(extract_from "$pr_block" "review_state")
+      extract_from "$pr_block" "review_state"; pr_state=$REPLY
       case "$pr_state" in
         approved)          pr_clr="$CLR_ADD" ;;
         changes_requested) pr_clr="$CLR_DEL" ;;
@@ -1482,7 +1634,7 @@ if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
 
   # Pre-compute visible widths (avoids repeated subshell forks in the loop)
   for (( i=0; i<seg_idx; i++ )); do
-    seg_widths[$i]=$(visible_width "${seg_vals[$i]}")
+    visible_width "${seg_vals[$i]}"; seg_widths[$i]=$REPLY
   done
 
   # Calculate total visible width (segments + separators)
@@ -1577,18 +1729,19 @@ if [ "$use_groups" = "true" ] && [ -n "$current_group" ] && [ "$group_has_conten
   output+="${group_close}"
 fi
 
+sl_profile "segments+render"
 # ── Line 1: Status bar ───────────────────────────────────────
 printf "%b" "$output"
 
 # ── Line 2: Live activity (optional) ────────────────────────
 
-# Visible width of the activity line: colour tokens were substituted with
-# raw SGR escape bytes, so strip that pattern before counting. No external
-# commands (sed-free), bash 3.2 safe; callers pay one $() subshell per call.
+# Visible width of the activity line (in REPLY): colour tokens were
+# substituted with raw SGR escape bytes, so strip that pattern before
+# counting. Pure bash, fork-free, bash 3.2 safe.
 activity_visible_width() {
   local s="$1" pat="${ESC_CH}\[[0-9;]*m"
   while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
-  echo "${#s}"
+  REPLY=${#s}
 }
 
 if [ -n "$activity_line" ]; then
@@ -1605,7 +1758,9 @@ if [ -n "$activity_line" ]; then
           # suffix appended below still fits inside COLUMNS.
           act_dropped=false
           act_limit="$COLUMNS"
-          while [ "$(activity_visible_width "$activity_line")" -gt "$act_limit" ]; do
+          while :; do
+            activity_visible_width "$activity_line"
+            [ "$REPLY" -gt "$act_limit" ] || break
             case "$activity_line" in
               *"  │  "*)
                 activity_line="${activity_line%"  │  "*}"
@@ -1618,7 +1773,8 @@ if [ -n "$activity_line" ]; then
           if [ "$act_dropped" = "true" ]; then
             activity_line="${activity_line}${CLR_DIM//\\033/$ESC_CH} …"
           fi
-          if [ "$(activity_visible_width "$activity_line")" -gt "$COLUMNS" ]; then
+          activity_visible_width "$activity_line"
+          if [ "$REPLY" -gt "$COLUMNS" ]; then
             # Still too wide (a single overlong part): plain hard cut
             act_pat="${ESC_CH}\[[0-9;]*m"
             while [[ $activity_line =~ $act_pat ]]; do
