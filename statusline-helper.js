@@ -6,10 +6,15 @@
 // (tool calls, subagent status, todo progress). Writes a simple cache file
 // that the bash statusline script can read.
 //
-// Usage: node statusline-helper.js <transcript_path> <cache_path>
+// Usage: node statusline-helper.js <transcript_path> <cache_path> [--colour]
 //
 // Cache format (one line): <epoch> <json>
 //   json: {"activity":"→ Edit main.ts  [Edit 5 · Read 4]  │  ⚒ research 12s"}
+//
+// With --colour the activity string carries zero-width tokens ({w},{o},{e},
+// {i},{d},{O},{h1}-{h3},{r0}-{r3},{s}) that the bash script maps to theme
+// colours after sanitization. Tokens are plain text, so they survive both
+// sanitize layers; without the flag the output is byte-identical to before.
 //
 // Parsing is incremental: a per-transcript cache stores the parse state plus
 // a byte offset, so each run only parses lines appended since the last one.
@@ -26,10 +31,16 @@ const crypto = require('crypto');
 const RECENT_MS = 5 * 60 * 1000;
 // Running tools show elapsed time once they run at least this long
 const TOOL_ELAPSED_MIN_S = 5;
+// Completion flash: a just-finished tool stays highlighted this long
+const FLASH_MS = 5 * 1000;
+// Elapsed-time heat tiers (seconds): below first = ok, below second = warn
+const HEAT_WARN_S = 30;
+const HEAT_HIGH_S = 120;
 
 // ── CLI args ────────────────────────────────────────────────
 const transcriptPath = process.argv[2];
 const cachePath = process.argv[3];
+const colourMode = process.argv.includes('--colour');
 
 if (!transcriptPath || !cachePath) {
   process.exit(1);
@@ -71,7 +82,7 @@ function writeParsedCache(transcriptPath, stat, offset, state) {
 }
 
 // ── Sanitize output ─────────────────────────────────────────
-function sanitize(str) {
+function sanitize(str, max) {
   if (!str) return '';
   return str
     .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')     // CSI sequences
@@ -79,7 +90,7 @@ function sanitize(str) {
     .replace(/\x1b\][^\x1b]*\x1b\\/g, '')        // OSC with ST
     .replace(/[\x00-\x1f\x7f]/g, '')             // control chars
     .replace(/[\u200b-\u200f\u2028-\u202f]/g, '') // Unicode bidi/zero-width
-    .slice(0, 200);                                // hard length limit
+    .slice(0, max || 200);                         // hard length limit
 }
 
 // ── Parse state ─────────────────────────────────────────────
@@ -304,6 +315,37 @@ function isRecent(t, now) {
   return !isNaN(ms) && (now - ms) <= RECENT_MS;
 }
 
+// Colour-token helpers. In plain mode every token collapses to '', keeping
+// the output byte-identical to pre-colour releases.
+function tk(token) {
+  return colourMode ? token : '';
+}
+
+// Heat tier for an elapsed duration: {h1} fine, {h2} taking a while, {h3} stuck
+function heatTk(elapsedS) {
+  if (!colourMode) return '';
+  if (elapsedS < HEAT_WARN_S) return '{h1}';
+  if (elapsedS < HEAT_HIGH_S) return '{h2}';
+  return '{h3}';
+}
+
+// Untrusted text could coincidentally contain colour tokens ({w}, {h1}, ...),
+// which would recolour the line (cosmetic only — substitution injects fixed
+// theme constants, never input). Defuse token lookalikes by swapping their
+// opening brace for a fullwidth one (text stays readable, e.g. shell ${a}
+// becomes $｛a}), looping to a fixed point so nested lookalikes like {h{x}1}
+// cannot reassemble into a live token.
+function defuse(str) {
+  if (!colourMode || !str) return str;
+  let s = String(str);
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(/\{(?=[A-Za-z][0-9]?\})/g, '｛');
+  } while (s !== prev);
+  return s;
+}
+
 function formatActivity(data) {
   const parts = [];
   const now = Date.now();
@@ -325,42 +367,53 @@ function formatActivity(data) {
     }
   }
 
-  // Running tools — elapsed time appears once a tool runs a few seconds
+  // Running tools — elapsed time appears once a tool runs a few seconds.
+  // Colour mode: tool name in warn yellow, target dim, elapsed heat-coloured,
+  // and the ▶ bullet becomes a {s} spinner slot the bash side animates.
   if (runningTools.length > 0) {
     let anyElapsed = false;
     const labels = runningTools.slice(-2).map(t => {
-      let label = t.target ? `${t.name} ${t.target}` : t.name;
+      let label = `${tk('{w}')}${defuse(t.name)}${tk('{d}')}`;
+      if (t.target) label += ` ${defuse(t.target)}`;
       const started = t.startTime ? new Date(t.startTime).getTime() : NaN;
       const elapsed = isNaN(started) ? 0 : Math.round((now - started) / 1000);
       if (elapsed >= TOOL_ELAPSED_MIN_S) {
-        label += ` ${formatDuration(elapsed)}`;
+        label += ` ${heatTk(elapsed)}${formatDuration(elapsed)}${tk('{d}')}`;
         anyElapsed = true;
       }
       return label;
     });
-    parts.push(`▶ ${labels.join(', ')}${anyElapsed ? '' : '...'}`);
+    parts.push(`${colourMode ? '{s}' : '▶'} ${labels.join(', ')}${anyElapsed ? '' : '...'}`);
   }
 
   const totalTools = Object.values(toolCounts).reduce((a, b) => a + b, 0);
 
-  // Last completed tool (only while recent) + compact total count
+  // Last completed tool (only while recent) + compact total count.
+  // Colour mode: a tool that finished within the last few seconds gets a
+  // bright green ✓ flash ({O}), then settles into the dim line.
   if (totalTools > 0) {
     let lastLabel = '';
     if (lastCompleted && isRecent(lastCompleted.endTime, now)) {
       lastLabel = lastCompleted.target
-        ? `${lastCompleted.name} ${lastCompleted.target}`
-        : lastCompleted.name;
+        ? `${defuse(lastCompleted.name)} ${defuse(lastCompleted.target)}`
+        : defuse(lastCompleted.name);
     }
 
     const sorted = Object.entries(toolCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
-      .map(([name, count]) => `${name} ${count}`)
+      .map(([name, count]) => `${defuse(name)} ${count}`)
       .join(' · ');
 
     if (runningTools.length === 0 && lastLabel) {
       // Nothing running — lead with the last action
-      parts.push(`→ ${lastLabel}  [${sorted}]`);
+      const endMs = new Date(lastCompleted.endTime).getTime();
+      const flashing = colourMode && !isNaN(endMs) && (now - endMs) <= FLASH_MS;
+      if (flashing) {
+        parts.push(`${tk('{i}')}→${tk('{d}')} {O}✓ ${lastLabel}{d}  [${sorted}]`);
+      } else {
+        parts.push(`${tk('{i}')}→${tk('{d}')} ${lastLabel}  [${sorted}]`);
+      }
     } else {
       // Something running — just show the summary
       parts.push(`[${sorted}]`);
@@ -369,8 +422,10 @@ function formatActivity(data) {
 
   // Most recent tool failure, shown briefly so errors don't pass unnoticed
   if (lastError && isRecent(lastError.endTime, now)) {
-    const label = lastError.target ? `${lastError.name} ${lastError.target}` : lastError.name;
-    parts.push(`✗ ${label}`);
+    const label = lastError.target
+      ? `${defuse(lastError.name)} ${defuse(lastError.target)}`
+      : defuse(lastError.name);
+    parts.push(`${tk('{e}')}✗ ${label}${tk('{d}')}`);
   }
 
   // Agent activity: running agents, else recently completed ones
@@ -380,15 +435,15 @@ function formatActivity(data) {
     for (const a of runningAgents.slice(-2)) {
       const started = a.startTime ? new Date(a.startTime).getTime() : NaN;
       const elapsed = isNaN(started) ? 0 : Math.round((now - started) / 1000);
-      const time = elapsed > 0 ? ` ${formatDuration(elapsed)}` : '';
-      const desc = a.description || a.type;
-      parts.push(`⚒ ${desc}${time}`);
+      const time = elapsed > 0 ? ` ${heatTk(elapsed)}${formatDuration(elapsed)}${tk('{d}')}` : '';
+      const desc = defuse(a.description) || defuse(a.type);
+      parts.push(`${tk('{w}')}⚒ ${desc}${tk('{d}')}${time}`);
     }
   } else if (recentDoneAgents.length > 0) {
     const count = recentDoneAgents.length;
     const last = recentDoneAgents[recentDoneAgents.length - 1];
-    const desc = last.description || last.type;
-    parts.push(`⚒ ${desc} ✓${count > 1 ? ` (${count})` : ''}`);
+    const desc = defuse(last.description) || defuse(last.type);
+    parts.push(`⚒ ${desc} ${tk('{o}')}✓${tk('{d}')}${count > 1 ? ` (${count})` : ''}`);
   }
 
   // Todo progress
@@ -396,13 +451,27 @@ function formatActivity(data) {
     const done = data.todos.filter(t => t.status === 'completed').length;
     const total = data.todos.length;
     const inProgress = data.todos.find(t => t.status === 'in_progress');
-    // Mini progress bar: ██░░ 2/5
+    // Mini progress bar: ██░░ 2/5. Colour mode shades the filled cells with
+    // a 4-step theme ramp ({r0}-{r3}) stretched across the filled portion.
     const barW = Math.min(total, 8);
     const filled = Math.round((done / total) * barW);
-    const bar = '█'.repeat(filled) + '░'.repeat(barW - filled);
+    let bar;
+    if (colourMode && filled > 0) {
+      bar = '';
+      let lastRamp = -1;
+      for (let i = 0; i < filled; i++) {
+        // Inclusive 0..3 mapping so the last filled cell reaches {r3}
+        const ramp = filled > 1 ? Math.round((i * 3) / (filled - 1)) : 0;
+        if (ramp !== lastRamp) { bar += `{r${ramp}}`; lastRamp = ramp; }
+        bar += '█';
+      }
+      bar += `{d}${'░'.repeat(barW - filled)}`;
+    } else {
+      bar = '█'.repeat(filled) + '░'.repeat(barW - filled);
+    }
     let todoText = `${bar} ${done}/${total}`;
     if (inProgress) {
-      todoText += ` ${inProgress.content}`;
+      todoText += ` ${defuse(inProgress.content)}`;
     }
     parts.push(todoText);
   }
@@ -455,7 +524,12 @@ function main() {
       todos: state.todos
     };
 
-    const activity = sanitize(formatActivity(data));
+    // Zero-width colour tokens eat into the cap, so allow extra headroom in
+    // colour mode; the bash side trims to the terminal width regardless.
+    let activity = sanitize(formatActivity(data), colourMode ? 320 : 200);
+    // The hard cap can land inside a colour token; drop a dangling fragment
+    // like '{', '{w' or '{r2' so it never renders as literal text
+    if (colourMode) activity = activity.replace(/\{[A-Za-z]?[0-9]?$/, '');
 
     // Write cache: "epoch json"
     const epoch = Math.floor(Date.now() / 1000);

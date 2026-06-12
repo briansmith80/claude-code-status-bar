@@ -20,6 +20,21 @@ set -e
 # Restrict file permissions for cache/temp files (not world-readable)
 umask 077
 
+# ${#s} and ${s:0:n} count characters per the locale; under a non-UTF-8
+# locale (LANG unset, LC_ALL=C) they count bytes, which over-trims line 2
+# and can slice a multibyte glyph. Probe and adopt a UTF-8 locale if needed.
+sl_probe='█'
+if [ "${#sl_probe}" -ne 1 ]; then
+  sl_saved_lc="${LC_ALL-}"
+  for sl_loc in C.UTF-8 en_US.UTF-8; do
+    export LC_ALL="$sl_loc" 2>/dev/null
+    [ "${#sl_probe}" -eq 1 ] && break
+    if [ -n "$sl_saved_lc" ]; then export LC_ALL="$sl_saved_lc"; else unset LC_ALL; fi
+  done
+  unset sl_saved_lc sl_loc
+fi
+unset sl_probe
+
 SCRIPT_DIR="${HOME}/.claude"
 VERSION_FILE="${SCRIPT_DIR}/.statusline-version"
 VERSION="unknown"
@@ -230,6 +245,8 @@ bar_width=10
 branch_max_length=""
 show_activity=true
 activity_ttl_seconds=120
+activity_colour=true
+activity_fresh_seconds=45
 # Consumed by statusline-subagent.js (the subagent panel renderer); declared
 # here so it appears in --dump-config alongside everything else
 subagent_rows=true
@@ -262,6 +279,8 @@ case "${1:-}" in
       printf 'group_close=%s\n'            "${group_close}"
       printf 'group_open=%s\n'             "${group_open}"
       printf 'max_width=%s\n'              "${max_width}"
+      printf 'activity_colour=%s\n'        "${activity_colour}"
+      printf 'activity_fresh_seconds=%s\n' "${activity_fresh_seconds}"
       printf 'activity_ttl_seconds=%s\n'   "${activity_ttl_seconds}"
       printf 'show_activity=%s\n'          "${show_activity}"
       printf 'show_agent=%s\n'             "${show_agent}"
@@ -379,6 +398,8 @@ apply_theme() {
       CLR_BAR_MED="\033[38;5;179m" # aurora yellow
       CLR_BAR_HIGH="\033[38;5;174m" # aurora red
       CLR_PACE="\033[38;5;199m"    # hot pink pacing marker
+      CLR_RAMP0="\033[38;5;108m" CLR_RAMP1="\033[38;5;151m" # todo-bar gradient
+      CLR_RAMP2="\033[38;5;179m" CLR_RAMP3="\033[38;5;174m" # green->red, aurora
       CLR_RESET="\033[0m"
       ;;
     dracula)
@@ -396,6 +417,8 @@ apply_theme() {
       CLR_BAR_MED="\033[38;5;228m" # yellow
       CLR_BAR_HIGH="\033[38;5;210m" # red
       CLR_PACE="\033[38;5;212m"    # pink pacing marker
+      CLR_RAMP0="\033[38;5;84m"  CLR_RAMP1="\033[38;5;120m" # todo-bar gradient
+      CLR_RAMP2="\033[38;5;228m" CLR_RAMP3="\033[38;5;210m" # green->pink-red
       CLR_RESET="\033[0m"
       ;;
     solarized)
@@ -413,6 +436,8 @@ apply_theme() {
       CLR_BAR_MED="\033[38;5;136m" # yellow
       CLR_BAR_HIGH="\033[38;5;160m" # red
       CLR_PACE="\033[38;5;125m"    # magenta pacing marker
+      CLR_RAMP0="\033[38;5;64m"  CLR_RAMP1="\033[38;5;106m" # todo-bar gradient
+      CLR_RAMP2="\033[38;5;136m" CLR_RAMP3="\033[38;5;166m" # green->orange
       CLR_RESET="\033[0m"
       ;;
     tokyo-night)
@@ -430,6 +455,8 @@ apply_theme() {
       CLR_BAR_MED="\033[38;5;179m" # yellow #e0af68
       CLR_BAR_HIGH="\033[38;5;204m" # red #f7768e
       CLR_PACE="\033[38;5;198m"   # pink #ff007c
+      CLR_RAMP0="\033[38;5;149m" CLR_RAMP1="\033[38;5;186m" # todo-bar gradient
+      CLR_RAMP2="\033[38;5;179m" CLR_RAMP3="\033[38;5;204m" # green->red
       CLR_RESET="\033[0m"
       ;;
     catppuccin)
@@ -447,12 +474,15 @@ apply_theme() {
       CLR_BAR_MED="\033[38;5;223m" # yellow #f9e2af
       CLR_BAR_HIGH="\033[38;5;211m" # red #f38ba8
       CLR_PACE="\033[38;5;218m"   # pink #f5c2e7
+      CLR_RAMP0="\033[38;5;150m" CLR_RAMP1="\033[38;5;151m" # todo-bar gradient
+      CLR_RAMP2="\033[38;5;223m" CLR_RAMP3="\033[38;5;216m" # green->peach
       CLR_RESET="\033[0m"
       ;;
     mono)
       CLR_DIR="" CLR_BRANCH="" CLR_MODEL="" CLR_MODEL_OPUS="" CLR_MODEL_FABLE=""
       CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO="" CLR_DIM=""
       CLR_BAR_OK="" CLR_BAR_MED="" CLR_BAR_HIGH="" CLR_PACE=""
+      CLR_RAMP0="" CLR_RAMP1="" CLR_RAMP2="" CLR_RAMP3=""
       CLR_RESET=""
       ;;
     *) # default — original colours
@@ -470,6 +500,8 @@ apply_theme() {
       CLR_BAR_MED="\033[0;33m" # yellow
       CLR_BAR_HIGH="\033[0;31m" # red
       CLR_PACE="\033[38;5;199m"  # hot pink pacing marker
+      CLR_RAMP0="\033[38;5;46m"  CLR_RAMP1="\033[38;5;112m" # todo-bar gradient
+      CLR_RAMP2="\033[38;5;178m" CLR_RAMP3="\033[38;5;208m" # green->orange
       CLR_RESET="\033[0m"
       ;;
   esac
@@ -522,12 +554,17 @@ extract_block() {
 extract()     { extract_from "$input" "$1"; }
 extract_num() { extract_num_from "$input" "$1"; }
 
+# Real ESC/BEL bytes for sed patterns: BSD sed (stock macOS) does not
+# interpret \x1b hex escapes, so the bytes are interpolated from bash instead.
+ESC_CH=$'\x1b'
+BEL_CH=$'\x07'
+
 # Strip ANSI escape sequences and control characters from untrusted strings.
 # Handles CSI (ESC[...), OSC terminated by BEL or ST (ESC\), and DCS/APC.
 sanitize() {
   local val="$1"
   # Remove ANSI escape sequences (CSI, OSC with BEL, OSC with ST)
-  val=$(printf '%s' "$val" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b\][^\x1b]*\x1b\\//g; s/\x1b[PX_^][^\x1b]*\x1b\\//g')
+  val=$(printf '%s' "$val" | sed "s/${ESC_CH}\[[0-9;]*[a-zA-Z]//g; s/${ESC_CH}\][^${BEL_CH}]*${BEL_CH}//g; s/${ESC_CH}\][^${ESC_CH}]*${ESC_CH}\\\\//g; s/${ESC_CH}[PX_^][^${ESC_CH}]*${ESC_CH}\\\\//g")
   # Remove remaining control characters (except space)
   val=$(printf '%s' "$val" | tr -d '\000-\037\177')
   echo "$val"
@@ -535,7 +572,7 @@ sanitize() {
 
 # Strip ANSI escapes for width measurement (used by truncation)
 strip_ansi() {
-  printf '%b' "$1" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b\][^\x1b]*\x1b\\//g'
+  printf '%b' "$1" | sed "s/${ESC_CH}\[[0-9;]*[a-zA-Z]//g; s/${ESC_CH}\][^${BEL_CH}]*${BEL_CH}//g; s/${ESC_CH}\][^${ESC_CH}]*${ESC_CH}\\\\//g"
 }
 
 visible_width() {
@@ -662,29 +699,101 @@ ACTIVITY_CACHE_FILE="${SCRIPT_DIR}/.statusline-activity-cache"
 [ -n "$session_id" ] && ACTIVITY_CACHE_FILE="${SCRIPT_DIR}/.statusline-activity-cache.${session_id:0:8}"
 HELPER_SCRIPT="${SCRIPT_DIR}/statusline-helper.js"
 activity_line=""
+activity_has_colour=false
+
+# Map the helper's zero-width colour tokens to theme colours. Tokens are
+# plain text, so they survive both sanitize layers; only fixed CLR_*
+# constants are ever substituted in, never input. {d} re-asserts the
+# line-wide dim instead of resetting, mirroring build_progress_bar. While
+# the cache is older than activity_fresh_seconds the colours are dropped,
+# so stale data reads as stale (the old all-dim look). {s} is a spinner
+# slot: the frame comes from the clock, so it animates at whatever rate
+# Claude Code re-runs the script (e.g. refreshInterval=1).
+apply_activity_tokens() {
+  case "$activity_line" in *"{"*"}"*) ;; *) return 0 ;; esac
+  local stale=false spin="▶" flash="" t
+  case "$activity_fresh_seconds" in ''|*[!0-9]*) activity_fresh_seconds=45 ;; esac
+  [ $(( NOW_EPOCH - cached_act_ts )) -gt "$activity_fresh_seconds" ] && stale=true
+  if [ "$activity_colour" = "true" ] && [ "$stale" = "false" ]; then
+    case $(( NOW_EPOCH % 4 )) in
+      0) spin="⠋" ;; 1) spin="⠙" ;; 2) spin="⠸" ;; *) spin="⠴" ;;
+    esac
+    # Substitute RAW escape bytes (not literal \033 text): line 2 is printed
+    # with %s, so printf %b never runs over transcript-derived content and
+    # cannot be tricked into decoding \n, \u, ... smuggled into the cache.
+    # ${CLR_X//\\033/$ESC_CH} converts the theme constants without a fork.
+    local W="${CLR_WARN//\\033/$ESC_CH}" A="${CLR_ADD//\\033/$ESC_CH}"
+    local E="${CLR_DEL//\\033/$ESC_CH}" I="${CLR_INFO//\\033/$ESC_CH}"
+    local DM="${CLR_DIM//\\033/$ESC_CH}"
+    local H1="${CLR_BAR_OK//\\033/$ESC_CH}" H2="${CLR_BAR_MED//\\033/$ESC_CH}"
+    local H3="${CLR_BAR_HIGH//\\033/$ESC_CH}"
+    local R0="${CLR_RAMP0//\\033/$ESC_CH}" R1="${CLR_RAMP1//\\033/$ESC_CH}"
+    local R2="${CLR_RAMP2//\\033/$ESC_CH}" R3="${CLR_RAMP3//\\033/$ESC_CH}"
+    if [ -n "$A" ]; then
+      flash="${ESC_CH}[1m${A}"
+      # A flash on the line: make {d} also clear bold (SGR 22), else the
+      # bold from {O} bleeds into the rest of line 2 on 256-colour themes
+      case "$activity_line" in *"{O}"*) DM="${ESC_CH}[22m${DM}" ;; esac
+    fi
+    activity_line="${activity_line//'{s}'/${W}${spin}${DM}}"
+    activity_line="${activity_line//'{w}'/$W}"
+    activity_line="${activity_line//'{o}'/$A}"
+    activity_line="${activity_line//'{e}'/$E}"
+    activity_line="${activity_line//'{i}'/$I}"
+    activity_line="${activity_line//'{O}'/$flash}"
+    activity_line="${activity_line//'{h1}'/$H1}"
+    activity_line="${activity_line//'{h2}'/$H2}"
+    activity_line="${activity_line//'{h3}'/$H3}"
+    activity_line="${activity_line//'{r0}'/$R0}"
+    activity_line="${activity_line//'{r1}'/$R1}"
+    activity_line="${activity_line//'{r2}'/$R2}"
+    activity_line="${activity_line//'{r3}'/$R3}"
+    activity_line="${activity_line//'{d}'/$DM}"
+    activity_has_colour=true
+  else
+    # Colour disabled or data stale: strip tokens for the plain dim look
+    activity_line="${activity_line//'{s}'/▶}"
+    for t in w o e i O h1 h2 h3 r0 r1 r2 r3 d; do
+      activity_line="${activity_line//"{$t}"/}"
+    done
+  fi
+}
 
 if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
   if command -v node > /dev/null 2>&1 && [ -f "$HELPER_SCRIPT" ]; then
     # Spawn helper in background (non-blocking); the same subshell sweeps
     # per-session caches older than a day so they never accumulate
     ( find "$SCRIPT_DIR" -maxdepth 1 -name '.statusline-activity-cache.*' -mmin +1440 -delete 2>/dev/null
-      node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null ) &
+      if [ "$activity_colour" = "true" ]; then
+        node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null
+      else
+        node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null
+      fi ) &
 
     # Read cached activity from previous run
     if [ -f "$ACTIVITY_CACHE_FILE" ]; then
       cached_act_ts="" cached_act_json=""
       { read -r cached_act_ts cached_act_json; } < "$ACTIVITY_CACHE_FILE" 2>/dev/null || true
-      case "$cached_act_ts" in *[!0-9]*) cached_act_ts=0 ;; esac
+      # Reject non-digits and leading zeroes (bash arithmetic reads 0089 as
+      # a bad octal and prints an error during expansion)
+      case "$cached_act_ts" in *[!0-9]*|0[0-9]*) cached_act_ts=0 ;; esac
       # Expire after activity_ttl_seconds. The default (120) stays comfortably
       # above typical refreshInterval values so line 2 survives idle timer
       # refreshes while a long subagent or workflow is running.
       case "$activity_ttl_seconds" in ''|*[!0-9]*) activity_ttl_seconds=120 ;; esac
       if [ -n "$cached_act_ts" ] && [ $(( NOW_EPOCH - cached_act_ts )) -le "$activity_ttl_seconds" ] 2>/dev/null; then
-        # Extract "activity" value from simple JSON {"activity":"..."}
-        act_pattern='"activity"[[:space:]]*:[[:space:]]*"([^"]*)"'
+        # Extract "activity" value from simple JSON {"activity":"..."},
+        # tolerating JSON-escaped quotes and backslashes inside the value
+        act_pattern='"activity"[[:space:]]*:[[:space:]]*"(([^"\]|\\.)*)"'
         if [[ ${cached_act_json:-} =~ $act_pattern ]]; then
           activity_line="${BASH_REMATCH[1]}"
+          # Unescape the JSON encodings the helper can produce (\" and \\).
+          # Anything else (\n, \u, ...) stays literal text: line 2 is
+          # printed with %s, never %b, so it can't decode into controls
+          activity_line="${activity_line//\\\"/\"}"
+          activity_line="${activity_line//\\\\/\\}"
           activity_line=$(sanitize "$activity_line")
+          apply_activity_tokens
         fi
       fi
     fi
@@ -991,9 +1100,11 @@ add_seg() {
   seg_idx=$((seg_idx + 1))
 }
 
-# Session start placeholder — before first API response, fields are null/empty
+# Session start placeholder — before first API response, fields are null/empty.
+# Plain ${CLR_DIM}: apply_theme always sets it, and the mono/NO_COLOR theme
+# sets it empty on purpose (a :-fallback here would leak \033[2m under NO_COLOR)
 if [ -z "$model" ] && [ -z "$used" ]; then
-  printf "%b" "${CLR_DIM:-\033[2m}Starting...${CLR_RESET}"
+  printf "%b" "${CLR_DIM}Starting...${CLR_RESET}"
   exit 0
 fi
 
@@ -1470,17 +1581,60 @@ fi
 printf "%b" "$output"
 
 # ── Line 2: Live activity (optional) ────────────────────────
+
+# Visible width of the activity line: colour tokens were substituted with
+# raw SGR escape bytes, so strip that pattern before counting. No external
+# commands (sed-free), bash 3.2 safe; callers pay one $() subshell per call.
+activity_visible_width() {
+  local s="$1" pat="${ESC_CH}\[[0-9;]*m"
+  while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
+  echo "${#s}"
+}
+
 if [ -n "$activity_line" ]; then
   # Trim to the terminal width (Claude Code >= 2.1.153 sets COLUMNS) so a
   # long activity line never wraps and pushes line 1 out of view
   case "${COLUMNS:-}" in
     ''|*[!0-9]*) : ;;
     *)
-      if [ "$COLUMNS" -gt 1 ] && [ "${#activity_line}" -gt "$COLUMNS" ]; then
-        activity_line="${activity_line:0:$((COLUMNS - 1))}…"
+      if [ "$COLUMNS" -gt 1 ]; then
+        if [ "$activity_has_colour" = "true" ]; then
+          # Colour-aware trim: drop whole '  │  ' parts from the end until
+          # the line fits — never cuts inside an escape sequence. Once a
+          # part has been dropped the budget shrinks by 2 so the ' …'
+          # suffix appended below still fits inside COLUMNS.
+          act_dropped=false
+          act_limit="$COLUMNS"
+          while [ "$(activity_visible_width "$activity_line")" -gt "$act_limit" ]; do
+            case "$activity_line" in
+              *"  │  "*)
+                activity_line="${activity_line%"  │  "*}"
+                act_dropped=true
+                act_limit=$((COLUMNS - 2))
+                ;;
+              *) break ;;
+            esac
+          done
+          if [ "$act_dropped" = "true" ]; then
+            activity_line="${activity_line}${CLR_DIM//\\033/$ESC_CH} …"
+          fi
+          if [ "$(activity_visible_width "$activity_line")" -gt "$COLUMNS" ]; then
+            # Still too wide (a single overlong part): plain hard cut
+            act_pat="${ESC_CH}\[[0-9;]*m"
+            while [[ $activity_line =~ $act_pat ]]; do
+              activity_line="${activity_line//"${BASH_REMATCH[0]}"/}"
+            done
+            activity_line="${activity_line:0:$((COLUMNS - 1))}…"
+          fi
+        elif [ "${#activity_line}" -gt "$COLUMNS" ]; then
+          activity_line="${activity_line:0:$((COLUMNS - 1))}…"
+        fi
       fi
       ;;
   esac
   printf '\n'
-  printf "%b" "${CLR_DIM}${activity_line}${CLR_RESET}"
+  # %s for the activity content: it may carry raw colour bytes from token
+  # substitution but must never be %b-decoded (transcript-derived text).
+  # The dim wrapper and reset are trusted theme constants, %b is fine there.
+  printf "%b%s%b" "${CLR_DIM}" "${activity_line}" "${CLR_RESET}"
 fi

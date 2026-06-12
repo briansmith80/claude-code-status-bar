@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.7.0] - 2026-06-12
+
+The activity line gets colour: active work pops in theme colours while history stays dim.
+
+### Added
+
+- **Colourful activity line** (`activity_colour=true`, default on): line 2 graduates from all-dim grey to per-segment theme colours. Running tools and agents render in the theme's warning colour behind a clock-driven spinner (`⠋⠙⠸⠴`, advances on every re-render; pair with a `refreshInterval` statusLine setting comfortably above the script's runtime, e.g. `1` on macOS/Linux, `5`+ on Windows where MSYS bash runs take 1-3s and a too-low interval makes Claude Code abort every run and blank the bar); elapsed times are heat-coloured (green under 30s, yellow under 2m, red beyond); failures are red; a just-finished tool flashes bright green with a `✓` for ~5 seconds; the todo bar's filled cells shade through a per-theme 4-step gradient (new `CLR_RAMP0`-`CLR_RAMP3` in every theme). When the cached data is older than `activity_fresh_seconds` (default 45) the colours drop back to all-dim, so stale data reads as stale. All seven themes, `NO_COLOR`, and mono degrade cleanly. Architecture: the helper emits zero-width plain-text tokens that survive both sanitize layers; bash maps them to theme constants after sanitization and prints line 2 with `%s`, so transcript-derived text is never `%b`-decoded.
+- **12 new BATS tests** (`tests/activity_colour.bats`, suite now 81) covering token emission, back-compat plain output, token-lookalike defusing, theme mapping, flash/gradient, stale fade, the `activity_colour` toggle, `NO_COLOR`, quote unescaping, decode-injection safety, the colour-aware trim, and `--dump-config`.
+
+### Fixed
+
+- **Line 2 width trim is now ANSI-aware**: it drops whole `  │  ` parts until the line fits instead of hard-cutting by byte count (which over-counted escape bytes and could slice mid-sequence).
+- **A double quote in displayed content no longer truncates line 2**: the cache extraction now tolerates JSON-escaped quotes and unescapes them for display.
+- **`NO_COLOR` leak in the `Starting...` placeholder**: it emitted a hardcoded `\033[2m` fallback even under `NO_COLOR`/mono.
+- **`sanitize`/`strip_ansi` now work on BSD sed (stock macOS)**: the patterns interpolate real ESC/BEL bytes instead of `\x1b` hex escapes that only GNU sed understands.
+- **Non-UTF-8 locales no longer over-trim line 2**: the script probes `${#}` character semantics at startup and adopts a UTF-8 locale when the active one counts bytes, so multibyte glyphs aren't sliced by the width trim.
+- **A corrupted activity cache timestamp with leading zeroes (e.g. `0089`) no longer prints a bash arithmetic error** to stderr.
+
 ## [2.6.1] - 2026-06-10
 
 Scope honesty for the subagent renderer, and Windows installs that survive every spawn shell.

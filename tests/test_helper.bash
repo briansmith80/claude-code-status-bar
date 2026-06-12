@@ -66,11 +66,14 @@ run_statusline_env() {
 
 # Strip ANSI escape sequences (CSI, OSC) from input.
 # Reads from $1 if given, else from stdin.
+# Real ESC/BEL bytes are interpolated because BSD sed (macOS) does not
+# understand \x1b hex escapes in patterns.
 strip_ansi() {
+  local esc=$'\x1b' bel=$'\x07'
   if [ $# -gt 0 ]; then
-    printf '%s' "$1" | sed -e 's/\x1b\[[0-9;]*[a-zA-Z]//g' -e 's/\x1b\][^\x07]*\x07//g'
+    printf '%s' "$1" | sed -e "s/${esc}\[[0-9;]*[a-zA-Z]//g" -e "s/${esc}\][^${bel}]*${bel}//g"
   else
-    sed -e 's/\x1b\[[0-9;]*[a-zA-Z]//g' -e 's/\x1b\][^\x07]*\x07//g'
+    sed -e "s/${esc}\[[0-9;]*[a-zA-Z]//g" -e "s/${esc}\][^${bel}]*${bel}//g"
   fi
 }
 

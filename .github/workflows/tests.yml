@@ -52,7 +52,9 @@ jobs:
         # pure bash, so run it straight from a pinned clone instead.
         run: git clone --depth 1 --branch v1.13.0 https://github.com/bats-core/bats-core.git "$HOME/bats-core"
       - name: Run tests
-        run: '"$HOME/bats-core/bin/bats" tests/'
+        # The runner's preinstalled node lives outside the MSYS PATH; expose
+        # it so the helper/subagent tests run instead of silently skipping
+        run: 'PATH="$PATH:/c/Program Files/nodejs" "$HOME/bats-core/bin/bats" tests/'
       - name: Validate install.ps1
         shell: pwsh
         run: |

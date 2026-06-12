@@ -144,21 +144,23 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 
 **Line 1** is the metrics bar: directory, branch, model, context, usage limits, git state, duration, cost.
 
-**Line 2** is the live activity line, rendered dim so it stays out of the way:
+**Line 2** is the live activity line. Active work pops in theme colours while history recedes into dim text:
 
 ```
-→ Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests
+⠙ Bash npm test 1m24s  │  → Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests
 ```
 
 | You see | It means |
 |---------|----------|
-| `▶ Edit main.ts...` | Tools running right now (up to the last two); elapsed time appears once a tool runs over 5 seconds, e.g. `▶ Bash npm test 45s` |
-| `→ Edit main.ts` | The last completed tool, shown when nothing is running |
-| `✗ Bash npm test` | The most recent tool failure, shown for five minutes |
+| `⠙ Edit main.ts...` | Tools running right now (up to the last two), in the theme's warning colour behind a spinner; elapsed time appears once a tool runs over 5 seconds and is heat-coloured (green under 30s, yellow under 2m, red beyond, so "stuck" is visible at a glance) |
+| `→ Edit main.ts` | The last completed tool, shown when nothing is running; flashes bright green with a `✓` for its first ~5 seconds |
+| `✗ Bash npm test` | The most recent tool failure, in red, shown for five minutes |
 | `[Edit 5 · Read 4 · Bash 2]` | The top three tool counts for the session |
-| `⚒ research 12s` | A running subagent with its elapsed time |
+| `⚒ research 12s` | A running subagent (warning colour) with its heat-coloured elapsed time |
 | `⚒ research ✓ (2)` | Finished subagents (and how many) |
-| `██░░░ 2/5 Add tests` | Todo progress plus the current in-progress item |
+| `██░░░ 2/5 Add tests` | Todo progress; filled cells shade through a per-theme gradient |
+
+The spinner picks its frame from the clock, so it advances at whatever rate Claude Code re-runs the script: each event-driven re-render, plus the `refreshInterval` statusLine setting if you set one. **Pick a `refreshInterval` comfortably above the script's runtime on your machine.** Claude Code aborts an in-flight run when the next one starts, and an aborted run blanks the whole bar, so an interval that's too low erases the status line entirely. On macOS/Linux the script runs in well under 200ms and `1` is fine; on Windows (MSYS bash) a run takes 1-3 seconds, so use `5` or higher there. When the cached activity ages past `activity_fresh_seconds` (default 45) the colours drop back to all-dim, so stale data reads as stale, powerlevel10k style. Set `activity_colour=false` to keep the classic all-dim line permanently; `NO_COLOR` and the mono theme degrade to plain text automatically.
 
 Good to know:
 
@@ -227,7 +229,7 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
 | Cost rate | `$2.10/hr` | `show_cost_rate` *(off)* | Burn rate; appears once the session is over a minute old |
 | Update notice | `↑ update available` | *(automatic)* | Background version check against GitHub every 6 hours |
-| Live activity | *(line 2, see above)* | `show_activity` | Running tools, tool counts, subagents, todo progress |
+| Live activity | *(line 2, see above)* | `show_activity` | Running tools, tool counts, subagents, todo progress; `activity_colour=false` for the classic all-dim look |
 
 Before the first API response of a session, the bar shows a dim `Starting...` placeholder. That is normal; the real segments appear as soon as Claude Code sends model and context data.
 
@@ -311,6 +313,8 @@ show_worktree=true
 show_cost=true
 show_cost_rate=false        # opt-in; shows after the session is a minute old
 show_activity=true          # the live line 2 (requires Node.js)
+activity_colour=true        # per-segment colours, spinner, flash, heat, gradient
+activity_fresh_seconds=45   # drop line 2 back to all-dim when data is older than this
 activity_ttl_seconds=120    # hide line 2 when its cache is older than this
 subagent_rows=true          # styled subagent panel rows (requires Node.js)
 
@@ -471,7 +475,7 @@ claude-code-status-bar/
 
 ## Testing
 
-A BATS suite under [`tests/`](tests/) covers schema parsing (old flat, new nested, and the CC 2.1.x shapes), segments, all seven themes, `NO_COLOR`, config overrides, context window formatting and compaction awareness, the live activity helper, and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
+A BATS suite under [`tests/`](tests/) covers schema parsing (old flat, new nested, and the CC 2.1.x shapes), segments, all seven themes, `NO_COLOR`, config overrides, context window formatting and compaction awareness, the live activity helper, the colourful activity line (token mapping, stale fade, injection safety, width trim), and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
 
 To run locally, install [bats-core](https://github.com/bats-core/bats-core):
 
@@ -494,6 +498,7 @@ See [`tests/README.md`](tests/README.md) for layout details.
 ## Troubleshooting
 
 - **The bar doesn't appear at all.** Check that `~/.claude/settings.json` has the `statusLine` entry (the installer skips this step if any `statusLine` entry already exists, including one from a different status line). Then wait for the next Claude Code response; the bar renders after responses, not on launch.
+- **The bar disappeared after setting a low `refreshInterval`.** Claude Code aborts an in-flight statusLine run when the next one starts, and an aborted run blanks the bar. If the interval is below the script's runtime (1-3 seconds on Windows under MSYS bash, ~100ms on macOS/Linux), every run is aborted and nothing ever renders. Raise the interval (`5`+ on Windows) or remove it.
 - **The bar just says `Starting...`** Normal. It means Claude Code hasn't sent model or context data yet, which happens at the start of every session.
 - **A segment I enabled isn't showing.** Most segments auto-hide when their value is zero or their data is missing. Run `bash ~/.claude/statusline-command.sh --dump-config` to confirm your override took effect, and `--dump-stdin` to see which fields your Claude Code version actually sends.
 - **Usage segments are missing.** On Claude Code 2.1+ they should appear automatically from stdin. For the OAuth fallback: check credentials exist (see [Credentials](#credentials-oauth-fallback-only)), then clear the caches and let them refresh: `rm -f ~/.claude/.statusline-usage-cache ~/.claude/.statusline-usage-backoff`. The backoff file matters: after repeated failures the script waits up to 30 minutes before retrying.
@@ -515,6 +520,7 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.7.0**: Colourful activity line: per-segment theme colours, a clock-driven spinner on running tools, heat-coloured elapsed times, completion flash, gradient todo bar, and stale-fade, with `activity_colour=false` restoring the classic all-dim look. Plus ANSI-aware width trimming and four long-standing fixes (quote truncation, `NO_COLOR` leak, BSD sed, non-UTF-8 locales).
 - **2.6.1**: Windows install hardening: settings.json gets quoted Windows-native paths (the MSYS `/c/...` form broke the subagent renderer under PowerShell/cmd spawns), both installers migrate their own older commands on re-run, and docs now state the renderer's real scope (Task-tool subagent rows only).
 - **2.6.0**: Compaction-aware context warnings (a `│` marker at the auto-compact point, `▲` timed to Claude Code's own warning), the `▲ 200k+` segment retired, and a native Windows PowerShell installer.
 - **2.5.0**: Subagent panel renderer: status icons, elapsed time, token cost, and live `tok/s` burn rate for every running Task-tool subagent.
