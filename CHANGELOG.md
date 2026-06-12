@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.9.0] - 2026-06-12
+
+Clickable PR links, two opt-in activity effects, and tag-driven release automation.
+
+### Added
+
+- **Clickable PR segment** (`pr_link=true`, default on): the `PR #1234` segment now wraps in an OSC 8 hyperlink to `pr.url` from stdin, so it click-opens the pull request in terminals with hyperlink support (Claude Code converts OSC 8 into real links; unsupported terminals degrade to plain text). URLs pass a strict allowlist (https only, no characters that could escape the OSC payload); anything else renders the plain segment. The truncation width maths is OSC 8 aware.
+- **`activity_pulse=false`** (opt-in): the running tool/agent label on line 2 breathes, alternating bold and faint each re-render. Intensity is cleared with SGR 22 at segment boundaries so it never bleeds.
+- **`activity_scanner=false`** (opt-in): while something has been running long enough to earn a heat tier (30s+), a small 8-cell tracker with a theme-accent cell sweeps left-right-left at the end of line 2, one step per re-render. Both effects are pure bash-side, so there is no helper version skew, and both are no-ops under `NO_COLOR`/mono defaults.
+- **Tag-driven release automation** (`.github/workflows/release.yml`): pushing a `v*` tag verifies that `VERSION`, `plugin.json`, and `CHANGELOG.md` agree, extracts the matching changelog section, and publishes the GitHub release. Retires the manual `gh release create` step and the drift class of release mistakes.
+- **6 new BATS tests** (`tests/pr_link.bats` plus pulse/scanner/defaults coverage in `tests/activity_colour.bats`; suite now 93).
+
 ## [2.8.0] - 2026-06-12
 
 4.5x faster on Windows: the script now renders in ~285ms there (down from ~1286ms), making `refreshInterval: 2` comfortable on Windows and keeping macOS/Linux well under 100ms.

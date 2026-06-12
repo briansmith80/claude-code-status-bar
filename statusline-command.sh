@@ -256,6 +256,7 @@ show_usage_5h=true
 show_usage_7d=true
 usage_label="clock"
 show_pr=true
+pr_link=true
 usage_cache_seconds=600
 auto_hide=true
 use_icons=true
@@ -277,6 +278,8 @@ show_activity=true
 activity_ttl_seconds=120
 activity_colour=true
 activity_fresh_seconds=45
+activity_pulse=false
+activity_scanner=false
 # Consumed by statusline-subagent.js (the subagent panel renderer); declared
 # here so it appears in --dump-config alongside everything else
 subagent_rows=true
@@ -311,6 +314,8 @@ case "${1:-}" in
       printf 'max_width=%s\n'              "${max_width}"
       printf 'activity_colour=%s\n'        "${activity_colour}"
       printf 'activity_fresh_seconds=%s\n' "${activity_fresh_seconds}"
+      printf 'activity_pulse=%s\n'         "${activity_pulse}"
+      printf 'activity_scanner=%s\n'       "${activity_scanner}"
       printf 'activity_ttl_seconds=%s\n'   "${activity_ttl_seconds}"
       printf 'show_activity=%s\n'          "${show_activity}"
       printf 'show_agent=%s\n'             "${show_agent}"
@@ -326,6 +331,7 @@ case "${1:-}" in
       printf 'show_fast_mode=%s\n'         "${show_fast_mode}"
       printf 'show_lines_changed=%s\n'     "${show_lines_changed}"
       printf 'show_model=%s\n'             "${show_model}"
+      printf 'pr_link=%s\n'                "${pr_link}"
       printf 'show_pr=%s\n'                "${show_pr}"
       printf 'show_stash=%s\n'             "${show_stash}"
       printf 'show_tokens=%s\n'            "${show_tokens}"
@@ -655,11 +661,14 @@ sanitize() {
 }
 
 # Visible width of a segment for truncation (in REPLY). Segments carry
-# theme colours as literal \033[..m text, so strip that pattern (plus any
-# raw ESC SGR, defensively) in pure bash — the old printf|sed pipeline
-# cost 3 forks per segment.
+# theme colours as literal \033[..m text — and the PR segment may carry a
+# literal OSC 8 hyperlink wrapper — so strip those patterns (plus any raw
+# ESC SGR, defensively) in pure bash. The old printf|sed pipeline cost 3
+# forks per segment.
 visible_width() {
-  local s="$1" pat='\\033\[[0-9;]*[a-zA-Z]'
+  local s="$1" pat='\\033\]8;[^\\]*\\033\\\\'
+  while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
+  pat='\\033\[[0-9;]*[a-zA-Z]'
   while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
   pat="${ESC_CH}\[[0-9;]*[a-zA-Z]"
   while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
@@ -858,14 +867,27 @@ apply_activity_tokens() {
     local H3="${CLR_BAR_HIGH//\\033/$ESC_CH}"
     local R0="${CLR_RAMP0//\\033/$ESC_CH}" R1="${CLR_RAMP1//\\033/$ESC_CH}"
     local R2="${CLR_RAMP2//\\033/$ESC_CH}" R3="${CLR_RAMP3//\\033/$ESC_CH}"
+    local need_22=false pulse_pfx="" scanner_due=false
+    # Opt-in pulse: the running label breathes by alternating bold/faint on
+    # epoch parity, one step per re-render (WCAG-safe at any refresh rate)
+    if [ "${activity_pulse:-false}" = "true" ] && [ -n "$W" ]; then
+      if [ $(( NOW_EPOCH % 2 )) -eq 0 ]; then pulse_pfx="${ESC_CH}[1m"; else pulse_pfx="${ESC_CH}[2m"; fi
+      need_22=true
+    fi
+    # Opt-in scanner: queue a KITT bar while something has been running long
+    # enough to earn a heat tier (the helper emits {h2}/{h3} past 30s)
+    if [ "${activity_scanner:-false}" = "true" ]; then
+      case "$activity_line" in *"{h2}"*|*"{h3}"*) scanner_due=true ;; esac
+    fi
     if [ -n "$A" ]; then
       flash="${ESC_CH}[1m${A}"
-      # A flash on the line: make {d} also clear bold (SGR 22), else the
-      # bold from {O} bleeds into the rest of line 2 on 256-colour themes
-      case "$activity_line" in *"{O}"*) DM="${ESC_CH}[22m${DM}" ;; esac
+      # Bold/faint on the line: make {d} also clear intensity (SGR 22), else
+      # the {O} flash or pulse bleeds into the rest of line 2
+      case "$activity_line" in *"{O}"*) need_22=true ;; esac
     fi
+    [ "$need_22" = "true" ] && DM="${ESC_CH}[22m${DM}"
     activity_line="${activity_line//'{s}'/${W}${spin}${DM}}"
-    activity_line="${activity_line//'{w}'/$W}"
+    activity_line="${activity_line//'{w}'/${pulse_pfx}$W}"
     activity_line="${activity_line//'{o}'/$A}"
     activity_line="${activity_line//'{e}'/$E}"
     activity_line="${activity_line//'{i}'/$I}"
@@ -878,6 +900,23 @@ apply_activity_tokens() {
     activity_line="${activity_line//'{r2}'/$R2}"
     activity_line="${activity_line//'{r3}'/$R3}"
     activity_line="${activity_line//'{d}'/$DM}"
+    # Scanner: an 8-cell track with a theme-accent cell sweeping left-right-
+    # left, one step per re-render. Appended last so the width trim drops it
+    # first on narrow terminals.
+    if [ "$scanner_due" = "true" ]; then
+      local P="${CLR_PACE//\\033/$ESC_CH}"
+      local scan_pos=$(( NOW_EPOCH % 14 )) scan_i=0 scan_track=""
+      [ "$scan_pos" -gt 7 ] && scan_pos=$(( 14 - scan_pos ))
+      while [ "$scan_i" -lt 8 ]; do
+        if [ "$scan_i" -eq "$scan_pos" ]; then
+          scan_track+="${P}█${DM}"
+        else
+          scan_track+="─"
+        fi
+        scan_i=$(( scan_i + 1 ))
+      done
+      activity_line="${activity_line}  │  ${scan_track}"
+    fi
     activity_has_colour=true
   else
     # Colour disabled or data stale: strip tokens for the plain dim look
@@ -1520,6 +1559,9 @@ fi
 
 # Pull request (priority 6) — from the stdin pr block (CC 2.1.145+), so no
 # gh calls needed. Coloured by review state; vanishes when the PR closes.
+# With pr_link=true (default) the segment is wrapped in an OSC 8 hyperlink
+# to pr.url — Claude Code (verified against 2.1.170) converts OSC 8 into
+# real clickable links and strips it where unsupported.
 if [ "$show_pr" = "true" ]; then
   extract_block "$input" "pr"; pr_block=$REPLY
   if [ -n "$pr_block" ]; then
@@ -1534,7 +1576,22 @@ if [ "$show_pr" = "true" ]; then
         pending)           pr_clr="$CLR_WARN" ;;
         *)                 pr_clr="$CLR_INFO" ;;
       esac
-      add_seg "${pr_clr}PR #${pr_number}${CLR_RESET}" 6 "git"
+      pr_text="PR #${pr_number}"
+      if [ "$pr_link" = "true" ]; then
+        extract_from "$pr_block" "url"; pr_url=$REPLY
+        sanitize "$pr_url"; pr_url=$REPLY
+        # Strict allowlist: https only, and none of the characters that
+        # could break out of the OSC payload or confuse the width maths
+        case "$pr_url" in
+          *" "*|*'"'*|*"'"*|*\\*|*\;*|*\]*) pr_url="" ;;
+          https://?*) ;;
+          *) pr_url="" ;;
+        esac
+        if [ -n "$pr_url" ]; then
+          pr_text="\033]8;;${pr_url}\033\\\\${pr_text}\033]8;;\033\\\\"
+        fi
+      fi
+      add_seg "${pr_clr}${pr_text}${CLR_RESET}" 6 "git"
     fi
   fi
 fi

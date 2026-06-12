@@ -160,6 +160,27 @@ Releases between Sprint 4 and Sprint 5: v2.2.0 (CC 2.1.170 audit), v2.3.0 (count
 
 ---
 
+## Sprint 6: v2.9.0 — Clickable Links, Opt-in Effects, Release Automation :white_check_mark:
+
+**Theme**: Cheap wins de-risked by the v2.7.0 research (Claude Code's renderer provably keeps OSC 8), plus retiring the manual release checklist.
+
+**Status**: Complete.
+
+| | # | Item | Type | Effort |
+|---|---|------|------|--------|
+| [x] | 6.1 | Clickable PR segment via OSC 8 (`pr_link`, https allowlist, OSC-aware widths) — #40 | feature | ~40 lines |
+| [x] | 6.2 | `activity_pulse` opt-in breathing label (bash-side, SGR 22 contained) | feature | ~15 lines |
+| [x] | 6.3 | `activity_scanner` opt-in sweep tracker on long-running tools (bash-side) | feature | ~25 lines |
+| [x] | 6.4 | Tag-driven release automation (`release.yml`: version agreement checks + changelog extraction) — #52 | ci | ~50 lines |
+| [x] | 6.5 | Tests: `tests/pr_link.bats` + pulse/scanner/defaults coverage (suite 93) | testing | ~80 lines |
+
+### Notes
+
+- Pulse and scanner are deliberately bash-side: the helper emits no new tokens, so any helper/script version skew renders cleanly in both directions.
+- v2.9.0 itself was released by the new automation (tag push → verify → publish).
+
+---
+
 ## Summary
 
 | Sprint | Version | LOC | Items |
@@ -170,4 +191,5 @@ Releases between Sprint 4 and Sprint 5: v2.2.0 (CC 2.1.170 audit), v2.3.0 (count
 | 3 | v2.0.0 | ~455 | 8 |
 | 4 | v2.1.0 | ~240 | 4 |
 | 5 | v2.8.0 | ~430 | 5 |
-| **Total** | | **~1292** | **32** |
+| 6 | v2.9.0 | ~210 | 5 |
+| **Total** | | **~1502** | **37** |

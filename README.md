@@ -223,7 +223,7 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Dirty count | `● 3 dirty` | `show_dirty_count` | Staged + unstaged + untracked files |
 | Ahead/behind | `↓2 ↑1` | `show_ahead_behind` | Commits behind/ahead of upstream; hidden when there is no upstream |
 | Stash count | `≡ stash:2` | `show_stash` | Git stash entries |
-| Pull request | `PR #1234` | `show_pr` | Open PR for the branch (CC 2.1.145+); colour = review state: green approved, yellow pending, red changes requested, dim draft |
+| Pull request | `PR #1234` | `show_pr` | Open PR for the branch (CC 2.1.145+); colour = review state: green approved, yellow pending, red changes requested, dim draft. Clickable (links to the PR) in terminals with OSC 8 support; `pr_link=false` disables |
 | Duration | `12m` / `1h23m` | `show_duration` | Session duration |
 | Worktree | `⊞ hotfix` | `show_worktree` | Worktree name; covers `--worktree` sessions and any linked git worktree (CC 2.1.145+) |
 | Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
@@ -316,6 +316,9 @@ show_activity=true          # the live line 2 (requires Node.js)
 activity_colour=true        # per-segment colours, spinner, flash, heat, gradient
 activity_fresh_seconds=45   # drop line 2 back to all-dim when data is older than this
 activity_ttl_seconds=120    # hide line 2 when its cache is older than this
+activity_pulse=false        # opt-in: the running label breathes (bold/faint alternation)
+activity_scanner=false      # opt-in: KITT-style tracker while something runs >30s
+pr_link=true                # PR segment links to the pull request (OSC 8 hyperlink)
 subagent_rows=true          # styled subagent panel rows (requires Node.js)
 
 # ── Display ──────────────────────────────────────────────
@@ -521,6 +524,7 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.9.0**: Clickable PR segment (OSC 8 hyperlink to the pull request, `pr_link`), opt-in `activity_pulse` and `activity_scanner` effects for line 2, and tag-driven release automation.
 - **2.8.0**: 4.5x faster on Windows (~285ms per run, was ~1286ms): internal helpers return via globals instead of forked command substitutions, git work consolidated to two calls via porcelain v2, pure-bash sanitize and width maths, and fork-free countdown labels. New `--benchmark` flag and `STATUSLINE_PROFILE=1` per-phase profiling; first direct git-segment test coverage.
 - **2.7.0**: Colourful activity line: per-segment theme colours, a clock-driven spinner on running tools, heat-coloured elapsed times, completion flash, gradient todo bar, and stale-fade, with `activity_colour=false` restoring the classic all-dim look. Plus ANSI-aware width trimming and four long-standing fixes (quote truncation, `NO_COLOR` leak, BSD sed, non-UTF-8 locales).
 - **2.6.1**: Windows install hardening: settings.json gets quoted Windows-native paths (the MSYS `/c/...` form broke the subagent renderer under PowerShell/cmd spawns), both installers migrate their own older commands on re-run, and docs now state the renderer's real scope (Task-tool subagent rows only).

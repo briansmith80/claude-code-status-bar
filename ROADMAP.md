@@ -122,14 +122,14 @@ Re-evaluate based on actual user feedback. The following ideas are parked — no
 | Today's totals | #35 |
 | --test CLI flag | #38 |
 | Plan-aware limits | #39 |
-| OSC 8 clickable links | #40 |
+| ~~OSC 8 clickable links~~ | ~~#40~~ (shipped in v2.9.0: clickable PR segment) |
 | Install script CI | #41 |
 | Modular segment architecture | #42-#44 |
 | ~~Performance optimizations~~ | ~~#45-#48~~ (shipped in v2.8.0: 4.5x faster on Windows) |
 | ~~--benchmark CLI flag~~ | ~~#49~~ (shipped in v2.8.0, plus STATUSLINE_PROFILE) |
 | Comprehensive BATS coverage | #50 |
 | CONTRIBUTING.md / JSON schema docs | #51 |
-| Automated release workflow | #52 |
+| ~~Automated release workflow~~ | ~~#52~~ (shipped in v2.9.0: tag-driven release.yml) |
 | Compact buffer zone | #61 |
 | Three-tier context severity | #62 |
 | Compact detection indicator | #65 |

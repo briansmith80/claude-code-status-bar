@@ -167,4 +167,37 @@ is_spinner_frame() {
   run env HOME="${TEST_HOME}" bash "${STATUSLINE_SCRIPT}" --dump-config
   [[ "$output" == *"activity_colour=true"* ]]
   [[ "$output" == *"activity_fresh_seconds=45"* ]]
+  [[ "$output" == *"activity_pulse=false"* ]]
+  [[ "$output" == *"activity_scanner=false"* ]]
+}
+
+@test "activity_pulse alternates intensity on the running label" {
+  require_node
+  write_conf "activity_pulse=true"
+  write_act_cache '{s} {w}Bash{d} npm test {h1}6s{d}'
+  run_statusline_env "$(act_stdin)" "COLUMNS=200"
+  l2="$(line2)"
+  # One of the two pulse frames must be present, plus the SGR 22 clear
+  [[ "$l2" == *$'\x1b[1m'* ]] || [[ "$l2" == *$'\x1b[2m'* ]]
+  [[ "$l2" == *$'\x1b[22m'* ]]
+}
+
+@test "activity_scanner appends a sweeping track while a tool runs long" {
+  require_node
+  write_conf "activity_scanner=true"
+  write_act_cache '{s} {w}Bash{d} npm test {h2}1m24s{d}'
+  run_statusline_env "$(act_stdin)" "COLUMNS=200"
+  l2="$(line2)"
+  [[ "$l2" == *"─"* ]]
+  [[ "$l2" == *$'\x1b[38;5;199m'"█"* ]]   # default theme CLR_PACE lit cell
+}
+
+@test "pulse and scanner stay off by default" {
+  require_node
+  write_act_cache '{s} {w}Bash{d} npm test {h2}1m24s{d}'
+  run_statusline_env "$(act_stdin)" "COLUMNS=200"
+  l2="$(line2)"
+  [[ "$l2" != *$'\x1b[1m'* ]]
+  [[ "$l2" != *$'\x1b[2m'* ]]
+  [[ "$l2" != *"─"* ]]
 }
