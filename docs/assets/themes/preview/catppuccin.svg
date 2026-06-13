@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="56" viewBox="0 0 400 56" role="img" aria-label="catppuccin proposed colour theme palette">
   <rect x="0.5" y="0.5" width="399" height="55" rx="8" fill="#0d1117" stroke="#30363d"/>
   <text x="14" y="33" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="600" fill="#e6edf3">catppuccin</text>
-  <rect x="118" y="15" width="26" height="26" rx="5" fill="#89b4fa"/>
+  <rect x="118" y="15" width="26" height="26" rx="5" fill="#b4befe"/>
   <rect x="152" y="15" width="26" height="26" rx="5" fill="#cba6f7"/>
-  <rect x="186" y="15" width="26" height="26" rx="5" fill="#74c7ec"/>
+  <rect x="186" y="15" width="26" height="26" rx="5" fill="#89dceb"/>
   <rect x="220" y="15" width="26" height="26" rx="5" fill="#fab387"/>
   <rect x="254" y="15" width="26" height="26" rx="5" fill="#a6e3a1"/>
   <rect x="288" y="15" width="26" height="26" rx="5" fill="#f9e2af"/>

@@ -15,16 +15,18 @@ const path = require('path');
 const PROPOSED = {
   // unchanged: tracks the terminal's own ANSI palette (representative set)
   default:       ['#11a8cd', '#bc3fbc', '#2472c8', '#ff8700', '#0dbc79', '#e5e510', '#cd3131', '#ff00af'],
-  // muted / icy — low saturation, frost + aurora (Nord official)
-  nord:          ['#88c0d0', '#b48ead', '#81a1c1', '#d08770', '#a3be8c', '#ebcb8b', '#bf616a', '#5e81ac'],
-  // neon / vivid — high saturation (Dracula official)
+  // MUTED — cool steel/slate, the lowest-saturation palette (Nord), led by
+  // steel #81a1c1 (not the lighter frost) so it reads clearly subdued
+  nord:          ['#81a1c1', '#b48ead', '#88c0d0', '#d08770', '#a3be8c', '#ebcb8b', '#bf616a', '#5e81ac'],
+  // NEON — electric, maximum saturation (Dracula official)
   dracula:       ['#bd93f9', '#ff79c6', '#8be9fd', '#ffb86c', '#50fa7b', '#f1fa8c', '#ff5555', '#ff79c6'],
-  // earthy / vintage — desaturated, balanced (Solarized official)
+  // EARTHY — vintage, desaturated, teal + amber (Solarized official)
   solarized:     ['#2aa198', '#6c71c4', '#268bd2', '#cb4b16', '#859900', '#b58900', '#dc322f', '#d33682'],
-  // deep blue night + warm orange pop (Tokyo Night official)
+  // DEEP — saturated blue night with hot neon accents (Tokyo Night official)
   'tokyo-night': ['#7aa2f7', '#bb9af7', '#7dcfff', '#ff9e64', '#9ece6a', '#e0af68', '#f7768e', '#ff007c'],
-  // cozy warm pastel — lavender/peach (Catppuccin Mocha official)
-  catppuccin:    ['#89b4fa', '#cba6f7', '#74c7ec', '#fab387', '#a6e3a1', '#f9e2af', '#f38ba8', '#f5c2e7'],
+  // SOFT PASTEL — warm + light, led by lavender/sky (Catppuccin), distinct
+  // from nord's cool steel on hue, lightness and temperature
+  catppuccin:    ['#b4befe', '#cba6f7', '#89dceb', '#fab387', '#a6e3a1', '#f9e2af', '#f38ba8', '#f5c2e7'],
   // digital-rain phosphor green — monochrome, separated by brightness
   matrix:        ['#00ff41', '#22ff88', '#00cc33', '#aaffaa', '#00ff00', '#9eff5e', '#008f11', '#d6ffd6'],
   // unchanged: no colour, neutral grey ramp
@@ -32,14 +34,14 @@ const PROPOSED = {
 };
 
 const CHARACTER = {
-  default: 'classic bright ANSI (your terminal’s own palette) — unchanged',
-  nord: 'muted / icy — low saturation, frost blues',
-  dracula: 'neon / vivid — high saturation',
-  solarized: 'earthy / vintage — desaturated, balanced',
-  'tokyo-night': 'deep blue night with a warm orange accent',
-  catppuccin: 'cozy warm pastel — lavender, peach',
-  matrix: 'digital-rain phosphor green — monochrome, brightness-separated',
-  mono: 'no colour, neutral grey ramp — unchanged',
+  default: 'BOLD — bright primary ANSI (your terminal’s own palette)',
+  nord: 'MUTED — cool steel/slate, the most subdued theme',
+  dracula: 'NEON — electric, maximum saturation',
+  solarized: 'EARTHY — vintage, desaturated, teal + amber',
+  'tokyo-night': 'DEEP — saturated blue night with hot neon accents',
+  catppuccin: 'SOFT PASTEL — warm lavender, peach, pink',
+  matrix: 'MONOCHROME — phosphor digital-rain green',
+  mono: 'GREYSCALE — no colour',
 };
 
 const W = 400, H = 56, SW = 26, START = 118, STEP = 34, SY = 15;
@@ -60,10 +62,14 @@ const dir = path.join(__dirname, 'preview');
 fs.mkdirSync(dir, { recursive: true });
 
 let md = `# Theme palette preview — current vs proposed\n\n`;
-md += `Proposed = each theme's **official** palette, leaned into a distinct character, `;
-md += `shown here in truecolour (the best case; terminals without truecolour would `;
-md += `fall back to the nearest 256-colour). Swatch order: directory · branch · `;
-md += `model · Opus accent · additions · warnings/cost · removals · pacing.\n\n`;
+md += `Proposed = each theme's **official** palette, deliberately spread across a `;
+md += `saturation/temperature ladder so no two read alike: **NEON** (dracula) · `;
+md += `**BOLD** (default) · **DEEP** (tokyo-night) · **SOFT PASTEL** (catppuccin) · `;
+md += `**EARTHY** (solarized) · **MUTED** (nord) · **MONOCHROME** (matrix) · `;
+md += `**GREYSCALE** (mono). Shown here in truecolour (the best case; terminals `;
+md += `without truecolour fall back to the nearest 256-colour). Swatch order: `;
+md += `directory · branch · model · Opus accent · additions · warnings/cost · `;
+md += `removals · pacing.\n\n`;
 md += `| Theme | Current | Proposed | Character |\n|---|---|---|---|\n`;
 
 for (const [name, colours] of Object.entries(PROPOSED)) {
