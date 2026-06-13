@@ -589,7 +589,8 @@ case "${1:-}" in
       all|'') : ;;
       *) demo_themes="$2" ;;
     esac
-    demo_json="{\"cwd\":\"$PWD\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":65,\"context_window_size\":200000,\"total_input_tokens\":130000},\"total_cost_usd\":2.50,\"rate_limits\":{\"five_hour\":{\"used_percentage\":42,\"resets_at\":$(( NOW_EPOCH + 7200 ))},\"seven_day\":{\"used_percentage\":71,\"resets_at\":$(( NOW_EPOCH + 86400 ))}}}"
+    # High fill so the full progress-bar gradient is visible across all cells.
+    demo_json="{\"cwd\":\"$PWD\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":92,\"context_window_size\":200000,\"total_input_tokens\":184000},\"total_cost_usd\":2.50,\"rate_limits\":{\"five_hour\":{\"used_percentage\":88,\"resets_at\":$(( NOW_EPOCH + 7200 ))},\"seven_day\":{\"used_percentage\":96,\"resets_at\":$(( NOW_EPOCH + 86400 ))}}}"
     for demo_t in $demo_themes; do
       printf '%s\n' "── ${demo_t} ──"
       printf '%s' "$demo_json" | STATUSLINE_THEME="$demo_t" bash "$0" 2>/dev/null || true

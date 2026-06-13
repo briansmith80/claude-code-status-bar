@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.16.1] - 2026-06-13
+
+### Changed
+
+- **`--demo` now fills the bars to ~92%** (context, plus the 5h/7d usage bars) instead of 65%, so the full progress-bar gradient is visible across the whole bar when previewing themes. Demo-only; no change to live rendering.
+
 ## [2.16.0] - 2026-06-13
 
 ### Changed
