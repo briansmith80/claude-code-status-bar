@@ -41,6 +41,21 @@ bar_fill_colours() {
   [ "$(printf '%s' "$output" | grep -c '^── ')" -eq 8 ]
 }
 
+@test "env STATUSLINE_THEME overrides the conf colour_theme" {
+  write_conf "colour_theme=nord"
+  run_statusline_env "$JSON" "STATUSLINE_TRUECOLOR=1" "STATUSLINE_THEME=matrix"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"38;2;0;255;65"* ]]   # matrix dir, not nord
+}
+
+@test "a STATUSLINE_THEME line in the conf is a no-op (env-only knob)" {
+  # A conf STATUSLINE_THEME must NOT clobber a real env override (the --demo bug).
+  write_conf "colour_theme=dracula" "STATUSLINE_THEME=mono"
+  run_statusline_env "$JSON" "STATUSLINE_TRUECOLOR=1" "STATUSLINE_THEME=matrix"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"38;2;0;255;65"* ]]   # env matrix wins over both conf lines
+}
+
 @test "nerd_font=true swaps the Unicode segment icons for glyphs" {
   write_conf "nerd_font=true"
   run_statusline "$JSON"

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.15.1] - 2026-06-13
+
+### Fixed
+
+- **`--demo` (and the `STATUSLINE_THEME` env override) could be defeated by a config line.** The override was applied *after* `statusline.conf` was sourced, so a `STATUSLINE_THEME=...` line in the conf (an easy mistake — it looks like a config key) clobbered the per-theme value `--demo` passes, making every previewed theme render identically (and pinning the live bar to that theme). The env value is now captured *before* the conf is sourced and applied after, so it always wins and a `STATUSLINE_THEME` line in the conf is a harmless no-op (use `colour_theme` to set the theme in the conf). 2 new BATS tests (suite 120).
+
 ## [2.15.0] - 2026-06-13
 
 Opt-in styling: gradient bars, a theme preview flag, and Nerd Font / Powerline glyphs (ideas adapted from kcchien/claude-code-statusline).

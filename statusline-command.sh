@@ -387,13 +387,18 @@ subagent_rows=true
 # Load user overrides (if any).
 # Note: this file has the same trust level as .bashrc — it can contain
 # arbitrary bash code. Only modify it yourself or via trusted tools.
+# Capture the env theme override BEFORE sourcing the conf, so a (stray) conf
+# line setting STATUSLINE_THEME can't clobber the real env value. This is the
+# env-only knob --demo uses to preview a theme.
+_env_theme="${STATUSLINE_THEME:-}"
 STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 # shellcheck disable=SC1090
 [ -f "$STATUSLINE_CONF" ] && . "$STATUSLINE_CONF"
 
-# Env override for the theme, applied after the conf so it wins. Used by
-# --demo to preview a theme without touching the user's statusline.conf.
-[ -n "${STATUSLINE_THEME:-}" ] && colour_theme="$STATUSLINE_THEME"
+# Apply the env override after the conf so it always wins. A STATUSLINE_THEME
+# line in the conf is therefore a harmless no-op (it's an environment-only knob,
+# not a config key — use colour_theme to set the theme in the conf).
+[ -n "$_env_theme" ] && colour_theme="$_env_theme"
 
 # Backwards compatibility: accept old name
 [ "${show_usage_weekly:-}" = "true" ] && show_usage_7d=true
