@@ -83,7 +83,7 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
 $settingsFile = Join-Path $TargetDir 'settings.json'
 if (-not (Test-Path $settingsFile)) {
   $settings = [ordered]@{
-    statusLine = [ordered]@{ type = 'command'; command = $statusCmd }
+    statusLine = [ordered]@{ type = 'command'; command = $statusCmd; refreshInterval = 60 }
   }
   if ($subagentCmd) {
     $settings['subagentStatusLine'] = [ordered]@{ type = 'command'; command = $subagentCmd }
@@ -96,7 +96,7 @@ if (-not (Test-Path $settingsFile)) {
     $added = @()
     if (-not $json.PSObject.Properties['statusLine']) {
       $json | Add-Member -NotePropertyName 'statusLine' `
-        -NotePropertyValue ([pscustomobject]@{ type = 'command'; command = $statusCmd })
+        -NotePropertyValue ([pscustomobject]@{ type = 'command'; command = $statusCmd; refreshInterval = 60 })
       $added += 'statusLine'
     }
     if ($subagentCmd -and -not $json.PSObject.Properties['subagentStatusLine']) {
@@ -135,7 +135,7 @@ if (-not (Test-Path $settingsFile)) {
   } catch {
     Write-Warning "Could not update settings.json automatically: $($_.Exception.Message)"
     Write-Host '  Add this to settings.json yourself:'
-    Write-Host "    `"statusLine`": { `"type`": `"command`", `"command`": `"$statusCmd`" }"
+    Write-Host "    `"statusLine`": { `"type`": `"command`", `"command`": `"$statusCmd`", `"refreshInterval`": 60 }"
     if ($subagentCmd) {
       Write-Host "    `"subagentStatusLine`": { `"type`": `"command`", `"command`": `"$subagentCmd`" }"
     }

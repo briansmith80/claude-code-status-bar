@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.10.1] - 2026-06-13
+
+Installers set a default `refreshInterval` so the new countdown label stays fresh.
+
+### Changed
+
+- **Both installers now write `"refreshInterval": 60` into the `statusLine` block** (`install.sh` and `install.ps1`). With the v2.10.0 countdown default, the label would otherwise only update when Claude Code re-rendered the bar (after each response); a 60-second timer keeps it current and keeps the live activity line's elapsed times moving. The value is written **only when the installer first creates the `statusLine` entry** (new install, or `statusLine` absent on update), so an existing `refreshInterval` is never overwritten. The Python no-node fallback preserves any existing value and defaults to 60. Tune or remove it in `settings.json`; keep it at `2`+ on Windows.
+
 ## [2.10.0] - 2026-06-13
 
 The usage-bar label now counts down by default.

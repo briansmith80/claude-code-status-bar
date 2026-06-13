@@ -86,7 +86,8 @@ if [ ! -f "$settings_file" ]; then
 {
   "statusLine": {
     "type": "command",
-    "command": "${command_value_json}"
+    "command": "${command_value_json}",
+    "refreshInterval": 60
   },
   "subagentStatusLine": {
     "type": "command",
@@ -99,7 +100,8 @@ EOF
 {
   "statusLine": {
     "type": "command",
-    "command": "${command_value_json}"
+    "command": "${command_value_json}",
+    "refreshInterval": 60
   }
 }
 EOF
@@ -112,7 +114,7 @@ elif command -v node > /dev/null 2>&1; then
     const fs = require('fs');
     const data = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
     const added = [];
-    if (!data.statusLine) { data.statusLine = { type: 'command', command: process.argv[2] }; added.push('statusLine'); }
+    if (!data.statusLine) { data.statusLine = { type: 'command', command: process.argv[2], refreshInterval: 60 }; added.push('statusLine'); }
     if (process.argv[3] && !data.subagentStatusLine) { data.subagentStatusLine = { type: 'command', command: process.argv[3] }; added.push('subagentStatusLine'); }
     if (added.length) {
       fs.writeFileSync(process.argv[1], JSON.stringify(data, null, 2) + '\n');
@@ -126,7 +128,7 @@ elif command -v python3 > /dev/null 2>&1; then
 import json, sys
 path, cmd = sys.argv[1], sys.argv[2]
 with open(path) as f: data = json.load(f)
-data['statusLine'] = {'type': 'command', 'command': cmd}
+data['statusLine'] = {'type': 'command', 'command': cmd, 'refreshInterval': (data.get('statusLine') or {}).get('refreshInterval', 60)}
 with open(path, 'w') as f: json.dump(data, f, indent=2); f.write('\n')
 " "$settings_file" "$command_value"
   echo "  Updated settings: ${settings_file}"
@@ -135,7 +137,7 @@ elif command -v python > /dev/null 2>&1; then
 import json, sys
 path, cmd = sys.argv[1], sys.argv[2]
 with open(path) as f: data = json.load(f)
-data['statusLine'] = {'type': 'command', 'command': cmd}
+data['statusLine'] = {'type': 'command', 'command': cmd, 'refreshInterval': (data.get('statusLine') or {}).get('refreshInterval', 60)}
 with open(path, 'w') as f: json.dump(data, f, indent=2); f.write('\n')
 " "$settings_file" "$command_value"
   echo "  Updated settings: ${settings_file}"
@@ -144,7 +146,7 @@ else
   echo "  Could not update settings automatically."
   echo "  Add this to ${settings_file} manually:"
   echo ""
-  echo "    \"statusLine\": { \"type\": \"command\", \"command\": \"${command_value_json}\" }"
+  echo "    \"statusLine\": { \"type\": \"command\", \"command\": \"${command_value_json}\", \"refreshInterval\": 60 }"
 fi
 
 # ── Migrate commands written by older installs (Windows) ─────

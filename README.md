@@ -250,7 +250,7 @@ The bar shows your Anthropic usage limits as colour-coded progress bars with res
 
 By default the label shows the time remaining until reset: `5hr (2h20m)`, `wk (3d4h)`. Set `usage_label=clock` in your config to show the reset moment instead: `5hr (2pm)`, `wk (fri,3am)`.
 
-The status bar re-renders when Claude Code triggers it (after responses and state changes), so the default countdown can sit stale while you are away. Claude Code can also re-run the status bar on a timer: add `refreshInterval` (seconds) to the `statusLine` block in `~/.claude/settings.json` and the countdown stays fresh, and the activity line's elapsed times keep moving too (recommended when using the countdown label):
+The status bar re-renders when Claude Code triggers it (after responses and state changes), so a countdown can sit stale while you are away. Claude Code can also re-run the status bar on a timer via `refreshInterval` (seconds) on the `statusLine` block. **Fresh installs set `refreshInterval: 60` automatically** (so the default countdown stays current and the activity line's elapsed times keep moving). The installer only sets it when it first writes the `statusLine` block, so an existing `refreshInterval` is never overwritten. Tune or remove it in `~/.claude/settings.json`:
 
 ```json
 {
@@ -261,6 +261,8 @@ The status bar re-renders when Claude Code triggers it (after responses and stat
   }
 }
 ```
+
+On Windows the script takes longer to run (~285ms), so keep `refreshInterval` at `2` or higher there; a value below the script's own runtime can blank the bar.
 
 ### Where the data comes from
 
