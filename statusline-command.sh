@@ -370,8 +370,9 @@ show_tokens=false
 show_effort=true
 show_fast_mode=true
 bar_width=10
-# Opt-in: colour progress bars along the per-theme CLR_RAMP gradient instead
-# of one flat colour. No-op under mono/NO_COLOR (ramps are empty).
+# Opt-in progress-bar gradient (default off). 'true' = the theme's own
+# green->accent ramp; 'heat' = a fixed green->yellow->orange->red ramp
+# regardless of theme. No-op under mono/NO_COLOR.
 bar_gradient=false
 branch_max_length=""
 show_activity=true
@@ -1412,17 +1413,22 @@ build_progress_bar() {
     colour="$CLR_BAR_OK"
   fi
 
-  # Opt-in gradient: interpolate a distinct colour per filled cell across the
-  # theme's four ramp stops (RAMP_HEX), so a wide bar shows a smooth ramp
-  # instead of 4 colour bands. Truecolour per cell; nearest-256 in fallback.
-  # No-op (plain █) when bar_gradient is off or RAMP_HEX is empty (mono/NO_COLOR).
-  local grad=false r0 g0 b0 r1 g1 b1 r2 g2 b2 r3 g3 b3
-  if [ "${bar_gradient:-false}" = "true" ] && [ -n "${RAMP_HEX:-}" ]; then
+  # Opt-in gradient: interpolate a distinct colour per filled cell across four
+  # colour stops, so a wide bar shows a smooth ramp instead of bands. Truecolour
+  # per cell; nearest-256 in fallback. `bar_gradient=true` uses the theme's ramp
+  # (RAMP_HEX); `bar_gradient=heat` uses a fixed green->yellow->orange->red ramp
+  # regardless of theme. No-op (plain █) under mono/NO_COLOR (CLR_RESET empty).
+  local grad=false stops="" r0 g0 b0 r1 g1 b1 r2 g2 b2 r3 g3 b3
+  case "${bar_gradient:-false}" in
+    heat) [ -n "$CLR_RESET" ] && stops="2ecc40 ffdc00 ff851b ff4136" ;;
+    true) stops="${RAMP_HEX:-}" ;;
+  esac
+  if [ -n "$stops" ]; then
     grad=true
     local h0 h1 h2 h3 _rest
-    h0="${RAMP_HEX%% *}"; _rest="${RAMP_HEX#* }"
-    h1="${_rest%% *}";    _rest="${_rest#* }"
-    h2="${_rest%% *}";    h3="${_rest##* }"
+    h0="${stops%% *}"; _rest="${stops#* }"
+    h1="${_rest%% *}"; _rest="${_rest#* }"
+    h2="${_rest%% *}"; h3="${_rest##* }"
     r0=$((16#${h0:0:2})) g0=$((16#${h0:2:2})) b0=$((16#${h0:4:2}))
     r1=$((16#${h1:0:2})) g1=$((16#${h1:2:2})) b1=$((16#${h1:4:2}))
     r2=$((16#${h2:0:2})) g2=$((16#${h2:2:2})) b2=$((16#${h2:4:2}))

@@ -53,7 +53,7 @@ Ask the user what they'd like to customize. Present these categories:
 - `use_icons` — Unicode icons before segments (default: true)
 - `nerd_font` — Opt-in: swap the Unicode segment icons for Nerd Font glyphs; needs a patched font installed (default: false)
 - `powerline` — Opt-in: arrow () separators between segments; needs a Nerd/Powerline font (default: false)
-- `bar_gradient` — Opt-in: colour progress bars along the theme's green→accent gradient instead of one flat colour (default: false)
+- `bar_gradient` — Progress-bar gradient (default: false). `true` = the theme's green→accent ramp; `heat` = a fixed green→yellow→orange→red ramp regardless of theme
 - `auto_hide` — Hide zero/empty values (default: true)
 - `usage_label` — Usage bar reset label: countdown, e.g. 2h20m (default), or clock, e.g. 2pm
 - `activity_ttl_seconds` — Hide the live activity line when its cache is older than this (default: 120)

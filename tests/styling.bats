@@ -31,6 +31,14 @@ bar_fill_colours() {
   [ "$(bar_fill_colours)" -le 1 ]
 }
 
+@test "bar_gradient=heat uses a fixed green->red ramp regardless of theme" {
+  write_conf "colour_theme=matrix" "bar_gradient=heat"
+  # 100% so the final cell reaches the red stop, on the all-green matrix theme
+  run_statusline_env '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":100,"context_window_size":200000}}' "STATUSLINE_TRUECOLOR=1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"38;2;255;65;54"* ]]   # red end — proves it's not the theme ramp
+}
+
 @test "--demo <theme> renders that theme and exits 0" {
   output="$(HOME="${TEST_HOME}" bash "${STATUSLINE_SCRIPT}" --demo nord 2>/dev/null)"
   status=$?

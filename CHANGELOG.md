@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.17.0] - 2026-06-13
+
+### Added
+
+- **`bar_gradient=heat`**: a third value for `bar_gradient` that paints the progress bars with a fixed **green→yellow→orange→red** ramp regardless of the colour theme. `bar_gradient=true` still uses the theme's own green→accent ramp; `heat` is for keeping a theme's look (e.g. `matrix`'s all-green palette) while still getting classic usage-heat bars. Reuses the existing per-cell interpolation engine (so it's smooth and truecolour/256-aware) and stays a no-op under `mono`/`NO_COLOR`. New BATS test (suite 121).
+
 ## [2.16.1] - 2026-06-13
 
 ### Changed
