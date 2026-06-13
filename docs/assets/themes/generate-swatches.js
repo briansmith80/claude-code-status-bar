@@ -15,13 +15,21 @@ const path = require('path');
 // terminal) and `mono` is a neutral grey ramp (it emits no colour at all).
 const ROLES = ['dir', 'branch', 'model', 'opus', 'add', 'warn', 'del', 'pace'];
 const THEMES = {
+  // BOLD — bright primary ANSI (representative; default tracks your terminal)
   default:       ['#11a8cd', '#bc3fbc', '#2472c8', '#ff8700', '#0dbc79', '#e5e510', '#cd3131', '#ff00af'],
-  nord:          ['#5fd7ff', '#af87af', '#87afff', '#d7875f', '#87af87', '#d7af5f', '#d78787', '#ff00af'],
-  dracula:       ['#af87ff', '#ff87d7', '#87d7ff', '#ffaf5f', '#5fff87', '#ffff87', '#ff8787', '#ff87d7'],
-  solarized:     ['#00afaf', '#5f5faf', '#0087ff', '#d75f00', '#5f8700', '#af8700', '#d70000', '#af005f'],
-  'tokyo-night': ['#87afff', '#af87ff', '#87d7ff', '#ffaf5f', '#afd75f', '#d7af5f', '#ff5f87', '#ff0087'],
-  catppuccin:    ['#87afff', '#d7afff', '#87d7d7', '#ffaf87', '#afd787', '#ffd7af', '#ff87af', '#ffafd7'],
-  matrix:        ['#00ff5f', '#00ff87', '#00d700', '#afff87', '#00ff00', '#afff00', '#008700', '#d7ffd7'],
+  // MUTED — cool steel/slate (Nord)
+  nord:          ['#81a1c1', '#b48ead', '#88c0d0', '#d08770', '#a3be8c', '#ebcb8b', '#bf616a', '#5e81ac'],
+  // NEON — electric, maximum saturation (Dracula)
+  dracula:       ['#bd93f9', '#ff79c6', '#8be9fd', '#ffb86c', '#50fa7b', '#f1fa8c', '#ff5555', '#ff79c6'],
+  // EARTHY — vintage, desaturated, teal + amber (Solarized)
+  solarized:     ['#2aa198', '#6c71c4', '#268bd2', '#cb4b16', '#859900', '#b58900', '#dc322f', '#d33682'],
+  // DEEP — midnight royal-blue + violet base, neon accents (Tokyo Night)
+  'tokyo-night': ['#5a7bf0', '#9d7cd8', '#7dcfff', '#ff9e64', '#9ece6a', '#e0af68', '#f7768e', '#ff007c'],
+  // SOFT PASTEL — warm lavender/peach (Catppuccin Mocha)
+  catppuccin:    ['#b4befe', '#cba6f7', '#89dceb', '#fab387', '#a6e3a1', '#f9e2af', '#f38ba8', '#f5c2e7'],
+  // MONOCHROME — phosphor digital-rain green
+  matrix:        ['#00ff41', '#22ff88', '#00cc33', '#aaffaa', '#00ff00', '#9eff5e', '#008f11', '#d6ffd6'],
+  // GREYSCALE — no colour
   mono:          ['#e6edf3', '#c9d1d9', '#adbac7', '#8b949e', '#6e7681', '#545d68', '#444c56', '#373e47'],
 };
 

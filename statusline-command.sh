@@ -563,125 +563,87 @@ fi
 # Respect NO_COLOR standard (https://no-color.org/)
 [ -n "${NO_COLOR:-}" ] && colour_theme="mono"
 
+# Truecolour (24-bit) support. The named themes carry exact hex palettes; with
+# truecolour we emit them as-is (38;2;r;g;b), otherwise we fall back to the
+# nearest xterm-256 colour (38;5;N) so Terminal.app and older terminals still
+# get sensible colours. Explicit STATUSLINE_TRUECOLOR wins over the COLORTERM
+# heuristic (and lets the tests pin a mode).
+case "${STATUSLINE_TRUECOLOR:-}" in
+  1|true)  TRUECOLOR=1 ;;
+  0|false) TRUECOLOR=0 ;;
+  *) case "${COLORTERM:-}" in *truecolor*|*24bit*) TRUECOLOR=1 ;; *) TRUECOLOR=0 ;; esac ;;
+esac
+
+# Map a channel value (0-255) to its nearest xterm-256 cube index (0-5).
+# Cube levels are 0,95,135,175,215,255; the cutoffs below are the midpoints.
+cube_index() {
+  if   [ "$1" -lt 48 ];  then REPLY=0
+  elif [ "$1" -lt 115 ]; then REPLY=1
+  elif [ "$1" -lt 155 ]; then REPLY=2
+  elif [ "$1" -lt 195 ]; then REPLY=3
+  elif [ "$1" -lt 235 ]; then REPLY=4
+  else                        REPLY=5
+  fi
+}
+
+# Convert a 6-hex colour to an SGR fg escape, truecolour or nearest-256.
+# Pure bash (no forks); returns the literal "\033[...m" text via REPLY.
+tc_clr() {
+  local h="$1" r g b ri gi bi
+  r=$(( 16#${h:0:2} )); g=$(( 16#${h:2:2} )); b=$(( 16#${h:4:2} ))
+  if [ "$TRUECOLOR" = "1" ]; then
+    REPLY="\033[38;2;${r};${g};${b}m"
+    return
+  fi
+  cube_index "$r"; ri=$REPLY
+  cube_index "$g"; gi=$REPLY
+  cube_index "$b"; bi=$REPLY
+  REPLY="\033[38;5;$(( 16 + 36*ri + 6*gi + bi ))m"
+}
+
+# Assign every CLR_* role from a positional hex list (truecolour-aware).
+# Order: dir branch model opus fable add del warn info dim
+#        bar_ok bar_med bar_high pace ramp0 ramp1 ramp2 ramp3
+apply_palette() {
+  tc_clr "$1";    CLR_DIR=$REPLY
+  tc_clr "$2";    CLR_BRANCH=$REPLY
+  tc_clr "$3";    CLR_MODEL=$REPLY
+  tc_clr "$4";    CLR_MODEL_OPUS=$REPLY
+  tc_clr "$5";    CLR_MODEL_FABLE=$REPLY
+  tc_clr "$6";    CLR_ADD=$REPLY
+  tc_clr "$7";    CLR_DEL=$REPLY
+  tc_clr "$8";    CLR_WARN=$REPLY
+  tc_clr "$9";    CLR_INFO=$REPLY
+  tc_clr "${10}"; CLR_DIM=$REPLY
+  tc_clr "${11}"; CLR_BAR_OK=$REPLY
+  tc_clr "${12}"; CLR_BAR_MED=$REPLY
+  tc_clr "${13}"; CLR_BAR_HIGH=$REPLY
+  tc_clr "${14}"; CLR_PACE=$REPLY
+  tc_clr "${15}"; CLR_RAMP0=$REPLY
+  tc_clr "${16}"; CLR_RAMP1=$REPLY
+  tc_clr "${17}"; CLR_RAMP2=$REPLY
+  tc_clr "${18}"; CLR_RAMP3=$REPLY
+  CLR_RESET="\033[0m"
+}
+
 apply_theme() {
   case "${colour_theme:-default}" in
-    nord)
-      CLR_DIR="\033[38;5;81m"     # frost blue
-      CLR_BRANCH="\033[38;5;139m"  # aurora purple
-      CLR_MODEL="\033[38;5;111m"   # frost lighter blue
-      CLR_MODEL_OPUS="\033[38;5;173m" # aurora orange (Opus tier)
-      CLR_MODEL_FABLE="\033[38;5;139m" # aurora purple (Fable tier)
-      CLR_ADD="\033[38;5;108m"     # aurora green
-      CLR_DEL="\033[38;5;174m"     # aurora red
-      CLR_WARN="\033[38;5;179m"    # aurora yellow
-      CLR_INFO="\033[38;5;110m"    # frost cyan
-      CLR_DIM="\033[38;5;60m"     # polar night dim
-      CLR_BAR_OK="\033[38;5;108m"  # aurora green
-      CLR_BAR_MED="\033[38;5;179m" # aurora yellow
-      CLR_BAR_HIGH="\033[38;5;174m" # aurora red
-      CLR_PACE="\033[38;5;199m"    # hot pink pacing marker
-      CLR_RAMP0="\033[38;5;108m" CLR_RAMP1="\033[38;5;151m" # todo-bar gradient
-      CLR_RAMP2="\033[38;5;179m" CLR_RAMP3="\033[38;5;174m" # green->red, aurora
-      CLR_RESET="\033[0m"
-      ;;
-    dracula)
-      CLR_DIR="\033[38;5;141m"     # purple
-      CLR_BRANCH="\033[38;5;212m"  # pink
-      CLR_MODEL="\033[38;5;117m"   # cyan
-      CLR_MODEL_OPUS="\033[38;5;215m" # orange #ffb86c (Opus tier)
-      CLR_MODEL_FABLE="\033[38;5;141m" # purple #bd93f9 (Fable tier)
-      CLR_ADD="\033[38;5;84m"      # green
-      CLR_DEL="\033[38;5;210m"     # red
-      CLR_WARN="\033[38;5;228m"    # yellow
-      CLR_INFO="\033[38;5;117m"    # cyan
-      CLR_DIM="\033[38;5;61m"     # comment grey
-      CLR_BAR_OK="\033[38;5;84m"   # green
-      CLR_BAR_MED="\033[38;5;228m" # yellow
-      CLR_BAR_HIGH="\033[38;5;210m" # red
-      CLR_PACE="\033[38;5;212m"    # pink pacing marker
-      CLR_RAMP0="\033[38;5;84m"  CLR_RAMP1="\033[38;5;120m" # todo-bar gradient
-      CLR_RAMP2="\033[38;5;228m" CLR_RAMP3="\033[38;5;210m" # green->pink-red
-      CLR_RESET="\033[0m"
-      ;;
-    solarized)
-      CLR_DIR="\033[38;5;37m"     # cyan
-      CLR_BRANCH="\033[38;5;61m"  # violet
-      CLR_MODEL="\033[38;5;33m"   # blue
-      CLR_MODEL_OPUS="\033[38;5;166m" # solarized orange (Opus tier)
-      CLR_MODEL_FABLE="\033[38;5;61m" # solarized violet (Fable tier)
-      CLR_ADD="\033[38;5;64m"     # green
-      CLR_DEL="\033[38;5;160m"    # red
-      CLR_WARN="\033[38;5;136m"   # yellow
-      CLR_INFO="\033[38;5;37m"    # cyan
-      CLR_DIM="\033[38;5;240m"   # base01 dim
-      CLR_BAR_OK="\033[38;5;64m"  # green
-      CLR_BAR_MED="\033[38;5;136m" # yellow
-      CLR_BAR_HIGH="\033[38;5;160m" # red
-      CLR_PACE="\033[38;5;125m"    # magenta pacing marker
-      CLR_RAMP0="\033[38;5;64m"  CLR_RAMP1="\033[38;5;106m" # todo-bar gradient
-      CLR_RAMP2="\033[38;5;136m" CLR_RAMP3="\033[38;5;166m" # green->orange
-      CLR_RESET="\033[0m"
-      ;;
-    tokyo-night)
-      CLR_DIR="\033[38;5;111m"    # blue #7aa2f7
-      CLR_BRANCH="\033[38;5;141m" # purple #bb9af7
-      CLR_MODEL="\033[38;5;117m"  # cyan #7dcfff
-      CLR_MODEL_OPUS="\033[38;5;215m" # orange #ff9e64 (Opus tier)
-      CLR_MODEL_FABLE="\033[38;5;141m" # purple #bb9af7 (Fable tier)
-      CLR_ADD="\033[38;5;149m"    # green #9ece6a
-      CLR_DEL="\033[38;5;204m"    # red #f7768e
-      CLR_WARN="\033[38;5;179m"   # yellow #e0af68
-      CLR_INFO="\033[38;5;117m"   # cyan #7dcfff
-      CLR_DIM="\033[38;5;59m"    # comment #565f89
-      CLR_BAR_OK="\033[38;5;149m" # green #9ece6a
-      CLR_BAR_MED="\033[38;5;179m" # yellow #e0af68
-      CLR_BAR_HIGH="\033[38;5;204m" # red #f7768e
-      CLR_PACE="\033[38;5;198m"   # pink #ff007c
-      CLR_RAMP0="\033[38;5;149m" CLR_RAMP1="\033[38;5;186m" # todo-bar gradient
-      CLR_RAMP2="\033[38;5;179m" CLR_RAMP3="\033[38;5;204m" # green->red
-      CLR_RESET="\033[0m"
-      ;;
-    catppuccin)
-      CLR_DIR="\033[38;5;111m"    # blue #89b4fa
-      CLR_BRANCH="\033[38;5;183m" # mauve #cba6f7
-      CLR_MODEL="\033[38;5;116m"  # sapphire #74c7ec
-      CLR_MODEL_OPUS="\033[38;5;216m" # peach #fab387 (Opus tier)
-      CLR_MODEL_FABLE="\033[38;5;183m" # mauve #cba6f7 (Fable tier)
-      CLR_ADD="\033[38;5;150m"    # green #a6e3a1
-      CLR_DEL="\033[38;5;211m"    # red #f38ba8
-      CLR_WARN="\033[38;5;223m"   # yellow #f9e2af
-      CLR_INFO="\033[38;5;116m"   # sapphire #74c7ec
-      CLR_DIM="\033[38;5;243m"   # overlay0 #6c7086
-      CLR_BAR_OK="\033[38;5;150m" # green #a6e3a1
-      CLR_BAR_MED="\033[38;5;223m" # yellow #f9e2af
-      CLR_BAR_HIGH="\033[38;5;211m" # red #f38ba8
-      CLR_PACE="\033[38;5;218m"   # pink #f5c2e7
-      CLR_RAMP0="\033[38;5;150m" CLR_RAMP1="\033[38;5;151m" # todo-bar gradient
-      CLR_RAMP2="\033[38;5;223m" CLR_RAMP3="\033[38;5;216m" # green->peach
-      CLR_RESET="\033[0m"
-      ;;
-    matrix)
-      # Digital-rain phosphor green. Monochrome by design — roles are
-      # separated by brightness, not hue, like a green CRT. The brightest
-      # "lead" green is reserved for the model accent and pacing marker.
-      CLR_DIR="\033[38;5;47m"      # bright matrix green #00ff5f
-      CLR_BRANCH="\033[38;5;48m"   # cyan-green #00ff87
-      CLR_MODEL="\033[38;5;40m"    # green #00d700
-      CLR_MODEL_OPUS="\033[38;5;156m" # lead green #afff87 (Opus tier)
-      CLR_MODEL_FABLE="\033[38;5;48m"  # cyan-green #00ff87 (Fable tier)
-      CLR_ADD="\033[38;5;46m"      # bright green #00ff00
-      CLR_DEL="\033[38;5;28m"      # dark green #008700 (removals — dim, not red)
-      CLR_WARN="\033[38;5;154m"    # chartreuse #afff00 (caution, still green)
-      CLR_INFO="\033[38;5;48m"     # cyan-green #00ff87
-      CLR_DIM="\033[38;5;22m"     # trailing rain #005f00
-      CLR_BAR_OK="\033[38;5;28m"   # calm dark green
-      CLR_BAR_MED="\033[38;5;46m"  # bright green
-      CLR_BAR_HIGH="\033[38;5;154m" # chartreuse (hottest)
-      CLR_PACE="\033[38;5;194m"    # palest lead green #d7ffd7 (rain head)
-      CLR_RAMP0="\033[38;5;22m"  CLR_RAMP1="\033[38;5;28m" # todo-bar gradient
-      CLR_RAMP2="\033[38;5;40m"  CLR_RAMP3="\033[38;5;46m" # dark->bright green
-      CLR_RESET="\033[0m"
-      ;;
+    # Named palettes are spread across a saturation/temperature ladder so no
+    # two read alike, rendered in truecolour (256-colour fallback). Role order:
+    # dir branch model opus fable add del warn info dim
+    # bar_ok bar_med bar_high pace ramp0 ramp1 ramp2 ramp3.
+    nord)        # MUTED — cool steel/slate (Nord)
+      apply_palette 81a1c1 b48ead 88c0d0 d08770 b48ead a3be8c bf616a ebcb8b 8fbcbb 4c566a a3be8c ebcb8b bf616a 5e81ac a3be8c ebcb8b d08770 bf616a ;;
+    dracula)     # NEON — electric, maximum saturation (Dracula)
+      apply_palette bd93f9 ff79c6 8be9fd ffb86c bd93f9 50fa7b ff5555 f1fa8c 8be9fd 6272a4 50fa7b f1fa8c ff5555 ff79c6 50fa7b f1fa8c ffb86c ff5555 ;;
+    solarized)   # EARTHY — vintage, desaturated, teal + amber (Solarized)
+      apply_palette 2aa198 6c71c4 268bd2 cb4b16 6c71c4 859900 dc322f b58900 2aa198 586e75 859900 b58900 dc322f d33682 859900 b58900 cb4b16 dc322f ;;
+    tokyo-night) # DEEP — midnight royal-blue + violet base, neon accents
+      apply_palette 5a7bf0 9d7cd8 7dcfff ff9e64 9d7cd8 9ece6a f7768e e0af68 7dcfff 565f89 9ece6a e0af68 f7768e ff007c 9ece6a e0af68 ff9e64 f7768e ;;
+    catppuccin)  # SOFT PASTEL — warm lavender/peach (Catppuccin Mocha)
+      apply_palette b4befe cba6f7 89dceb fab387 cba6f7 a6e3a1 f38ba8 f9e2af 89dceb 6c7086 a6e3a1 f9e2af f38ba8 f5c2e7 a6e3a1 94e2d5 f9e2af fab387 ;;
+    matrix)      # MONOCHROME — phosphor digital-rain green, separated by brightness
+      apply_palette 00ff41 22ff88 00cc33 aaffaa 22ff88 00ff00 008f11 9eff5e 22ff88 005f00 008f11 00ff00 9eff5e d6ffd6 005f00 008f11 00cc33 00ff00 ;;
     mono)
       CLR_DIR="" CLR_BRANCH="" CLR_MODEL="" CLR_MODEL_OPUS="" CLR_MODEL_FABLE=""
       CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO="" CLR_DIM=""

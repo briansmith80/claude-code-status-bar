@@ -77,3 +77,25 @@ csi_count() {
   [ "$status" -eq 0 ]
   [ "$(csi_count)" -eq 0 ]
 }
+
+@test "truecolour mode emits 24-bit (38;2) sequences" {
+  write_conf "colour_theme=tokyo-night"
+  run_statusline_env "$JSON" "STATUSLINE_TRUECOLOR=1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"38;2;90;123;240"* ]]   # tokyo-night dir #5a7bf0
+}
+
+@test "256-colour fallback emits indexed (38;5) sequences" {
+  write_conf "colour_theme=tokyo-night"
+  run_statusline_env "$JSON" "STATUSLINE_TRUECOLOR=0"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"38;5;"* ]]
+  [[ "$output" != *"38;2;"* ]]
+}
+
+@test "STATUSLINE_TRUECOLOR overrides COLORTERM" {
+  write_conf "colour_theme=nord"
+  run_statusline_env "$JSON" "COLORTERM=truecolor" "STATUSLINE_TRUECOLOR=0"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"38;2;"* ]]
+}

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.14.0] - 2026-06-13
+
+Truecolour theme palettes, redesigned to be distinct.
+
+### Changed
+
+- **The six named themes were re-palette'd to official, distinct colours and rendered in 24-bit truecolour.** They're now spread across a deliberate saturation/temperature ladder so no two read alike: **dracula** neon, **default** bold primary, **tokyo-night** deep midnight blue + neon accents, **catppuccin** soft warm pastel, **solarized** earthy, **nord** muted cool steel, **matrix** monochrome green, **mono** greyscale. This fixes themes (notably nord vs catppuccin, and tokyo-night vs catppuccin) reading as near-identical, which happened because the old 256-colour codes quantized distinct palettes onto the same cells.
+- **Truecolour with a 256-colour fallback.** `apply_theme()` now stores hex palettes and emits `38;2;r;g;b` when truecolour is available (detected via `$COLORTERM`, overridable with `STATUSLINE_TRUECOLOR=1`/`0`), falling back to the nearest xterm-256 colour so Terminal.app and older terminals still get sensible, distinct colours. `default` still tracks your terminal's own ANSI palette; `mono` is unchanged.
+- README theme gallery regenerated with the new palettes and a "vibe" column; swatch generator updated. **3 new BATS tests** (truecolour/256/override paths; suite 110).
+
 ## [2.13.0] - 2026-06-13
 
 A *Matrix* theme.
