@@ -18,6 +18,7 @@ install.ps1                # Windows PowerShell installer/updater — native JSO
 commands/setup.md          # Slash command: /claude-code-status-bar:setup
 commands/configure.md      # Slash command: /claude-code-status-bar:configure
 docs/assets/               # README images (banner dark/light, terminal demo SVGs)
+docs/assets/themes/        # per-theme palette swatch SVGs + generate-swatches.js (regenerate from apply_theme())
 README.md                  # User-facing docs
 ```
 
