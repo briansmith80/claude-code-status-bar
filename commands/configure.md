@@ -63,6 +63,7 @@ If the user turns on `activity_pulse` or `activity_scanner`, suggest they set `r
 - `pr_link` — Wrap the PR segment in an OSC 8 hyperlink to the pull request (clickable in terminals that support links) (default: true)
 - `subagent_rows` — Set to false to keep Claude Code's default subagent panel rows (default: true)
 - `usage_cache_seconds` — OAuth fallback refresh interval in seconds; ignored when stdin provides rate limits (default: 600)
+- `auto_update` — Opt-in: when a newer version is detected, download and install it automatically in the background (atomic; never touches statusline.conf or settings.json) (default: false)
 - `bar_width` — Progress bar width in characters (default: 10)
 - `branch_max_length` — Truncate long branch names (default: unlimited)
 - `context_warn_threshold` — auto = warn within 20k tokens of Claude Code's auto-compact point (default); or a raw percentage like 80

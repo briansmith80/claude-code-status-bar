@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.12.0] - 2026-06-13
+
+Opt-in automatic updates.
+
+### Added
+
+- **`auto_update` config (opt-in, default `false`)**: when the background check flags a newer version, the bar installs it for you in a detached background process that never blocks rendering. It reuses the v2.11.0 atomic self-update (staged downloads swapped in only once all succeed; a failed or interrupted fetch changes nothing; `statusline.conf`/`settings.json` untouched) and serialises with a lock dir so parallel sessions don't all download at once. Stays off by default so the tool never replaces its own executable without you asking. The manual `--update` flag and the auto path now share one `perform_self_update` core.
+- **4 new BATS tests** (`tests/update.bats`; suite now 106): `auto_update` default-off + `--dump-config`, install-on-pending, leave-alone-when-off, and no-op-when-current. A `STATUSLINE_AUTOUPDATE_SYNC` seam runs the otherwise-detached update inline so the tests are deterministic.
+
 ## [2.11.0] - 2026-06-13
 
 One-command self-update, and an update notice that tells you the version and links the release notes.

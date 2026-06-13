@@ -342,6 +342,9 @@ group_close="]"
 # ── Usage limits ─────────────────────────────────────────
 usage_label=countdown       # countdown = time remaining (2h20m, default); clock = reset moment (2pm)
 usage_cache_seconds=600     # OAuth fallback refresh interval (ignored when stdin provides limits)
+
+# ── Updates ──────────────────────────────────────────────
+auto_update=false           # opt-in: install new versions automatically in the background
 ```
 
 A few details worth knowing:
@@ -378,6 +381,10 @@ bash ~/.claude/statusline-command.sh --update
 ```
 
 It downloads the latest script and helpers, swaps them in only once every file has downloaded, bumps the version, and leaves `statusline.conf` and your `settings.json` entries alone. Run `--check-update` first if you just want to see what's current versus latest.
+
+### Automatic updates (opt-in)
+
+Set `auto_update=true` in `statusline.conf` and the bar installs new versions for you: once the background check flags a newer release, it runs the same self-update in a detached background process (it never blocks rendering), serialised with a lock so parallel sessions don't all download at once. A failed or interrupted download changes nothing, and `statusline.conf`/`settings.json` are never touched. It stays off by default so the tool never replaces its own executable without you asking; leave it off if you prefer to review releases before updating.
 
 Re-running the installer also updates in place and is the way to go if your install is too old to have `--update`:
 

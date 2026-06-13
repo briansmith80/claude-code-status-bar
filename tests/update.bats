@@ -106,3 +106,68 @@ skip_if_windows() {
   grep -q "usage_label=clock" "${TEST_HOME}/.claude/statusline.conf"
   rm -rf "${remote_dir}"
 }
+
+# ── Opt-in auto-update (v2.12.0) ─────────────────────────────
+# STATUSLINE_AUTOUPDATE_SYNC runs the otherwise-detached auto-update inline so
+# these assertions are deterministic.
+
+@test "auto_update defaults to false and appears in --dump-config" {
+  output="$(HOME="${TEST_HOME}" bash "${STATUSLINE_SCRIPT}" --dump-config 2>/dev/null)"
+  [[ "$output" == *"auto_update=false"* ]]
+}
+
+@test "auto_update=true installs a pending update" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  write_conf "auto_update=true"
+  printf '%s %s\n' "$(date +%s)" "9.9.9" > "${TEST_HOME}/.claude/.statusline-update-cache"
+  remote_dir="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-remote-XXXXXX")"
+  printf '9.9.9\n'         > "${remote_dir}/VERSION"
+  printf 'echo auto-new\n' > "${remote_dir}/statusline-command.sh"
+  printf '// h\n'          > "${remote_dir}/statusline-helper.js"
+  printf '// s\n'          > "${remote_dir}/statusline-subagent.js"
+
+  run_statusline_env "$NOTICE_JSON" \
+    "STATUSLINE_REPO_RAW=file://${remote_dir}" "STATUSLINE_AUTOUPDATE_SYNC=1"
+
+  [ "$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")" = "9.9.9" ]
+  grep -q "auto-new" "${TEST_HOME}/.claude/statusline-command.sh"
+  # Cache cleared and lock released afterwards.
+  [ ! -f "${TEST_HOME}/.claude/.statusline-update-cache" ]
+  [ ! -d "${TEST_HOME}/.claude/.statusline-autoupdate.lock" ]
+  rm -rf "${remote_dir}"
+}
+
+@test "auto_update=false leaves a pending update alone" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  write_conf "auto_update=false"
+  printf '%s %s\n' "$(date +%s)" "9.9.9" > "${TEST_HOME}/.claude/.statusline-update-cache"
+  remote_dir="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-remote-XXXXXX")"
+  printf '9.9.9\n'      > "${remote_dir}/VERSION"
+  printf 'echo nope\n'  > "${remote_dir}/statusline-command.sh"
+  printf '// h\n'       > "${remote_dir}/statusline-helper.js"
+  printf '// s\n'       > "${remote_dir}/statusline-subagent.js"
+  before="$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")"
+
+  run_statusline_env "$NOTICE_JSON" "STATUSLINE_REPO_RAW=file://${remote_dir}"
+
+  [ "$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")" = "$before" ]
+  rm -rf "${remote_dir}"
+}
+
+@test "auto_update=true does nothing when already current" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  write_conf "auto_update=true"
+  ver="$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")"
+  printf '%s %s\n' "$(date +%s)" "$ver" > "${TEST_HOME}/.claude/.statusline-update-cache"
+  remote_dir="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-remote-XXXXXX")"
+  printf '%s\n' "$ver" > "${remote_dir}/VERSION"
+
+  run_statusline_env "$NOTICE_JSON" \
+    "STATUSLINE_REPO_RAW=file://${remote_dir}" "STATUSLINE_AUTOUPDATE_SYNC=1"
+
+  [ "$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")" = "$ver" ]
+  rm -rf "${remote_dir}"
+}

@@ -101,6 +101,62 @@ EOF
   fi
 }
 
+# Self-update core (shared by --update and the opt-in auto-update). Downloads
+# the latest script + helpers to staging files beside their targets, then
+# renames them in only after EVERY download succeeds, so a failed or
+# interrupted fetch changes nothing. statusline-command.sh moves first — it is
+# the running file, so an in-use rename failure (Windows) aborts before any
+# version mismatch, and rename is safe while running (the live shell keeps
+# reading its original inode). Echoes one line per file; callers control
+# verbosity by redirecting. Writes .statusline-version on success. Never
+# touches statusline.conf or settings.json.
+# Usage: perform_self_update REMOTE_VERSION   ->  0 ok / 1 failed
+perform_self_update() {
+  local new_ver="$1" f g failed=""
+  local files="statusline-command.sh statusline-helper.js statusline-subagent.js"
+  # Self-heal staging files left behind by a previously killed attempt.
+  find "$SCRIPT_DIR" -maxdepth 1 -name '*.update.*' -mmin +60 -delete 2>/dev/null || true
+  for f in $files; do
+    if ! http_get "${REPO_RAW}/${f}" 20 > "${SCRIPT_DIR}/.${f}.update.$$" 2>/dev/null \
+       || [ ! -s "${SCRIPT_DIR}/.${f}.update.$$" ]; then
+      echo "  ✗ failed to download ${f}"
+      for g in $files; do rm -f "${SCRIPT_DIR}/.${g}.update.$$"; done
+      return 1
+    fi
+  done
+  for f in $files; do
+    if mv "${SCRIPT_DIR}/.${f}.update.$$" "${SCRIPT_DIR}/${f}" 2>/dev/null; then
+      echo "  ✓ ${f}"
+    else
+      failed="$f"
+      for g in $files; do rm -f "${SCRIPT_DIR}/.${g}.update.$$"; done
+      echo "  ✗ could not replace ${failed} (in use?)"
+      return 1
+    fi
+  done
+  chmod +x "${SCRIPT_DIR}/statusline-command.sh" 2>/dev/null || true
+  printf '%s\n' "$new_ver" > "${SCRIPT_DIR}/.statusline-version"
+  echo "  ✓ .statusline-version -> ${new_ver}"
+  return 0
+}
+
+# Opt-in background auto-update driver. Serialises with a lock dir so parallel
+# sessions don't all download at once, runs the self-update, then clears the
+# update cache so the notice disappears on the next render. Silent by design;
+# any failure leaves the install intact.
+# Usage: run_auto_update REMOTE_VERSION
+run_auto_update() {
+  local lock="${SCRIPT_DIR}/.statusline-autoupdate.lock"
+  # Clear a stale lock left by a killed process (a download never takes 10 min).
+  if [ -d "$lock" ]; then
+    find "$lock" -maxdepth 0 -type d -mmin +10 -exec rmdir {} + 2>/dev/null || true
+  fi
+  mkdir "$lock" 2>/dev/null || return 0   # another session is already updating
+  umask 077
+  if perform_self_update "$1"; then rm -f "$UPDATE_CACHE_FILE"; fi
+  rmdir "$lock" 2>/dev/null || true
+}
+
 # Parse an ISO 8601 timestamp (or pass through a raw epoch) to epoch
 # seconds in REPLY. Raw epochs short-circuit with zero forks — that is the
 # stdin rate-limits path, the common case since Claude Code 2.1.
@@ -182,12 +238,8 @@ case "${1:-}" in
     exit 0
     ;;
   --update)
-    # Self-update: download the latest script + helpers in place. Never
-    # touches statusline.conf or settings.json. Each file is fetched to a
-    # temp file beside its target and only moved once every download
-    # succeeds, so a failed fetch leaves the install untouched. The rename
-    # is safe even though this is the running script — the live shell keeps
-    # reading its original inode.
+    # Manual self-update. The download/swap (and its safety properties) live
+    # in perform_self_update, shared with the opt-in auto_update path.
     echo "Checking latest..."
     remote_version=$(http_get "${REPO_RAW}/VERSION" 5 | tr -d '[:space:]') || remote_version=""
     if [ -z "$remote_version" ]; then
@@ -201,51 +253,15 @@ case "${1:-}" in
     fi
     echo "  ${remote_version} available (you have ${VERSION})"
     umask 077
-    update_files="statusline-command.sh statusline-helper.js statusline-subagent.js"
-    clean_update_tmp() {
-      local uf
-      for uf in $update_files; do rm -f "${SCRIPT_DIR}/.${uf}.update.$$"; done
-    }
-    # Stage every file first; only move once all downloads succeed.
-    update_ok=true
-    for uf in $update_files; do
-      if ! http_get "${REPO_RAW}/${uf}" 20 > "${SCRIPT_DIR}/.${uf}.update.$$" 2>/dev/null \
-         || [ ! -s "${SCRIPT_DIR}/.${uf}.update.$$" ]; then
-        echo "  ✗ failed to download ${uf}"
-        update_ok=false
-        break
-      fi
-    done
-    if [ "$update_ok" != "true" ]; then
-      clean_update_tmp
-      echo "  Update aborted; nothing was changed."
-      exit 1
+    if perform_self_update "$remote_version"; then
+      rm -f "$UPDATE_CACHE_FILE"
+      echo "statusline.conf and settings.json left untouched."
+      echo "Done. New version active on next render."
+      exit 0
     fi
-    # Move statusline-command.sh first: it is the running file, so if the
-    # rename fails (e.g. locked on Windows) we abort before the helpers and
-    # never leave a version mismatch.
-    update_failed=""
-    for uf in $update_files; do
-      if mv "${SCRIPT_DIR}/.${uf}.update.$$" "${SCRIPT_DIR}/${uf}" 2>/dev/null; then
-        echo "  ✓ ${uf}"
-      else
-        update_failed="$uf"
-        break
-      fi
-    done
-    if [ -n "$update_failed" ]; then
-      clean_update_tmp
-      echo "  ✗ could not replace ${update_failed} (in use?). Update manually:"
-      echo "    curl -fsSL ${REPO_RAW}/install.sh | bash"
-      exit 1
-    fi
-    chmod +x "${SCRIPT_DIR}/statusline-command.sh" 2>/dev/null || true
-    printf '%s\n' "$remote_version" > "${SCRIPT_DIR}/.statusline-version"
-    echo "  ✓ .statusline-version -> ${remote_version}"
-    rm -f "$UPDATE_CACHE_FILE"
-    echo "statusline.conf and settings.json left untouched."
-    echo "Done. New version active on next render."
-    exit 0
+    echo "  Update aborted; nothing was changed. Update manually:"
+    echo "    curl -fsSL ${REPO_RAW}/install.sh | bash"
+    exit 1
     ;;
   --dump-stdin)
     # Diagnostic: show the raw JSON that Claude Code sends on stdin
@@ -329,6 +345,9 @@ usage_label="countdown"
 show_pr=true
 pr_link=true
 usage_cache_seconds=600
+# Opt-in: when an update is detected, download and install it in the
+# background automatically (atomic; never touches statusline.conf/settings.json).
+auto_update=false
 auto_hide=true
 use_icons=true
 context_warn_threshold=auto
@@ -375,6 +394,7 @@ case "${1:-}" in
     # Reflects defaults overridden by ~/.claude/statusline.conf.
     {
       printf 'auto_hide=%s\n'              "${auto_hide}"
+      printf 'auto_update=%s\n'            "${auto_update}"
       printf 'bar_width=%s\n'              "${bar_width}"
       printf 'branch_max_length=%s\n'      "${branch_max_length}"
       printf 'colour_theme=%s\n'           "${colour_theme}"
@@ -519,6 +539,25 @@ case "${1:-}" in
     exit 0
     ;;
 esac
+
+# ── Auto-update (opt-in) ─────────────────────────────────────
+# With auto_update=true, once the background check has flagged a newer
+# version (update_available, read from the cache by check_for_update),
+# install it. Detached so it never holds the render's stdout open — the
+# download is longer than the version probe. Only a clean version string
+# is acted on. STATUSLINE_AUTOUPDATE_SYNC runs it inline (tests only).
+if [ "$auto_update" = "true" ] && [ -n "$update_available" ]; then
+  case "$update_available" in
+    ''|*[!0-9.]*) ;;
+    *)
+      if [ -n "${STATUSLINE_AUTOUPDATE_SYNC:-}" ]; then
+        run_auto_update "$update_available" > /dev/null 2>&1
+      else
+        run_auto_update "$update_available" > /dev/null 2>&1 < /dev/null &
+      fi
+      ;;
+  esac
+fi
 
 # ── Colour Themes ────────────────────────────────────────────
 # Respect NO_COLOR standard (https://no-color.org/)
