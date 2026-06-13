@@ -7,3 +7,6 @@ Thumbs.db
 .statusline-update-cache
 .statusline-version
 statusline.conf
+
+# Windows/MSYS crash artifacts
+*.stackdump

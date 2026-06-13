@@ -228,7 +228,7 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Worktree | `⊞ hotfix` | `show_worktree` | Worktree name; covers `--worktree` sessions and any linked git worktree (CC 2.1.145+) |
 | Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
 | Cost rate | `$2.10/hr` | `show_cost_rate` *(off)* | Burn rate; appears once the session is over a minute old |
-| Update notice | `↑ update available` | *(automatic)* | Background version check against GitHub every 6 hours |
+| Update notice | `↑ 2.11.0` | *(automatic)* | Background version check against GitHub every 6 hours; shows the new version, links to its release notes, and `--update` installs it |
 | Live activity | *(line 2, see above)* | `show_activity` | Running tools, tool counts, subagents, todo progress; `activity_colour=false` for the classic all-dim look |
 
 Before the first API response of a session, the bar shows a dim `Starting...` placeholder. That is normal; the real segments appear as soon as Claude Code sends model and context data.
@@ -362,7 +362,8 @@ The script normally runs with no arguments, fed JSON on stdin by Claude Code. Th
 |------|-------------|
 | `--help`, `-h` | Show usage info and exit. |
 | `--version`, `-v` | Print the installed version and exit. |
-| `--check-update` | Clear the update cache and synchronously check GitHub for a newer version. Prints current and latest, plus the install one-liner if an update exists. |
+| `--check-update` | Clear the update cache and synchronously check GitHub for a newer version. Prints current and latest, plus the `--update` command if an update exists. |
+| `--update` | Download and install the latest version in place: overwrites `statusline-command.sh` and the two Node helpers, bumps `.statusline-version`, and clears the update cache. Each file is staged and only swapped in once every download succeeds, so a failed fetch changes nothing. Never touches `statusline.conf` or `settings.json`. |
 | `--dump-config` | Print the resolved configuration (defaults merged with your `statusline.conf`) as sorted `key=value` lines. The fastest answer to "why isn't my override taking effect?" |
 | `--dump-stdin` | Echo the JSON Claude Code sends (pretty-printed when a working python3 is on PATH) plus a YES/NO report of detected fields: `rate_limits`, `transcript_path`, nested `model`, nested `context_window`. Pipe JSON in: `echo '<json>' \| bash ~/.claude/statusline-command.sh --dump-stdin` |
 | `--benchmark [N]` | Time N end-to-end runs (default 5) against a realistic canned payload and report min/avg/max, for picking a safe `refreshInterval`. Needs GNU date `%N` (Linux/MSYS2). Add `STATUSLINE_PROFILE=1` to any run for a per-phase breakdown on stderr. |
@@ -370,7 +371,15 @@ The script normally runs with no arguments, fed JSON on stdin by Claude Code. Th
 
 ## Updating
 
-When a new version is available you'll see `↑ update available` in the bar (the check runs in the background every 6 hours and never slows anything down). To update, re-run the installer:
+When a new version is available you'll see `↑ <version>` in the bar (e.g. `↑ 2.11.0`), clickable through to that release's notes. The check runs in the background every 6 hours and never slows anything down. The simplest way to update is the built-in self-update (works in bash and PowerShell alike, as do all the [CLI flags](#cli-flags)):
+
+```bash
+bash ~/.claude/statusline-command.sh --update
+```
+
+It downloads the latest script and helpers, swaps them in only once every file has downloaded, bumps the version, and leaves `statusline.conf` and your `settings.json` entries alone. Run `--check-update` first if you just want to see what's current versus latest.
+
+Re-running the installer also updates in place and is the way to go if your install is too old to have `--update`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
@@ -380,13 +389,7 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex
 ```
 
-It detects the existing installation, updates in place, and leaves `statusline.conf` and your `settings.json` entries alone. To check manually (this exact command works in bash and PowerShell alike, as do all the [CLI flags](#cli-flags)):
-
-```bash
-bash ~/.claude/statusline-command.sh --check-update
-```
-
-> Right after a release, GitHub's raw CDN can serve the previous version for a few minutes. If `--check-update` reports an older version than expected, wait five minutes and try again.
+> Right after a release, GitHub's raw CDN can serve the previous version for a few minutes. If `--update` or `--check-update` reports an older version than expected, wait five minutes and try again.
 
 ## Uninstall
 

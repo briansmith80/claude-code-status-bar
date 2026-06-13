@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.11.0] - 2026-06-13
+
+One-command self-update, and an update notice that tells you the version and links the release notes.
+
+### Added
+
+- **`--update` flag**: `bash ~/.claude/statusline-command.sh --update` downloads the latest `statusline-command.sh` and both Node helpers, bumps `.statusline-version`, and clears the update cache. Each file is staged beside its target and only swapped in once **every** download succeeds, so a failed or interrupted fetch leaves the install untouched; `statusline-command.sh` moves first (it is the running file) so a Windows in-use rename can't leave a version mismatch. Never touches `statusline.conf` or `settings.json`. The download source is overridable with `STATUSLINE_REPO_RAW` (a fork, or a `file://` path for testing).
+- **9 new BATS tests** (`tests/update.bats`; suite now 102): the `--update` happy path, no-op-when-current, config preservation, and the notice's version + OSC 8 hyperlink behaviour.
+
+### Changed
+
+- **The update notice now shows the new version and links to its release notes.** `↑ update available` became `↑ <version>` (e.g. `↑ 2.11.0`), wrapped in an OSC 8 hyperlink to that release's GitHub page so it click-opens the changelog (honours `pr_link`; falls back to plain text when the version string isn't clean or links are off). `--check-update` now points at `--update` instead of the install one-liner.
+
 ## [2.10.2] - 2026-06-13
 
 Documented the `refreshInterval` the animated activity effects need.

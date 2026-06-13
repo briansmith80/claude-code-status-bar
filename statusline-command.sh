@@ -64,7 +64,9 @@ fi
 
 UPDATE_CHECK_INTERVAL=21600  # seconds between update checks (6 hours)
 UPDATE_CACHE_FILE="${SCRIPT_DIR}/.statusline-update-cache"
-REPO_RAW="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
+# Base raw URL for VERSION and the self-update download. Overridable via
+# STATUSLINE_REPO_RAW (point at a fork, or a file:// path for testing).
+REPO_RAW="${STATUSLINE_REPO_RAW:-https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main}"
 
 # ── Shared Helpers ──────────────────────────────────────────
 # HTTP GET helper — returns body on stdout. Usage: http_get URL [TIMEOUT]
@@ -141,6 +143,9 @@ case "${1:-}" in
     echo "                     bash statusline-command.sh --version"
     echo "  --check-update   Force a synchronous update check"
     echo "                     bash statusline-command.sh --check-update"
+    echo "  --update         Download and install the latest version in place"
+    echo "                     bash statusline-command.sh --update"
+    echo "                     (keeps statusline.conf and settings.json)"
     echo "  --dump-stdin     Pretty-print the raw JSON Claude Code sends (diagnostic)"
     echo "                     echo '<json>' | bash statusline-command.sh --dump-stdin"
     echo "  --dump-config    Print resolved config (defaults + statusline.conf)"
@@ -172,8 +177,74 @@ case "${1:-}" in
       echo "Latest:  ${remote_version}"
       echo ""
       echo "Update available! Run:"
-      echo "  curl -fsSL ${REPO_RAW}/install.sh | bash"
+      echo "  bash ~/.claude/statusline-command.sh --update"
     fi
+    exit 0
+    ;;
+  --update)
+    # Self-update: download the latest script + helpers in place. Never
+    # touches statusline.conf or settings.json. Each file is fetched to a
+    # temp file beside its target and only moved once every download
+    # succeeds, so a failed fetch leaves the install untouched. The rename
+    # is safe even though this is the running script — the live shell keeps
+    # reading its original inode.
+    echo "Checking latest..."
+    remote_version=$(http_get "${REPO_RAW}/VERSION" 5 | tr -d '[:space:]') || remote_version=""
+    if [ -z "$remote_version" ]; then
+      echo "  Could not reach the update source. Try again, or update manually:"
+      echo "    curl -fsSL ${REPO_RAW}/install.sh | bash"
+      exit 1
+    fi
+    if [ "$remote_version" = "$VERSION" ]; then
+      echo "  Already up to date (${VERSION})."
+      exit 0
+    fi
+    echo "  ${remote_version} available (you have ${VERSION})"
+    umask 077
+    update_files="statusline-command.sh statusline-helper.js statusline-subagent.js"
+    clean_update_tmp() {
+      local uf
+      for uf in $update_files; do rm -f "${SCRIPT_DIR}/.${uf}.update.$$"; done
+    }
+    # Stage every file first; only move once all downloads succeed.
+    update_ok=true
+    for uf in $update_files; do
+      if ! http_get "${REPO_RAW}/${uf}" 20 > "${SCRIPT_DIR}/.${uf}.update.$$" 2>/dev/null \
+         || [ ! -s "${SCRIPT_DIR}/.${uf}.update.$$" ]; then
+        echo "  ✗ failed to download ${uf}"
+        update_ok=false
+        break
+      fi
+    done
+    if [ "$update_ok" != "true" ]; then
+      clean_update_tmp
+      echo "  Update aborted; nothing was changed."
+      exit 1
+    fi
+    # Move statusline-command.sh first: it is the running file, so if the
+    # rename fails (e.g. locked on Windows) we abort before the helpers and
+    # never leave a version mismatch.
+    update_failed=""
+    for uf in $update_files; do
+      if mv "${SCRIPT_DIR}/.${uf}.update.$$" "${SCRIPT_DIR}/${uf}" 2>/dev/null; then
+        echo "  ✓ ${uf}"
+      else
+        update_failed="$uf"
+        break
+      fi
+    done
+    if [ -n "$update_failed" ]; then
+      clean_update_tmp
+      echo "  ✗ could not replace ${update_failed} (in use?). Update manually:"
+      echo "    curl -fsSL ${REPO_RAW}/install.sh | bash"
+      exit 1
+    fi
+    chmod +x "${SCRIPT_DIR}/statusline-command.sh" 2>/dev/null || true
+    printf '%s\n' "$remote_version" > "${SCRIPT_DIR}/.statusline-version"
+    echo "  ✓ .statusline-version -> ${remote_version}"
+    rm -f "$UPDATE_CACHE_FILE"
+    echo "statusline.conf and settings.json left untouched."
+    echo "Done. New version active on next render."
     exit 0
     ;;
   --dump-stdin)
@@ -1664,11 +1735,26 @@ if [ "$show_cost_rate" = "true" ] && [ -n "$total_cost" ] && [ -n "$duration_ms"
   fi
 fi
 
-# Update notification (priority 9 — lowest)
+# Update notification (priority 9 — lowest). Shows the new version and, when
+# it is a clean version string, wraps it in an OSC 8 hyperlink to that
+# release's notes (same mechanism as the PR segment; honours pr_link).
 if [ -n "$update_available" ]; then
-  update_icon=""
-  [ "$use_icons" = "true" ] && update_icon="↑ "
-  add_seg "${CLR_ADD}${update_icon}update available${CLR_RESET}" 9
+  case "$update_available" in
+    ''|*[!0-9.]*) update_ver="" ;;   # not a clean version — show generic text
+    *)            update_ver="$update_available" ;;
+  esac
+  if [ -n "$update_ver" ]; then
+    if [ "$use_icons" = "true" ]; then update_text="↑ ${update_ver}"; else update_text="update ${update_ver}"; fi
+    if [ "$pr_link" = "true" ]; then
+      update_url="https://github.com/briansmith80/claude-code-status-bar/releases/tag/v${update_ver}"
+      update_text="\033]8;;${update_url}\033\\\\${update_text}\033]8;;\033\\\\"
+    fi
+  elif [ "$use_icons" = "true" ]; then
+    update_text="↑ update available"
+  else
+    update_text="update available"
+  fi
+  add_seg "${CLR_ADD}${update_text}${CLR_RESET}" 9
 fi
 
 # ── Truncation ───────────────────────────────────────────────
