@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.10.0] - 2026-06-13
+
+The usage-bar label now counts down by default.
+
+### Changed
+
+- **`usage_label` now defaults to `countdown`** (was `clock`): the 5hr and weekly usage bars show the time remaining until reset (`5hr (2h20m)`, `wk (3d4h)`) out of the box, instead of the reset moment (`5hr (2pm)`, `wk (fri,3am)`). Set `usage_label=clock` in `statusline.conf` to keep the old reset-moment label. Because a countdown sits stale between renders, pairing it with a `refreshInterval` on the `statusLine` setting is recommended (see the README). BATS coverage updated: the default case now asserts countdown, and a new test covers the `usage_label=clock` opt-out.
+
 ## [2.9.0] - 2026-06-12
 
 Clickable PR links, two opt-in activity effects, and tag-driven release automation.

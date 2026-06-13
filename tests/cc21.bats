@@ -84,7 +84,15 @@ load test_helper
   assert_plain_contains "wk (3d4h)"
 }
 
-@test "default clock label is unchanged when usage_label is unset" {
+@test "countdown is the default when usage_label is unset" {
+  now=$(date +%s)
+  # 2h20m plus a 45s buffer so the label stays 2h20m while the test runs
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"rate_limits\":{\"five_hour\":{\"used_percentage\":42,\"resets_at\":$((now + 2*3600 + 20*60 + 45))}}}"
+  assert_plain_contains "5hr (2h20m)"
+}
+
+@test "usage_label=clock opts back into the reset-moment label" {
+  write_conf "usage_label=clock"
   now=$(date +%s)
   run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"rate_limits\":{\"five_hour\":{\"used_percentage\":42,\"resets_at\":$((now + 2*3600 + 20*60))}}}"
   assert_plain_contains "5hr ("

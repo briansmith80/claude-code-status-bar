@@ -52,7 +52,7 @@ Ask the user what they'd like to customize. Present these categories:
 ### Display Options
 - `use_icons` — Unicode icons before segments (default: true)
 - `auto_hide` — Hide zero/empty values (default: true)
-- `usage_label` — Usage bar reset label: clock, e.g. 2pm (default), or countdown, e.g. 2h20m
+- `usage_label` — Usage bar reset label: countdown, e.g. 2h20m (default), or clock, e.g. 2pm
 - `activity_ttl_seconds` — Hide the live activity line when its cache is older than this (default: 120)
 - `activity_colour` — Per-segment theme colours on the activity line: spinner on running tools, heat-coloured elapsed times, red failures, completion flash, gradient todo bar. Set false for the classic all-dim line (default: true)
 - `activity_fresh_seconds` — Drop the activity line back to all-dim when its data is older than this, so stale info reads as stale (default: 45)

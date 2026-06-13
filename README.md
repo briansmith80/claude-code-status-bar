@@ -248,9 +248,9 @@ The bar shows your Anthropic usage limits as colour-coded progress bars with res
 
 ### Label style: reset time or countdown
 
-By default the label shows the reset moment: `5hr (2pm)`, `wk (fri,3am)`. Set `usage_label=countdown` in your config to show the time remaining instead: `5hr (2h20m)`, `wk (3d4h)`.
+By default the label shows the time remaining until reset: `5hr (2h20m)`, `wk (3d4h)`. Set `usage_label=clock` in your config to show the reset moment instead: `5hr (2pm)`, `wk (fri,3am)`.
 
-The status bar re-renders when Claude Code triggers it (after responses and state changes), so a countdown can sit stale while you are away. Claude Code can also re-run the status bar on a timer: add `refreshInterval` (seconds) to the `statusLine` block in `~/.claude/settings.json` and the countdown stays fresh, and the activity line's elapsed times keep moving too:
+The status bar re-renders when Claude Code triggers it (after responses and state changes), so the default countdown can sit stale while you are away. Claude Code can also re-run the status bar on a timer: add `refreshInterval` (seconds) to the `statusLine` block in `~/.claude/settings.json` and the countdown stays fresh, and the activity line's elapsed times keep moving too (recommended when using the countdown label):
 
 ```json
 {
@@ -338,7 +338,7 @@ group_open="["
 group_close="]"
 
 # ── Usage limits ─────────────────────────────────────────
-usage_label=clock           # clock = reset moment (2pm); countdown = time remaining (2h20m)
+usage_label=countdown       # countdown = time remaining (2h20m, default); clock = reset moment (2pm)
 usage_cache_seconds=600     # OAuth fallback refresh interval (ignored when stdin provides limits)
 ```
 
