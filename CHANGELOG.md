@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.15.0] - 2026-06-13
+
+Opt-in styling: gradient bars, a theme preview flag, and Nerd Font / Powerline glyphs (ideas adapted from kcchien/claude-code-statusline).
+
+### Added
+
+- **`bar_gradient` (opt-in, default false):** colour the progress bars along the active theme's green→accent gradient instead of one flat colour, reusing the existing per-theme `CLR_RAMP0-3` stops (and the truecolour engine). No-op under `mono`/`NO_COLOR`; the dim track and pacing marker are unchanged.
+- **`--demo [theme]` flag:** preview a theme with a realistic canned payload without faking stdin or touching `statusline.conf`. `--demo tokyo-night` renders one; `--demo` / `--demo all` cycles all eight, labelled. Uses a new `STATUSLINE_THEME` env override (applied after the conf) to force the theme per render.
+- **`nerd_font` and `powerline` (opt-in, default false):** `nerd_font` swaps the Unicode segment icons for Nerd Font glyphs (encoded as UTF-8 bytes via `printf -v`, so still Bash 3.2-safe and fork-free); `powerline` adds an arrow () separator between segments. Both need a patched Nerd Font installed and degrade to the Unicode/space defaults otherwise.
+- **8 new BATS tests** (`tests/styling.bats`; suite 118): gradient on/off, `--demo` single/all, nerd-font on/off, powerline on/off.
+
+All three are off by default, so existing output is unchanged. Not adopted from kcchien: its `jq` requirement, macOS-only `stat`, and 5s git cache (we're jq-free and already lean via porcelain-v2).
+
 ## [2.14.0] - 2026-06-13
 
 Truecolour theme palettes, redesigned to be distinct.

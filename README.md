@@ -325,8 +325,11 @@ subagent_rows=true          # styled subagent panel rows (requires Node.js)
 
 # ── Display ──────────────────────────────────────────────
 use_icons=true              # ↱ ◆ ▸ ● ≡ ⊞ ↑ prefixes and the ▲ context warning
+nerd_font=false             # opt-in: swap the Unicode icons for Nerd Font glyphs (needs a patched font)
+powerline=false             # opt-in: arrow () separators between segments (needs a Nerd/Powerline font)
 auto_hide=true              # hide zero-valued segments
 bar_width=10                # progress bar width in characters
+bar_gradient=false          # opt-in: colour progress bars along the theme's green→accent gradient
 branch_max_length=          # truncate long branch names with … (empty = no limit)
 context_warn_threshold=auto # auto = ▲ within 20k tokens of auto-compact; or a raw % like 80
 
@@ -348,6 +351,8 @@ auto_update=false           # opt-in: install new versions automatically in the 
 ```
 
 A few details worth knowing:
+
+- **Styling extras** (all opt-in, off by default): `bar_gradient=true` colours the progress bars along the active theme's green→accent gradient (reusing the same stops as the activity todo-bar; a no-op under `mono`/`NO_COLOR`). `nerd_font=true` swaps the Unicode segment icons for [Nerd Font](https://www.nerdfonts.com/) glyphs and `powerline=true` adds an arrow () separator between segments — both need a patched Nerd Font installed in your terminal and degrade to the Unicode/space defaults otherwise. Preview any combination with `--demo`.
 
 - **Context warnings are compaction-aware**: Claude Code auto-compacts at a fixed reserve below the window (not at a percentage), which lands at roughly 83% of a 200k window but almost 97% of a 1M window. With `context_warn_threshold=auto` (the default), the `│` marker on the context bar shows that point and `▲` appears within 20k tokens of it, matching Claude Code's own context-low timing. The maths honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting from `/autocompact`, and `DISABLE_AUTO_COMPACT` (which removes the marker and falls back to a raw 80% rule). Set a number instead of `auto` to keep the old fixed-percentage behaviour. When `▲` appears, a `/compact` at your next natural stopping point beats letting auto-compact summarize mid-task.
 - **Animated effects need a low `refreshInterval`**: the spinner, the `activity_scanner` sweep, and the `activity_pulse` breath are all driven by the wall clock, so they only visibly move when the bar re-renders often. If you enable `activity_pulse` or `activity_scanner`, set a low **odd** `refreshInterval` such as `3` on the `statusLine` block (see the [usage-label section](#label-style-reset-time-or-countdown)). Odd matters for the pulse: its breath toggles on each whole second, so an even interval like `2` can keep sampling the same beat and leave it stuck bold or faint. On the default `refreshInterval: 60` these effects sit still, which is why both ship off by default.
@@ -401,6 +406,7 @@ The script normally runs with no arguments, fed JSON on stdin by Claude Code. Th
 | `--dump-config` | Print the resolved configuration (defaults merged with your `statusline.conf`) as sorted `key=value` lines. The fastest answer to "why isn't my override taking effect?" |
 | `--dump-stdin` | Echo the JSON Claude Code sends (pretty-printed when a working python3 is on PATH) plus a YES/NO report of detected fields: `rate_limits`, `transcript_path`, nested `model`, nested `context_window`. Pipe JSON in: `echo '<json>' \| bash ~/.claude/statusline-command.sh --dump-stdin` |
 | `--benchmark [N]` | Time N end-to-end runs (default 5) against a realistic canned payload and report min/avg/max, for picking a safe `refreshInterval`. Needs GNU date `%N` (Linux/MSYS2). Add `STATUSLINE_PROFILE=1` to any run for a per-phase breakdown on stderr. |
+| `--demo [theme]` | Preview a theme with a realistic canned payload, e.g. `--demo tokyo-night`. With no argument (or `all`) it cycles all eight themes, each labelled. Renders without touching your `statusline.conf`. Handy after changing `colour_theme`, `bar_gradient`, or the Nerd Font options. |
 | `--uninstall` | Interactively remove all installed files. See [Uninstall](#uninstall). |
 
 ## Updating

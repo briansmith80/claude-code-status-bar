@@ -211,6 +211,8 @@ case "${1:-}" in
     echo "  --benchmark [N]  Time N end-to-end runs (default 5) against a canned payload"
     echo "                     bash statusline-command.sh --benchmark"
     echo "                     STATUSLINE_PROFILE=1 adds a per-phase breakdown to any run"
+    echo "  --demo [theme]   Preview a theme (or 'all', the default) with a canned payload"
+    echo "                     bash statusline-command.sh --demo tokyo-night"
     echo ""
     echo "Version: ${VERSION}"
     exit 0
@@ -310,7 +312,7 @@ check_for_update() {
 # Skip the background update check for diagnostic / management flags
 # (they would race with cache deletion or pollute --dump-config output).
 case "${1:-}" in
-  --dump-config|--uninstall|--benchmark) ;;
+  --dump-config|--uninstall|--benchmark|--demo) ;;
   *) check_for_update ;;
 esac
 
@@ -350,6 +352,11 @@ usage_cache_seconds=600
 auto_update=false
 auto_hide=true
 use_icons=true
+# Opt-in styling. nerd_font swaps the Unicode segment icons for Nerd Font
+# glyphs; powerline adds an arrow separator between segments. Both need a
+# patched Nerd Font installed and degrade to the Unicode/space defaults.
+nerd_font=false
+powerline=false
 context_warn_threshold=auto
 enable_truncation=false
 max_width=""
@@ -363,6 +370,9 @@ show_tokens=false
 show_effort=true
 show_fast_mode=true
 bar_width=10
+# Opt-in: colour progress bars along the per-theme CLR_RAMP gradient instead
+# of one flat colour. No-op under mono/NO_COLOR (ramps are empty).
+bar_gradient=false
 branch_max_length=""
 show_activity=true
 activity_ttl_seconds=120
@@ -381,9 +391,32 @@ STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 # shellcheck disable=SC1090
 [ -f "$STATUSLINE_CONF" ] && . "$STATUSLINE_CONF"
 
+# Env override for the theme, applied after the conf so it wins. Used by
+# --demo to preview a theme without touching the user's statusline.conf.
+[ -n "${STATUSLINE_THEME:-}" ] && colour_theme="$STATUSLINE_THEME"
+
 # Backwards compatibility: accept old name
 [ "${show_usage_weekly:-}" = "true" ] && show_usage_7d=true
 [ "${show_usage_weekly:-}" = "false" ] && show_usage_7d=false
+
+# ── Nerd Font glyphs (opt-in) ─────────────────────────────────
+# Encoded as raw UTF-8 bytes via `printf -v` so the script stays Bash 3.2-safe
+# (no \u escapes) and forks nothing; only built when nerd_font=true. Segments
+# fall back to their Unicode/empty icons otherwise. Glyph codepoints (standard
+# Nerd Font private-use area) are easy to retune in this one block.
+nf_branch="" nf_model="" nf_agent="" nf_fast="" nf_dirty="" nf_stash="" nf_wt=""
+PL_SEP=""
+if [ "$nerd_font" = "true" ]; then
+  printf -v nf_branch '\xee\x82\xa0 '   # U+E0A0 branch
+  printf -v nf_model  '\xef\x8b\x9b '   # U+F2DB chip
+  printf -v nf_agent  '\xef\x95\x84 '   # U+F544 robot
+  printf -v nf_fast   '\xef\x83\xa7 '   # U+F0E7 bolt
+  printf -v nf_dirty  '\xef\x81\x80 '   # U+F040 pencil
+  printf -v nf_stash  '\xef\x86\x87 '   # U+F187 archive
+  printf -v nf_wt     '\xef\x86\xbb '   # U+F1BB tree
+fi
+# Powerline separator glyph (U+E0B0). Used between segments when powerline=true.
+[ "$powerline" = "true" ] && printf -v PL_SEP '\xee\x82\xb0'
 
 # ── Post-config CLI Flags ─────────────────────────────────────
 # These flags need the resolved config (defaults + statusline.conf),
@@ -395,6 +428,7 @@ case "${1:-}" in
     {
       printf 'auto_hide=%s\n'              "${auto_hide}"
       printf 'auto_update=%s\n'            "${auto_update}"
+      printf 'bar_gradient=%s\n'           "${bar_gradient}"
       printf 'bar_width=%s\n'              "${bar_width}"
       printf 'branch_max_length=%s\n'      "${branch_max_length}"
       printf 'colour_theme=%s\n'           "${colour_theme}"
@@ -422,6 +456,8 @@ case "${1:-}" in
       printf 'show_fast_mode=%s\n'         "${show_fast_mode}"
       printf 'show_lines_changed=%s\n'     "${show_lines_changed}"
       printf 'show_model=%s\n'             "${show_model}"
+      printf 'nerd_font=%s\n'              "${nerd_font}"
+      printf 'powerline=%s\n'              "${powerline}"
       printf 'pr_link=%s\n'                "${pr_link}"
       printf 'show_pr=%s\n'                "${show_pr}"
       printf 'show_stash=%s\n'             "${show_stash}"
@@ -536,6 +572,24 @@ case "${1:-}" in
     done
     echo "min ${bench_min} ms · avg $(( bench_total / bench_runs )) ms · max ${bench_max} ms"
     rm -f "$bench_tr" "${SCRIPT_DIR}/.statusline-activity-cache.benchmar" 2>/dev/null
+    exit 0
+    ;;
+  --demo)
+    # Preview a theme (or all eight) with a realistic canned payload, without
+    # touching the user's statusline.conf. Re-invokes this script per theme
+    # with STATUSLINE_THEME set; the child renders normally (no recursion).
+    # Usage: statusline-command.sh --demo [theme|all]
+    demo_themes="default nord dracula solarized tokyo-night catppuccin matrix mono"
+    case "${2:-all}" in
+      all|'') : ;;
+      *) demo_themes="$2" ;;
+    esac
+    demo_json="{\"cwd\":\"$PWD\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":65,\"context_window_size\":200000,\"total_input_tokens\":130000},\"total_cost_usd\":2.50,\"rate_limits\":{\"five_hour\":{\"used_percentage\":42,\"resets_at\":$(( NOW_EPOCH + 7200 ))},\"seven_day\":{\"used_percentage\":71,\"resets_at\":$(( NOW_EPOCH + 86400 ))}}}"
+    for demo_t in $demo_themes; do
+      printf '%s\n' "── ${demo_t} ──"
+      printf '%s' "$demo_json" | STATUSLINE_THEME="$demo_t" bash "$0" 2>/dev/null || true
+      printf '\n\n'
+    done
     exit 0
     ;;
 esac
@@ -1347,12 +1401,24 @@ build_progress_bar() {
     colour="$CLR_BAR_OK"
   fi
 
-  local bar="${colour}"
+  # Opt-in gradient: colour each filled cell along the per-theme CLR_RAMP
+  # stops (green->accent) by its position. No-op under mono/NO_COLOR (the
+  # ramps are empty) and leaves dim cells + the pace marker unchanged.
+  local bar="${colour}" gstop gcol
   for (( i=0; i<width; i++ )); do
     if [ "$i" -eq "$target_pos" ]; then
       bar+="${CLR_PACE}│${colour}"
     elif [ "$i" -lt "$filled" ]; then
-      bar+="█"
+      if [ "${bar_gradient:-false}" = "true" ]; then
+        gstop=$(( i * 4 / width )); [ "$gstop" -gt 3 ] && gstop=3
+        case "$gstop" in
+          0) gcol="$CLR_RAMP0" ;; 1) gcol="$CLR_RAMP1" ;;
+          2) gcol="$CLR_RAMP2" ;; *) gcol="$CLR_RAMP3" ;;
+        esac
+        bar+="${gcol}█"
+      else
+        bar+="█"
+      fi
     else
       bar+="${CLR_DIM}░${colour}"
     fi
@@ -1396,6 +1462,7 @@ fi
 if [ "$show_branch" = "true" ] && [ -n "$branch" ]; then
   branch_icon=""
   [ "$use_icons" = "true" ] && branch_icon="↱ "
+  [ "$nerd_font" = "true" ] && branch_icon="$nf_branch"
   dir_branch+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
 fi
 [ -n "$dir_branch" ] && add_seg "$dir_branch" 1
@@ -1413,6 +1480,7 @@ fi
 if [ "$show_model" = "true" ]; then
   model_icon=""
   [ "$use_icons" = "true" ] && model_icon="◆ "
+  [ "$nerd_font" = "true" ] && model_icon="$nf_model"
   case "${model:-}" in
     *Haiku*)  model_clr="$CLR_ADD" ;;                # green (cheap)
     *Sonnet*) model_clr="$CLR_WARN" ;;               # yellow (mid)
@@ -1434,6 +1502,7 @@ if [ "$show_agent" = "true" ]; then
       sanitize "$agent_name"; agent_name=$REPLY
       agent_icon=""
       [ "$use_icons" = "true" ] && agent_icon="▸ "
+      [ "$nerd_font" = "true" ] && agent_icon="$nf_agent"
       add_seg "${CLR_MODEL}${agent_icon}${agent_name}${CLR_RESET}" 3
     fi
   fi
@@ -1459,6 +1528,7 @@ if [ "$show_fast_mode" = "true" ]; then
   if [[ $input =~ $fm_guard ]]; then
     fast_icon=""
     [ "$use_icons" = "true" ] && fast_icon="⚡ "
+    [ "$nerd_font" = "true" ] && fast_icon="$nf_fast"
     add_seg "${CLR_WARN}${fast_icon}fast${CLR_RESET}" 4
   fi
 fi
@@ -1625,6 +1695,7 @@ if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
   if [ "$auto_hide" != "true" ] || [ "$dirty_count" -gt 0 ] 2>/dev/null; then
     dirty_icon=""
     [ "$use_icons" = "true" ] && dirty_icon="● "
+    [ "$nerd_font" = "true" ] && dirty_icon="$nf_dirty"
     add_seg "${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}" 5 "git"
   fi
 fi
@@ -1647,6 +1718,7 @@ if [ "$show_stash" = "true" ]; then
   if [ "$auto_hide" != "true" ] || [ "$sc" -gt 0 ] 2>/dev/null; then
     stash_icon=""
     [ "$use_icons" = "true" ] && stash_icon="≡ "
+    [ "$nerd_font" = "true" ] && stash_icon="$nf_stash"
     add_seg "${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}" 6 "git"
   fi
 fi
@@ -1713,6 +1785,7 @@ fi
 if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
   wt_icon=""
   [ "$use_icons" = "true" ] && wt_icon="⊞ "
+  [ "$nerd_font" = "true" ] && wt_icon="$nf_wt"
   add_seg "${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}" 8
 fi
 
@@ -1848,6 +1921,11 @@ first_seg=1
 current_group=""
 group_has_content=false
 
+# Inter-segment/inter-group separator. Powerline mode swaps the double space
+# for a fg-coloured arrow glyph (lite: no per-segment background fill).
+seg_sep="  "
+[ "$powerline" = "true" ] && [ -n "$PL_SEP" ] && seg_sep=" ${CLR_DIM}${PL_SEP}${CLR_RESET} "
+
 for (( i=0; i<seg_idx; i++ )); do
   if [ "$enable_truncation" = "true" ] && [ "${seg_active[$i]:-1}" = "0" ]; then
     continue
@@ -1862,7 +1940,7 @@ for (( i=0; i<seg_idx; i++ )); do
         output+="${group_close}"
       fi
       # Separator between segments/groups
-      [ "$first_seg" != "1" ] && output+="  "
+      [ "$first_seg" != "1" ] && output+="$seg_sep"
       first_seg=0
       # Open new group
       output+="${group_open}"
@@ -1883,7 +1961,7 @@ for (( i=0; i<seg_idx; i++ )); do
     if [ "$first_seg" = "1" ]; then
       first_seg=0
     else
-      output+="  "
+      output+="$seg_sep"
     fi
   fi
 
