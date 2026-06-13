@@ -25,6 +25,8 @@ const PROPOSED = {
   'tokyo-night': ['#7aa2f7', '#bb9af7', '#7dcfff', '#ff9e64', '#9ece6a', '#e0af68', '#f7768e', '#ff007c'],
   // cozy warm pastel — lavender/peach (Catppuccin Mocha official)
   catppuccin:    ['#89b4fa', '#cba6f7', '#74c7ec', '#fab387', '#a6e3a1', '#f9e2af', '#f38ba8', '#f5c2e7'],
+  // digital-rain phosphor green — monochrome, separated by brightness
+  matrix:        ['#00ff41', '#22ff88', '#00cc33', '#aaffaa', '#00ff00', '#9eff5e', '#008f11', '#d6ffd6'],
   // unchanged: no colour, neutral grey ramp
   mono:          ['#e6edf3', '#c9d1d9', '#adbac7', '#8b949e', '#6e7681', '#545d68', '#444c56', '#373e47'],
 };
@@ -36,6 +38,7 @@ const CHARACTER = {
   solarized: 'earthy / vintage — desaturated, balanced',
   'tokyo-night': 'deep blue night with a warm orange accent',
   catppuccin: 'cozy warm pastel — lavender, peach',
+  matrix: 'digital-rain phosphor green — monochrome, brightness-separated',
   mono: 'no colour, neutral grey ramp — unchanged',
 };
 

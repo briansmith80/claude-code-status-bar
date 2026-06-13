@@ -24,7 +24,7 @@ fi
 Ask the user what they'd like to customize. Present these categories:
 
 ### Themes
-- `colour_theme` — Pick one of: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `mono` (default: default)
+- `colour_theme` — Pick one of: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `matrix`, `mono` (default: default)
 
 ### Segments (toggle on/off)
 - `show_directory` — Working directory

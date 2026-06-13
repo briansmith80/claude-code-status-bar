@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Theme tests. The script applies one of seven palettes via apply_theme().
+# Theme tests. The script applies one of eight palettes via apply_theme().
 # - non-mono themes must emit at least one ANSI CSI sequence (\033[)
 # - mono must emit zero CSI sequences
 # - NO_COLOR=1 must force mono behaviour regardless of theme
@@ -52,6 +52,13 @@ csi_count() {
 
 @test "catppuccin theme emits ANSI escapes" {
   write_conf "colour_theme=catppuccin"
+  run_statusline "$JSON"
+  [ "$status" -eq 0 ]
+  [ "$(csi_count)" -gt 0 ]
+}
+
+@test "matrix theme emits ANSI escapes" {
+  write_conf "colour_theme=matrix"
   run_statusline "$JSON"
   [ "$status" -eq 0 ]
   [ "$(csi_count)" -gt 0 ]

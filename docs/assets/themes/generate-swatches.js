@@ -21,6 +21,7 @@ const THEMES = {
   solarized:     ['#00afaf', '#5f5faf', '#0087ff', '#d75f00', '#5f8700', '#af8700', '#d70000', '#af005f'],
   'tokyo-night': ['#87afff', '#af87ff', '#87d7ff', '#ffaf5f', '#afd75f', '#d7af5f', '#ff5f87', '#ff0087'],
   catppuccin:    ['#87afff', '#d7afff', '#87d7d7', '#ffaf87', '#afd787', '#ffd7af', '#ff87af', '#ffafd7'],
+  matrix:        ['#00ff5f', '#00ff87', '#00d700', '#afff87', '#00ff00', '#afff00', '#008700', '#d7ffd7'],
   mono:          ['#e6edf3', '#c9d1d9', '#adbac7', '#8b949e', '#6e7681', '#545d68', '#444c56', '#373e47'],
 };
 

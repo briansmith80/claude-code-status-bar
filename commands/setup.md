@@ -99,7 +99,7 @@ If the output shows a formatted status line with colors, the installation is suc
 
 Ask the user if they want to customize their status bar. Available options:
 
-- **Theme**: default, nord, dracula, solarized, tokyo-night, catppuccin, mono
+- **Theme**: default, nord, dracula, solarized, tokyo-night, catppuccin, matrix, mono
 - **Live activity line**: Shows running tools, agents, and todo progress (enabled by default, requires Node.js)
 - **Usage pacing markers**: Shows where usage should be for even consumption (enabled by default)
 - **Toggle segments**: Each segment can be turned on/off

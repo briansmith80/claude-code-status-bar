@@ -660,6 +660,28 @@ apply_theme() {
       CLR_RAMP2="\033[38;5;223m" CLR_RAMP3="\033[38;5;216m" # green->peach
       CLR_RESET="\033[0m"
       ;;
+    matrix)
+      # Digital-rain phosphor green. Monochrome by design — roles are
+      # separated by brightness, not hue, like a green CRT. The brightest
+      # "lead" green is reserved for the model accent and pacing marker.
+      CLR_DIR="\033[38;5;47m"      # bright matrix green #00ff5f
+      CLR_BRANCH="\033[38;5;48m"   # cyan-green #00ff87
+      CLR_MODEL="\033[38;5;40m"    # green #00d700
+      CLR_MODEL_OPUS="\033[38;5;156m" # lead green #afff87 (Opus tier)
+      CLR_MODEL_FABLE="\033[38;5;48m"  # cyan-green #00ff87 (Fable tier)
+      CLR_ADD="\033[38;5;46m"      # bright green #00ff00
+      CLR_DEL="\033[38;5;28m"      # dark green #008700 (removals — dim, not red)
+      CLR_WARN="\033[38;5;154m"    # chartreuse #afff00 (caution, still green)
+      CLR_INFO="\033[38;5;48m"     # cyan-green #00ff87
+      CLR_DIM="\033[38;5;22m"     # trailing rain #005f00
+      CLR_BAR_OK="\033[38;5;28m"   # calm dark green
+      CLR_BAR_MED="\033[38;5;46m"  # bright green
+      CLR_BAR_HIGH="\033[38;5;154m" # chartreuse (hottest)
+      CLR_PACE="\033[38;5;194m"    # palest lead green #d7ffd7 (rain head)
+      CLR_RAMP0="\033[38;5;22m"  CLR_RAMP1="\033[38;5;28m" # todo-bar gradient
+      CLR_RAMP2="\033[38;5;40m"  CLR_RAMP3="\033[38;5;46m" # dark->bright green
+      CLR_RESET="\033[0m"
+      ;;
     mono)
       CLR_DIR="" CLR_BRANCH="" CLR_MODEL="" CLR_MODEL_OPUS="" CLR_MODEL_FABLE=""
       CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO="" CLR_DIM=""

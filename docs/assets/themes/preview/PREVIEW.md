@@ -10,4 +10,5 @@ Proposed = each theme's **official** palette, leaned into a distinct character, 
 | `solarized` | <img src="../solarized.svg" width="360"> | <img src="solarized.svg" width="360"> | earthy / vintage — desaturated, balanced |
 | `tokyo-night` | <img src="../tokyo-night.svg" width="360"> | <img src="tokyo-night.svg" width="360"> | deep blue night with a warm orange accent |
 | `catppuccin` | <img src="../catppuccin.svg" width="360"> | <img src="catppuccin.svg" width="360"> | cozy warm pastel — lavender, peach |
+| `matrix` | <img src="../matrix.svg" width="360"> | <img src="matrix.svg" width="360"> | digital-rain phosphor green — monochrome, brightness-separated |
 | `mono` | <img src="../mono.svg" width="360"> | <img src="mono.svg" width="360"> | no colour, neutral grey ramp — unchanged |

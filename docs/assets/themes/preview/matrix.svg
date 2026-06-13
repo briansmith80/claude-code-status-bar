@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="56" viewBox="0 0 400 56" role="img" aria-label="matrix proposed colour theme palette">
+  <rect x="0.5" y="0.5" width="399" height="55" rx="8" fill="#0d1117" stroke="#30363d"/>
+  <text x="14" y="33" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="600" fill="#e6edf3">matrix</text>
+  <rect x="118" y="15" width="26" height="26" rx="5" fill="#00ff41"/>
+  <rect x="152" y="15" width="26" height="26" rx="5" fill="#22ff88"/>
+  <rect x="186" y="15" width="26" height="26" rx="5" fill="#00cc33"/>
+  <rect x="220" y="15" width="26" height="26" rx="5" fill="#aaffaa"/>
+  <rect x="254" y="15" width="26" height="26" rx="5" fill="#00ff00"/>
+  <rect x="288" y="15" width="26" height="26" rx="5" fill="#9eff5e"/>
+  <rect x="322" y="15" width="26" height="26" rx="5" fill="#008f11"/>
+  <rect x="356" y="15" width="26" height="26" rx="5" fill="#d6ffd6"/>
+</svg>

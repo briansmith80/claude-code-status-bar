@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.13.0] - 2026-06-13
+
+A *Matrix* theme.
+
+### Added
+
+- **`matrix` colour theme**: a digital-rain phosphor-green palette (the eighth theme). It's monochrome by design, like a green CRT, so segments are separated by brightness rather than hue: bright `#00ff5f` directory, the palest "lead" green for the Opus accent and the pacing marker, chartreuse for warnings/cost, and a dim `#008700` for removals (no red). Respects `NO_COLOR`/mono like every theme. Added to `apply_theme()`, the swatch generator (new `docs/assets/themes/matrix.svg`), the README theme gallery, and the `setup`/`configure` commands. New BATS test in `tests/themes.bats`.
+
 ## [2.12.0] - 2026-06-13
 
 Opt-in automatic updates.
