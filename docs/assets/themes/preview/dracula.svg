@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="56" viewBox="0 0 400 56" role="img" aria-label="dracula proposed colour theme palette">
+  <rect x="0.5" y="0.5" width="399" height="55" rx="8" fill="#0d1117" stroke="#30363d"/>
+  <text x="14" y="33" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="600" fill="#e6edf3">dracula</text>
+  <rect x="118" y="15" width="26" height="26" rx="5" fill="#bd93f9"/>
+  <rect x="152" y="15" width="26" height="26" rx="5" fill="#ff79c6"/>
+  <rect x="186" y="15" width="26" height="26" rx="5" fill="#8be9fd"/>
+  <rect x="220" y="15" width="26" height="26" rx="5" fill="#ffb86c"/>
+  <rect x="254" y="15" width="26" height="26" rx="5" fill="#50fa7b"/>
+  <rect x="288" y="15" width="26" height="26" rx="5" fill="#f1fa8c"/>
+  <rect x="322" y="15" width="26" height="26" rx="5" fill="#ff5555"/>
+  <rect x="356" y="15" width="26" height="26" rx="5" fill="#ff79c6"/>
+</svg>
