@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.10.2] - 2026-06-13
+
+Documented the `refreshInterval` the animated activity effects need.
+
+### Changed
+
+- **Docs: `activity_pulse` and `activity_scanner` now explain their `refreshInterval` dependency.** The spinner, the scanner sweep, and the pulse breath are all driven by the wall clock, so they only animate when the bar re-renders often. The README and the `/configure` command now recommend a low **odd** `refreshInterval` such as `3` when either effect is enabled, and call out that an even value like `2` can leave the pulse stuck (its breath toggles each whole second, so an even interval keeps sampling the same beat). No behaviour change; defaults remain `activity_pulse=false`, `activity_scanner=false`, `refreshInterval` written as `60`, which is why both effects ship off.
+
 ## [2.10.1] - 2026-06-13
 
 Installers set a default `refreshInterval` so the new countdown label stays fresh.

@@ -56,8 +56,10 @@ Ask the user what they'd like to customize. Present these categories:
 - `activity_ttl_seconds` — Hide the live activity line when its cache is older than this (default: 120)
 - `activity_colour` — Per-segment theme colours on the activity line: spinner on running tools, heat-coloured elapsed times, red failures, completion flash, gradient todo bar. Set false for the classic all-dim line (default: true)
 - `activity_fresh_seconds` — Drop the activity line back to all-dim when its data is older than this, so stale info reads as stale (default: 45)
-- `activity_pulse` — Opt-in: the running tool/agent label breathes (alternates bold/faint each re-render) (default: false)
-- `activity_scanner` — Opt-in: a small sweeping tracker bar appears on line 2 while something has been running over 30 seconds (default: false)
+- `activity_pulse` — Opt-in: the running tool/agent label breathes (alternates bold/faint each re-render) (default: false). Needs a low odd `refreshInterval` such as 3 to animate; an even value like 2 can leave the breath stuck.
+- `activity_scanner` — Opt-in: a small sweeping tracker bar appears on line 2 while something has been running over 30 seconds (default: false). Needs a low `refreshInterval` such as 3 to animate.
+
+If the user turns on `activity_pulse` or `activity_scanner`, suggest they set `refreshInterval` (e.g. 3) on the `statusLine` block in `settings.json` so the effects animate. These effects barely move on the default `refreshInterval` of 60.
 - `pr_link` — Wrap the PR segment in an OSC 8 hyperlink to the pull request (clickable in terminals that support links) (default: true)
 - `subagent_rows` — Set to false to keep Claude Code's default subagent panel rows (default: true)
 - `usage_cache_seconds` — OAuth fallback refresh interval in seconds; ignored when stdin provides rate limits (default: 600)

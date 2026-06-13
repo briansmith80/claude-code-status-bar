@@ -318,8 +318,8 @@ show_activity=true          # the live line 2 (requires Node.js)
 activity_colour=true        # per-segment colours, spinner, flash, heat, gradient
 activity_fresh_seconds=45   # drop line 2 back to all-dim when data is older than this
 activity_ttl_seconds=120    # hide line 2 when its cache is older than this
-activity_pulse=false        # opt-in: the running label breathes (bold/faint alternation)
-activity_scanner=false      # opt-in: KITT-style tracker while something runs >30s
+activity_pulse=false        # opt-in: the running label breathes (bold/faint alternation); see note below on refreshInterval
+activity_scanner=false      # opt-in: KITT-style tracker while something runs >30s; see note below on refreshInterval
 pr_link=true                # PR segment links to the pull request (OSC 8 hyperlink)
 subagent_rows=true          # styled subagent panel rows (requires Node.js)
 
@@ -347,6 +347,7 @@ usage_cache_seconds=600     # OAuth fallback refresh interval (ignored when stdi
 A few details worth knowing:
 
 - **Context warnings are compaction-aware**: Claude Code auto-compacts at a fixed reserve below the window (not at a percentage), which lands at roughly 83% of a 200k window but almost 97% of a 1M window. With `context_warn_threshold=auto` (the default), the `│` marker on the context bar shows that point and `▲` appears within 20k tokens of it, matching Claude Code's own context-low timing. The maths honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting from `/autocompact`, and `DISABLE_AUTO_COMPACT` (which removes the marker and falls back to a raw 80% rule). Set a number instead of `auto` to keep the old fixed-percentage behaviour. When `▲` appears, a `/compact` at your next natural stopping point beats letting auto-compact summarize mid-task.
+- **Animated effects need a low `refreshInterval`**: the spinner, the `activity_scanner` sweep, and the `activity_pulse` breath are all driven by the wall clock, so they only visibly move when the bar re-renders often. If you enable `activity_pulse` or `activity_scanner`, set a low **odd** `refreshInterval` such as `3` on the `statusLine` block (see the [usage-label section](#label-style-reset-time-or-countdown)). Odd matters for the pulse: its breath toggles on each whole second, so an even interval like `2` can keep sampling the same beat and leave it stuck bold or faint. On the default `refreshInterval: 60` these effects sit still, which is why both ship off by default.
 - **`NO_COLOR`**: when the [`NO_COLOR`](https://no-color.org/) environment variable is set, all colours are disabled regardless of theme.
 - **Truncation order**: with `enable_truncation=true`, segments are dropped tier by tier, least important first: the update notice, then worktree, then duration, then ahead/behind, stash and the PR number, then effort, tokens, lines changed and dirty count, then fast mode, cost and cost rate, then vim mode, model, agent and the usage bars, then the context bar, and last of all directory and branch.
 - **Groups**: with `use_groups=true`, related segments are bracketed: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`. Directory/branch, vim, agent, effort, fast mode, tokens, worktree, and the update notice stay outside groups. Brackets wrap contiguous runs, so an ungrouped segment sitting between group members (an agent name or a worktree) splits the bracket around itself.
