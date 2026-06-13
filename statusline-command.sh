@@ -682,6 +682,8 @@ apply_palette() {
   tc_clr "${16}"; CLR_RAMP1=$REPLY
   tc_clr "${17}"; CLR_RAMP2=$REPLY
   tc_clr "${18}"; CLR_RAMP3=$REPLY
+  # Raw ramp hexes kept for the smooth per-cell gradient bar (bar_gradient).
+  RAMP_HEX="${15} ${16} ${17} ${18}"
   CLR_RESET="\033[0m"
 }
 
@@ -708,6 +710,7 @@ apply_theme() {
       CLR_ADD="" CLR_DEL="" CLR_WARN="" CLR_INFO="" CLR_DIM=""
       CLR_BAR_OK="" CLR_BAR_MED="" CLR_BAR_HIGH="" CLR_PACE=""
       CLR_RAMP0="" CLR_RAMP1="" CLR_RAMP2="" CLR_RAMP3=""
+      RAMP_HEX=""
       CLR_RESET=""
       ;;
     *) # default — original colours
@@ -727,6 +730,8 @@ apply_theme() {
       CLR_PACE="\033[38;5;199m"  # hot pink pacing marker
       CLR_RAMP0="\033[38;5;46m"  CLR_RAMP1="\033[38;5;112m" # todo-bar gradient
       CLR_RAMP2="\033[38;5;178m" CLR_RAMP3="\033[38;5;208m" # green->orange
+      # Hex equivalents of the ramp codes above, for the smooth gradient bar.
+      RAMP_HEX="00ff00 87d700 d7af00 ff8700"
       CLR_RESET="\033[0m"
       ;;
   esac
@@ -1406,21 +1411,45 @@ build_progress_bar() {
     colour="$CLR_BAR_OK"
   fi
 
-  # Opt-in gradient: colour each filled cell along the per-theme CLR_RAMP
-  # stops (green->accent) by its position. No-op under mono/NO_COLOR (the
-  # ramps are empty) and leaves dim cells + the pace marker unchanged.
-  local bar="${colour}" gstop gcol
+  # Opt-in gradient: interpolate a distinct colour per filled cell across the
+  # theme's four ramp stops (RAMP_HEX), so a wide bar shows a smooth ramp
+  # instead of 4 colour bands. Truecolour per cell; nearest-256 in fallback.
+  # No-op (plain █) when bar_gradient is off or RAMP_HEX is empty (mono/NO_COLOR).
+  local grad=false r0 g0 b0 r1 g1 b1 r2 g2 b2 r3 g3 b3
+  if [ "${bar_gradient:-false}" = "true" ] && [ -n "${RAMP_HEX:-}" ]; then
+    grad=true
+    local h0 h1 h2 h3 _rest
+    h0="${RAMP_HEX%% *}"; _rest="${RAMP_HEX#* }"
+    h1="${_rest%% *}";    _rest="${_rest#* }"
+    h2="${_rest%% *}";    h3="${_rest##* }"
+    r0=$((16#${h0:0:2})) g0=$((16#${h0:2:2})) b0=$((16#${h0:4:2}))
+    r1=$((16#${h1:0:2})) g1=$((16#${h1:2:2})) b1=$((16#${h1:4:2}))
+    r2=$((16#${h2:0:2})) g2=$((16#${h2:2:2})) b2=$((16#${h2:4:2}))
+    r3=$((16#${h3:0:2})) g3=$((16#${h3:2:2})) b3=$((16#${h3:4:2}))
+  fi
+
+  local bar="${colour}" i pos seg frac cr cg cb ri gi bi cell
   for (( i=0; i<width; i++ )); do
     if [ "$i" -eq "$target_pos" ]; then
       bar+="${CLR_PACE}│${colour}"
     elif [ "$i" -lt "$filled" ]; then
-      if [ "${bar_gradient:-false}" = "true" ]; then
-        gstop=$(( i * 4 / width )); [ "$gstop" -gt 3 ] && gstop=3
-        case "$gstop" in
-          0) gcol="$CLR_RAMP0" ;; 1) gcol="$CLR_RAMP1" ;;
-          2) gcol="$CLR_RAMP2" ;; *) gcol="$CLR_RAMP3" ;;
+      if [ "$grad" = "true" ]; then
+        # Position along the 4 stops (0..3000), then lerp the bracketing pair.
+        if [ "$width" -le 1 ]; then pos=0; else pos=$(( i * 3000 / (width - 1) )); fi
+        seg=$(( pos / 1000 )); frac=$(( pos % 1000 ))
+        case "$seg" in
+          0) cr=$(( r0 + (r1-r0)*frac/1000 )) cg=$(( g0 + (g1-g0)*frac/1000 )) cb=$(( b0 + (b1-b0)*frac/1000 )) ;;
+          1) cr=$(( r1 + (r2-r1)*frac/1000 )) cg=$(( g1 + (g2-g1)*frac/1000 )) cb=$(( b1 + (b2-b1)*frac/1000 )) ;;
+          2) cr=$(( r2 + (r3-r2)*frac/1000 )) cg=$(( g2 + (g3-g2)*frac/1000 )) cb=$(( b2 + (b3-b2)*frac/1000 )) ;;
+          *) cr=$r3 cg=$g3 cb=$b3 ;;
         esac
-        bar+="${gcol}█"
+        if [ "$TRUECOLOR" = "1" ]; then
+          cell="\033[38;2;${cr};${cg};${cb}m"
+        else
+          cube_index "$cr"; ri=$REPLY; cube_index "$cg"; gi=$REPLY; cube_index "$cb"; bi=$REPLY
+          cell="\033[38;5;$(( 16 + 36*ri + 6*gi + bi ))m"
+        fi
+        bar+="${cell}█"
       else
         bar+="█"
       fi

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.16.0] - 2026-06-13
+
+### Changed
+
+- **`bar_gradient` now renders a smooth per-cell gradient instead of four colour bands.** Each filled cell gets its own colour, linearly interpolated (in RGB) across the theme's four ramp stops, so a 10-wide bar shows ten distinct shades rather than the old `3 + 2 + …` banding. Truecolour per cell, with a nearest-256 fallback. Still theme-aware (e.g. `matrix` stays a smooth dark→bright green) and still a no-op under `mono`/`NO_COLOR`. The ramp hexes are stashed in `RAMP_HEX` by `apply_palette()` (and the `default` theme); interpolation is pure-bash integer math (no forks). Test tightened to assert a smooth spread.
+
 ## [2.15.1] - 2026-06-13
 
 ### Fixed

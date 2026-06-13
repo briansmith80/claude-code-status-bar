@@ -15,11 +15,13 @@ bar_fill_colours() {
   printf '%s' "$output" | grep -oE '38;2;[0-9;]+m█' | sort -u | wc -l | tr -d ' '
 }
 
-@test "bar_gradient=true colours the bar across multiple ramp stops" {
+@test "bar_gradient=true gives a smooth per-cell gradient (not 4 bands)" {
   write_conf "colour_theme=tokyo-night" "bar_gradient=true"
   run_statusline_env "$GRAD_JSON" "STATUSLINE_TRUECOLOR=1"
   [ "$status" -eq 0 ]
-  [ "$(bar_fill_colours)" -ge 2 ]
+  # ~7 filled cells at 78%; interpolation should give well more than the old
+  # 4 ramp stops — assert a smooth spread, not banding.
+  [ "$(bar_fill_colours)" -ge 5 ]
 }
 
 @test "bar_gradient=false (default) uses a single bar colour" {
