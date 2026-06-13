@@ -22,8 +22,9 @@ const PROPOSED = {
   dracula:       ['#bd93f9', '#ff79c6', '#8be9fd', '#ffb86c', '#50fa7b', '#f1fa8c', '#ff5555', '#ff79c6'],
   // EARTHY — vintage, desaturated, teal + amber (Solarized official)
   solarized:     ['#2aa198', '#6c71c4', '#268bd2', '#cb4b16', '#859900', '#b58900', '#dc322f', '#d33682'],
-  // DEEP — saturated blue night with hot neon accents (Tokyo Night official)
-  'tokyo-night': ['#7aa2f7', '#bb9af7', '#7dcfff', '#ff9e64', '#9ece6a', '#e0af68', '#f7768e', '#ff007c'],
+  // DEEP — midnight base: richer/darker royal-blue dir + violet branch, with
+  // bright neon accents kept (orange/red/hot-pink) so they pop like city lights
+  'tokyo-night': ['#5a7bf0', '#9d7cd8', '#7dcfff', '#ff9e64', '#9ece6a', '#e0af68', '#f7768e', '#ff007c'],
   // SOFT PASTEL — warm + light, led by lavender/sky (Catppuccin), distinct
   // from nord's cool steel on hue, lightness and temperature
   catppuccin:    ['#b4befe', '#cba6f7', '#89dceb', '#fab387', '#a6e3a1', '#f9e2af', '#f38ba8', '#f5c2e7'],
@@ -38,7 +39,7 @@ const CHARACTER = {
   nord: 'MUTED — cool steel/slate, the most subdued theme',
   dracula: 'NEON — electric, maximum saturation',
   solarized: 'EARTHY — vintage, desaturated, teal + amber',
-  'tokyo-night': 'DEEP — saturated blue night with hot neon accents',
+  'tokyo-night': 'DEEP — midnight royal-blue + violet base, hot neon accents',
   catppuccin: 'SOFT PASTEL — warm lavender, peach, pink',
   matrix: 'MONOCHROME — phosphor digital-rain green',
   mono: 'GREYSCALE — no colour',
