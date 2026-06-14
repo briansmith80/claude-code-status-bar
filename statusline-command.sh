@@ -422,6 +422,20 @@ STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 [ "${show_usage_weekly:-}" = "true" ] && show_usage_7d=true
 [ "${show_usage_weekly:-}" = "false" ] && show_usage_7d=false
 
+# --demo preview mode: the --demo dispatch re-invokes this script per theme with
+# STATUSLINE_DEMO=1 so the preview is clean and complete regardless of the user's
+# terminal width or git state: never truncate, show just the folder basename, and
+# drop the noisy git-state segments, so each theme's colours and gradient bars are
+# what stand out. (The canonical scene is built in the --demo branch below;
+# docs/assets/themes/generate-theme-demos.sh renders the same scene to SVG.)
+if [ "${STATUSLINE_DEMO:-}" = "1" ]; then
+  enable_truncation=false
+  dir_style=basename
+  show_dirty_count=false
+  show_ahead_behind=false
+  show_stash=false
+fi
+
 # ── Post-config CLI Flags ─────────────────────────────────────
 # These flags need the resolved config (defaults + statusline.conf),
 # but must run BEFORE we read stdin, fetch caches, or hit the network.
@@ -587,11 +601,15 @@ case "${1:-}" in
       all|'') : ;;
       *) demo_themes="$2" ;;
     esac
-    # High fill so the full progress-bar gradient is visible across all cells.
-    demo_json="{\"cwd\":\"$PWD\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":92,\"context_window_size\":200000,\"total_input_tokens\":184000},\"total_cost_usd\":2.50,\"rate_limits\":{\"five_hour\":{\"used_percentage\":88,\"resets_at\":$(( NOW_EPOCH + 7200 ))},\"seven_day\":{\"used_percentage\":96,\"resets_at\":$(( NOW_EPOCH + 86400 ))}}}"
+    # Canonical preview scene (also rendered to the README's per-theme SVGs by
+    # docs/assets/themes/generate-theme-demos.sh): a 1M-context model name (which
+    # exercises the " context" trim and matches the 1M window), varied bar fills
+    # (low 5h, mid context, near-full weekly) so the whole green->red gradient
+    # range shows, and tokens kept below the auto-compact warning band (no ▲).
+    demo_json="{\"cwd\":\"$PWD\",\"model\":{\"display_name\":\"Opus 4.8 (1M context)\"},\"context_window\":{\"used_percentage\":78,\"context_window_size\":1000000,\"total_input_tokens\":780000},\"total_cost_usd\":0.45,\"rate_limits\":{\"five_hour\":{\"used_percentage\":37,\"resets_at\":$(( NOW_EPOCH + 8400 ))},\"seven_day\":{\"used_percentage\":98,\"resets_at\":$(( NOW_EPOCH + 97200 ))}}}"
     for demo_t in $demo_themes; do
       printf '%s\n' "── ${demo_t} ──"
-      printf '%s' "$demo_json" | STATUSLINE_THEME="$demo_t" bash "$0" 2>/dev/null || true
+      printf '%s' "$demo_json" | STATUSLINE_THEME="$demo_t" STATUSLINE_DEMO=1 bash "$0" 2>/dev/null || true
       printf '\n\n'
     done
     exit 0

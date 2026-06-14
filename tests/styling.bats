@@ -58,6 +58,17 @@ bar_fill_colours() {
   [ "$(printf '%s' "$output" | grep -c '^── ')" -eq 8 ]
 }
 
+@test "--demo renders the full scene (model, usage bars, cost), not a truncated stub" {
+  # Regression: demo mode forces no-truncation, so the model, both usage bars,
+  # and cost always survive regardless of terminal width.
+  output="$(HOME="${TEST_HOME}" bash "${STATUSLINE_SCRIPT}" --demo nord 2>/dev/null)"
+  [[ "$output" == *"Opus 4.8 (1M)"* ]]   # model name, with the " context" trimmed
+  [[ "$output" == *"5hr ("* ]]           # 5-hour usage bar survived
+  [[ "$output" == *"wk ("* ]]            # weekly usage bar survived
+  [[ "$output" == *'$0.45'* ]]           # cost survived
+  [[ "$output" != *"▲"* ]]               # tokens kept below the auto-compact warning band
+}
+
 @test "env STATUSLINE_THEME overrides the conf colour_theme" {
   write_conf "colour_theme=nord"
   run_statusline_env "$JSON" "STATUSLINE_TRUECOLOR=1" "STATUSLINE_THEME=matrix"
