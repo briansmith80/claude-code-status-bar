@@ -1,10 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
-  <img src="docs/assets/banner-dark.svg" alt="claude-code-status-bar: usage limits, context, git state and live activity in your Claude Code status bar" width="830">
-</picture>
+<img src="docs/assets/banner-concept.svg" alt="claude-code-status-bar: real-time Claude Code usage, context window, live activity, and session cost, right in your status bar" width="880">
 
 [![ShellCheck](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml)
 [![Tests](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/tests.yml/badge.svg)](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/tests.yml)
@@ -362,6 +358,10 @@ A few details worth knowing:
 - **Trust level**: the config is sourced as bash, so treat it like your `.bashrc`: only put your own settings in it.
 
 ## Colour themes
+
+<div align="center">
+  <img src="docs/assets/banner-dark.svg" alt="claude-code-status-bar shown across four themes: default, tokyo-night, dracula, matrix" width="760">
+</div>
 
 Eight built-in themes, spread across a saturation/temperature ladder so no two read alike. Each preview below is a **real render** of the bar in that theme (the same output `--demo` prints), so you see the actual segment colours and the gradient progress bars in context:
 

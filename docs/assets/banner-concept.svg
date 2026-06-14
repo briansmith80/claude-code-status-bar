@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 790" width="1280" height="790" role="img" aria-labelledby="heroTitle">
+  <title id="heroTitle">claude-code-status-bar: stop discovering limits when it's too late</title>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="4%" r="72%">
+      <stop offset="0%" stop-color="#d97757" stop-opacity="0.18"/>
+      <stop offset="55%" stop-color="#7c5cff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#d97757" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="790" fill="#0b0e16"/>
+  <rect width="1280" height="790" fill="url(#glow)"/>
+
+  <!-- logo + wordmark (roughly centred) -->
+  <rect x="475" y="34" width="30" height="30" rx="8" fill="#d97757"/>
+  <text x="490" y="56" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="17" fill="#0b0e16">◆</text>
+  <text x="520" y="58" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="22" font-weight="700"><tspan fill="#d97757">claude</tspan><tspan fill="#e6edf3">-code-status-bar</tspan></text>
+
+  <!-- headline -->
+  <text x="640" y="150" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="56" font-weight="800" fill="#e6edf3">Stop discovering limits</text>
+  <text x="640" y="212" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="56" font-weight="800" fill="#d97757">when it's too late.</text>
+
+  <!-- subtitle -->
+  <text x="640" y="256" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="18" fill="#9aa4b2">Real-time visibility into your Claude Code usage, context window, active work, and session cost, right where you can see it.</text>
+
+  <!-- product panel: the real status bar -->
+  <rect x="40" y="300" width="1200" height="150" rx="14" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <circle cx="68" cy="326" r="5" fill="#f85149"/><circle cx="88" cy="326" r="5" fill="#d29922"/><circle cx="108" cy="326" r="5" fill="#3fb950"/>
+  <text x="1212" y="331" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="12" fill="#8b949e">Claude Code</text>
+  <line x1="40" y1="344" x2="1240" y2="344" stroke="#30363d" stroke-opacity="0.6"/>
+  <text x="64" y="386" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="12.5" xml:space="preserve"><tspan fill="#39c5cf">~/my-app</tspan><tspan fill="#8b949e"> on </tspan><tspan fill="#bc8cff">↱ main</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#d97757">◆ Opus 4.8 (1M)</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#2ecc40">█</tspan><tspan fill="#73d12b">█</tspan><tspan fill="#b9d616">█</tspan><tspan fill="#ffdc00">█</tspan><tspan fill="#ffc008">█</tspan><tspan fill="#ffa311">█</tspan><tspan fill="#ff851b">█</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#ff00af">│</tspan><tspan fill="#d29922"> 78%</tspan><tspan fill="#8b949e"> of 1M  5hr (2h20m) </tspan><tspan fill="#2ecc40">█</tspan><tspan fill="#73d12b">█</tspan><tspan fill="#b9d616">█</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#ff00af">│</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#3fb950"> 37%</tspan><tspan fill="#8b949e">  wk (3d4h) </tspan><tspan fill="#2ecc40">█</tspan><tspan fill="#73d12b">█</tspan><tspan fill="#b9d616">█</tspan><tspan fill="#ffdc00">█</tspan><tspan fill="#ffc008">█</tspan><tspan fill="#ffa311">█</tspan><tspan fill="#ff851b">█</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#ff00af">│</tspan><tspan fill="#6e7681">░</tspan><tspan fill="#d29922"> 72%</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#3fb950">+42</tspan><tspan fill="#8b949e"> </tspan><tspan fill="#f85149">-7</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#d29922">● 3 dirty</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#58a6ff">↓2 ↑1</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#58a6ff">12m</tspan><tspan fill="#8b949e">  </tspan><tspan fill="#3fb950">$0.45</tspan></text>
+  <text x="64" y="416" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="12.5" fill="#8b949e" xml:space="preserve">→ Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests</text>
+
+  <circle cx="160" cy="512" r="23" fill="#bc8cff" fill-opacity="0.14" stroke="#bc8cff" stroke-opacity="0.55"/>
+  <text x="160" y="519" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="20" fill="#bc8cff">│</text>
+  <text x="160" y="570" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#e6edf3">Stay on pace</text>
+  <text x="160" y="596" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">Usage bars with pacing</text>
+  <text x="160" y="616" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">markers keep you aligned with</text>
+  <text x="160" y="636" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">your 5-hour and weekly quotas</text>
+  <circle cx="480" cy="512" r="23" fill="#d29922" fill-opacity="0.14" stroke="#d29922" stroke-opacity="0.55"/>
+  <text x="480" y="519" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="20" fill="#d29922">▲</text>
+  <text x="480" y="570" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#e6edf3">Protect quality</text>
+  <text x="480" y="596" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">A context-window marker</text>
+  <text x="480" y="616" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">warns you before the</text>
+  <text x="480" y="636" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">auto-compact danger zone</text>
+  <circle cx="800" cy="512" r="23" fill="#39c5cf" fill-opacity="0.14" stroke="#39c5cf" stroke-opacity="0.55"/>
+  <text x="800" y="519" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="20" fill="#39c5cf">⚒</text>
+  <text x="800" y="570" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#e6edf3">See the activity</text>
+  <text x="800" y="596" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">A live line shows running</text>
+  <text x="800" y="616" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">tools, subagents, and</text>
+  <text x="800" y="636" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">real-time task progress</text>
+  <circle cx="1120" cy="512" r="23" fill="#3fb950" fill-opacity="0.14" stroke="#3fb950" stroke-opacity="0.55"/>
+  <text x="1120" y="519" text-anchor="middle" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="20" fill="#3fb950">$</text>
+  <text x="1120" y="570" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#e6edf3">Track your spend</text>
+  <text x="1120" y="596" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">Real-time session cost and</text>
+  <text x="1120" y="616" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">burn rate, so there are</text>
+  <text x="1120" y="636" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" fill="#8b949e">no surprises</text>
+
+  <!-- footer -->
+  <text x="640" y="730" text-anchor="middle" font-family="'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="17"><tspan fill="#9aa4b2">Better visibility. </tspan><tspan fill="#e6edf3">Smarter sessions. </tspan><tspan fill="#d97757">Better outcomes.</tspan></text>
+</svg>
