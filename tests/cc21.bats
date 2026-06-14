@@ -35,6 +35,12 @@ load test_helper
   assert_plain_not_contains "[1m]"
 }
 
+@test "the redundant ' context' is stripped from the model name" {
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus 4.8 (1M context)"},"context_window":{"used_percentage":40}}'
+  assert_plain_contains "Opus 4.8 (1M)"
+  assert_plain_not_contains "context"
+}
+
 @test "effort level renders as eff:<level>" {
   run_statusline '{"cwd":"/tmp","model":{"display_name":"Fable 5"},"context_window":{"used_percentage":40},"effort":{"level":"xhigh"}}'
   assert_plain_contains "eff:xhigh"

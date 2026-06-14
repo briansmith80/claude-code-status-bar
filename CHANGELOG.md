@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.18.0] - 2026-06-14
+
+Better defaults out of the box (gradient bars, responsive layout), a commented config users can edit, a tidier model name, and the Nerd Font/Powerline experiment removed.
+
+### Added
+
+- **`dir_style` config** (`auto` default, `full`, or `basename`): `basename` shows just the last folder; `auto` is **responsive** — the full path when the line fits the terminal width, collapsing to the basename when it would overflow. The collapse happens *before* truncation drops any segments, so on a narrow terminal the path shrinks first and your model/usage/context survive longer. Handles both `/` and `\` separators. 4 new BATS tests.
+- **A commented `statusline.conf.example`**, and the installers now create `~/.claude/statusline.conf` from it **on first install only** (never overwriting an existing one). Every line is commented and shows its default, so a fresh copy changes nothing — it just makes every option discoverable and editable in place. The `.example` is always refreshed so new options show up after an update.
+
+### Changed
+
+- **`bar_gradient` is now on by default** (`true`). Set `bar_gradient=false` for the classic flat single-colour bars. (`heat` forces a fixed green→yellow→orange→red ramp on any theme.) Measured with `--benchmark`: no perceptible cost vs flat (pure-bash integer lerp, no forks).
+- **`dir_style` defaults to `auto`** and **`enable_truncation` defaults to `true`** — together they make narrow terminals graceful: the path collapses to its basename first, then low-priority segments drop only if it's still too tight, instead of the line wrapping. Both rely on `COLUMNS` (set by Claude Code 2.1.153+); set `dir_style=full` / `enable_truncation=false` to opt out.
+- **The `default` theme's gradient is now a green→yellow→orange→red "heat" ramp**, so out of the box the bars read green→red by usage. Other themes keep their own gradient ramps.
+- **The model name drops the redundant " context"**: `Opus 4.8 (1M context)` → `Opus 4.8 (1M)`. Saves ~8 chars; only touches that exact suffix.
+
+### Removed
+
+- **`nerd_font` and `powerline`** (added in v2.15.0) are removed — they required a patched Nerd Font in the terminal and added noise for little benefit. The scattered glyph overrides, the `printf -v` glyph block, the separator logic, the `--dump-config` entries, the tests, and all docs references are gone. Segment icons are back to plain Unicode (`use_icons`). Any `nerd_font`/`powerline` lines left in a `statusline.conf` are harmless no-ops.
+
 ## [2.17.0] - 2026-06-13
 
 ### Added

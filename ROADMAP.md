@@ -114,13 +114,32 @@ Shipped after Sprint 4, driven by Claude Code audits and user-visible polish. Fu
 
 ---
 
+## v2.10.0 – v2.18.0 — Continuous releases :white_check_mark:
+
+Driven by user feedback. Full detail in [CHANGELOG.md](CHANGELOG.md):
+
+| Version | Highlights |
+|---------|-----------|
+| v2.10.x | `usage_label=countdown` default; installers write a default `refreshInterval`; refreshInterval docs for animated effects |
+| v2.11.0 | One-command self-update (`--update`) + versioned, clickable update notice |
+| v2.12.0 | Opt-in `auto_update` (detached, atomic, lock-serialised) |
+| v2.13.0 | `matrix` theme (eighth palette) |
+| v2.14.0 | Truecolour theme redesign (`tc_clr`/`apply_palette`, 256 fallback) — eight distinct palettes on a saturation ladder |
+| v2.15.0 | `--demo` theme preview; opt-in `bar_gradient`; (nerd_font/powerline added, later removed in v2.18.0) |
+| v2.16.x | Smooth per-cell gradient bars; `--demo` fills bars so the full ramp shows |
+| v2.17.0 | `bar_gradient=heat` (fixed green→red ramp on any theme) |
+| v2.18.0 | `default` theme gradient → green→red heat; `bar_gradient` **on by default** (`false` = flat); `dir_style=full/basename/auto` (responsive path collapse); model name drops the redundant "context"; nerd_font/powerline removed |
+
+---
+
 ## Parked ideas (promote on demand)
 
 Re-evaluate based on actual user feedback. The following ideas are parked — not planned, not promised. If users ask for them, we'll prioritize:
 
 | Idea | Source Issue |
 |------|-------------|
-| Fish-style directory truncation | #12 |
+| Directory + branch on line 2 (model-led line 1, activity beside it) | user request, parked 2026-06 — feasible but makes the bar permanently two lines and needs path-aware line-2 width trimming; revisit on demand |
+| Fish-style directory truncation | #12 — v2.18.0 shipped `dir_style=basename`/`auto` (responsive collapse to the last folder); the `c/l/w/…` fish-style abbreviation specifically is still unbuilt |
 | API wait time segment | #5 |
 | Cache hit ratio segment | #7 |
 | Separator config/styles | #11, #20 |
@@ -140,7 +159,7 @@ Re-evaluate based on actual user feedback. The following ideas are parked — no
 | Cost velocity indicator | #29 |
 | Alert-only usage mode | #30 |
 | ~~Rate limit countdown~~ | ~~#31~~ (shipped in v2.3.0: `usage_label=countdown`) |
-| --preview CLI flag | #33 |
+| ~~--preview CLI flag~~ | ~~#33~~ (shipped in v2.15.0 as `--demo [theme\|all]`) |
 | Session history / --stats | #34, #36 |
 | Today's totals | #35 |
 | --test CLI flag | #38 |

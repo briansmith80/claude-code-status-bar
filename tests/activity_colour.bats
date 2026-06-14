@@ -95,8 +95,8 @@ is_spinner_frame() {
   run_statusline_env "$(act_stdin)" "COLUMNS=200"
   l2="$(line2)"
   [[ "$l2" == *$'\x1b[1m\x1b[0;32m'* ]]   # flash = bold + CLR_ADD
-  [[ "$l2" == *$'\x1b[38;5;46m'* ]]       # ramp step 0 (default theme)
-  [[ "$l2" == *$'\x1b[38;5;208m'* ]]      # ramp step 3
+  [[ "$l2" == *$'\x1b[38;5;40m'* ]]       # ramp step 0 (default theme heat ramp)
+  [[ "$l2" == *$'\x1b[38;5;196m'* ]]      # ramp step 3 (default theme heat ramp)
 }
 
 @test "stale cache drops colours and restores the plain dim look" {

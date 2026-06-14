@@ -56,3 +56,31 @@ load test_helper
   # The full original branch name should NOT appear.
   assert_plain_not_contains "$current_branch"
 }
+
+DIR_JSON='{"cwd":"/tmp/aaa/bbb/project-xyz","model":{"display_name":"Opus"},"context_window":{"used_percentage":40}}'
+
+@test "dir_style=full always shows the whole path" {
+  write_conf "dir_style=full"
+  run_statusline "$DIR_JSON"
+  assert_plain_contains "/tmp/aaa/bbb/project-xyz"
+}
+
+@test "dir_style=basename shows only the last path component" {
+  write_conf "dir_style=basename"
+  run_statusline "$DIR_JSON"
+  assert_plain_contains "project-xyz"
+  assert_plain_not_contains "/tmp/aaa/bbb"
+}
+
+@test "dir_style=auto keeps the full path on a wide terminal" {
+  write_conf "dir_style=auto" "max_width=200"
+  run_statusline "$DIR_JSON"
+  assert_plain_contains "/tmp/aaa/bbb/project-xyz"
+}
+
+@test "dir_style=auto collapses to the basename on a narrow terminal" {
+  write_conf "dir_style=auto" "max_width=20"
+  run_statusline "$DIR_JSON"
+  assert_plain_contains "project-xyz"
+  assert_plain_not_contains "/tmp/aaa/bbb"
+}

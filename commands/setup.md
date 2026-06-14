@@ -48,6 +48,13 @@ if [ -f "${plugin_dir}VERSION" ]; then
   cp "${plugin_dir}VERSION" "${target_dir}/.statusline-version"
 fi
 
+# Commented config template: always refresh the reference, and create the live
+# statusline.conf from it on first install only — never overwrite an existing one.
+if [ -f "${plugin_dir}statusline.conf.example" ]; then
+  cp "${plugin_dir}statusline.conf.example" "${target_dir}/statusline.conf.example"
+  [ -f "${target_dir}/statusline.conf" ] || cp "${plugin_dir}statusline.conf.example" "${target_dir}/statusline.conf"
+fi
+
 echo "Files installed to ${target_dir}"
 ```
 

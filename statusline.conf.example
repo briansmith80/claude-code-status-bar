@@ -1,0 +1,63 @@
+# ~/.claude/statusline.conf — claude-code-status-bar configuration
+#
+# This file is yours: it is NEVER overwritten by updates or re-installs.
+# Every option below is COMMENTED OUT and shows its default. To change one,
+# uncomment the line (remove the leading "# ") and edit the value. Leaving a
+# line commented keeps the default — and lets you pick up future default changes.
+#
+# See every resolved value (defaults + your overrides):
+#   bash ~/.claude/statusline-command.sh --dump-config
+# Preview a theme (or all of them):
+#   bash ~/.claude/statusline-command.sh --demo
+# Full docs: https://github.com/briansmith80/claude-code-status-bar#configuration
+
+# ── Colour theme ────────────────────────────────────────────
+# default | nord | dracula | solarized | tokyo-night | catppuccin | matrix | mono
+# colour_theme=default
+
+# ── Progress-bar gradient ───────────────────────────────────
+# true = the theme's gradient ramp (default) · false = flat single colour ·
+# heat = a fixed green→yellow→orange→red ramp on any theme
+# bar_gradient=true
+
+# ── Directory display ───────────────────────────────────────
+# auto = full path when it fits, basename when the line is too narrow (default)
+# full = always the whole path · basename = always just the last folder
+# dir_style=auto
+
+# ── Usage-limit labels ──────────────────────────────────────
+# countdown = time remaining like 2h20m (default) · clock = reset time like 2pm
+# usage_label=countdown
+
+# ── Segments — turn any off with =false (all on unless noted) ─
+# show_directory  show_branch  show_model  show_context_bar  show_cost
+# show_lines_changed  show_dirty_count  show_ahead_behind  show_stash
+# show_duration  show_worktree  show_usage_5h  show_usage_7d  show_pr
+# show_effort  show_fast_mode  show_vim_mode  show_agent
+# show_tokens=false      # OFF by default — input/output token counts
+# show_cost_rate=false   # OFF by default — $/hr (appears after ~1 min)
+
+# ── Live activity line (line 2; needs Node.js) ──────────────
+# show_activity=true     # the running tools / agents / todos line
+# activity_colour=true   # per-segment colours, spinner, heat, completion flash
+# activity_pulse=false   # opt-in: running label breathes (needs odd refreshInterval, e.g. 3)
+# activity_scanner=false # opt-in: sweeping tracker once a tool runs >30s
+
+# ── Layout & width ──────────────────────────────────────────
+# bar_width=10           # progress-bar width in characters
+# enable_truncation=true # drop low-priority segments on narrow terminals (default on)
+# max_width=             # override the detected terminal width (empty = auto)
+# branch_max_length=     # truncate long branch names with … (empty = no limit)
+# use_groups=false       # bracket related segments: [model+context] [usage] [git] …
+
+# ── Context warning ─────────────────────────────────────────
+# auto = warn within 20k tokens of auto-compact (default) · or a raw % like 80
+# context_warn_threshold=auto
+
+# ── Automatic updates ───────────────────────────────────────
+# auto_update=false      # opt-in: install new versions in the background
+
+# ── Timing (defaults are sensible) ──────────────────────────
+# activity_ttl_seconds=120   # hide line 2 when its cache is older than this
+# activity_fresh_seconds=45  # fade line 2 to dim when its data is older
+# usage_cache_seconds=600    # OAuth fallback refresh (ignored when stdin has limits)

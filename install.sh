@@ -57,6 +57,25 @@ chmod +x "$target_file"
 echo "  Script installed to: ${target_file}"
 echo "  Version: ${VERSION}"
 
+# ── Config template ────────────────────────────────────────────
+# Ship a commented reference template (always refreshed) and create the live
+# statusline.conf from it on first install ONLY — never overwrite an existing
+# one (user config survives updates). Every line in it is commented, so a fresh
+# copy changes nothing; it just makes the options discoverable and editable.
+conf_example="${target_dir}/statusline.conf.example"
+conf_file="${target_dir}/statusline.conf"
+if command -v curl > /dev/null 2>&1; then
+  curl -fsSL "${REPO_RAW}/statusline.conf.example" -o "$conf_example" 2>/dev/null || true
+elif command -v wget > /dev/null 2>&1; then
+  wget -qO "$conf_example" "${REPO_RAW}/statusline.conf.example" 2>/dev/null || true
+fi
+if [ -f "$conf_example" ] && [ ! -f "$conf_file" ]; then
+  cp "$conf_example" "$conf_file"
+  echo "  Config created: ${conf_file} (commented — edit to customise)"
+elif [ -f "$conf_file" ]; then
+  echo "  Config kept: ${conf_file} (new options are in statusline.conf.example)"
+fi
+
 # ── Update settings.json ─────────────────────────────────────
 # On Windows, settings.json needs native paths (C:/...): Claude Code spawns
 # these commands via PowerShell or cmd when Git Bash is missing, and native

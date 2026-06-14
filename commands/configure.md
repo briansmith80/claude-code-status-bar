@@ -51,9 +51,7 @@ Ask the user what they'd like to customize. Present these categories:
 
 ### Display Options
 - `use_icons` — Unicode icons before segments (default: true)
-- `nerd_font` — Opt-in: swap the Unicode segment icons for Nerd Font glyphs; needs a patched font installed (default: false)
-- `powerline` — Opt-in: arrow () separators between segments; needs a Nerd/Powerline font (default: false)
-- `bar_gradient` — Progress-bar gradient (default: false). `true` = the theme's green→accent ramp; `heat` = a fixed green→yellow→orange→red ramp regardless of theme
+- `bar_gradient` — Progress-bar gradient (default: true). `true` = the theme's own gradient ramp; `false` = flat single-colour bars; `heat` = a fixed green→yellow→orange→red ramp regardless of theme
 - `auto_hide` — Hide zero/empty values (default: true)
 - `usage_label` — Usage bar reset label: countdown, e.g. 2h20m (default), or clock, e.g. 2pm
 - `activity_ttl_seconds` — Hide the live activity line when its cache is older than this (default: 120)
@@ -69,6 +67,7 @@ If the user turns on `activity_pulse` or `activity_scanner`, suggest they set `r
 - `auto_update` — Opt-in: when a newer version is detected, download and install it automatically in the background (atomic; never touches statusline.conf or settings.json) (default: false)
 - `bar_width` — Progress bar width in characters (default: 10)
 - `branch_max_length` — Truncate long branch names (default: unlimited)
+- `dir_style` — Directory display: `full` (whole path, default), `basename` (just the last folder), or `auto` (full when the line fits the terminal width, basename when it would overflow)
 - `context_warn_threshold` — auto = warn within 20k tokens of Claude Code's auto-compact point (default); or a raw percentage like 80
 - `enable_truncation` — Drop segments on narrow terminals (default: false)
 - `max_width` — Override terminal width for truncation

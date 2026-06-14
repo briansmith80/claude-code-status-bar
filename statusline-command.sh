@@ -352,13 +352,11 @@ usage_cache_seconds=600
 auto_update=false
 auto_hide=true
 use_icons=true
-# Opt-in styling. nerd_font swaps the Unicode segment icons for Nerd Font
-# glyphs; powerline adds an arrow separator between segments. Both need a
-# patched Nerd Font installed and degrade to the Unicode/space defaults.
-nerd_font=false
-powerline=false
 context_warn_threshold=auto
-enable_truncation=false
+# On by default: when the bar is wider than the terminal, drop low-priority
+# segments (lowest first) until it fits, instead of wrapping. Pairs with
+# dir_style=auto, which collapses the path first. Set false to never drop.
+enable_truncation=true
 max_width=""
 use_groups=false
 group_open="["
@@ -370,11 +368,17 @@ show_tokens=false
 show_effort=true
 show_fast_mode=true
 bar_width=10
-# Opt-in progress-bar gradient (default off). 'true' = the theme's own
-# green->accent ramp; 'heat' = a fixed green->yellow->orange->red ramp
-# regardless of theme. No-op under mono/NO_COLOR.
-bar_gradient=false
+# Progress-bar gradient (on by default). 'true' = the theme's own gradient
+# ramp (the 'default' theme's is a green->red heat ramp); 'false' = a flat
+# single colour; 'heat' = a fixed green->yellow->orange->red ramp on any
+# theme. Pure-bash integer lerp (no measurable cost); no-op under mono/NO_COLOR.
+bar_gradient=true
 branch_max_length=""
+# Directory display: 'auto' (default — full path when the line fits the
+# terminal width, basename when it would overflow), 'full' (always the whole
+# path), or 'basename' (always just the last folder). 'auto' needs a known
+# width (COLUMNS, which Claude Code sets; or max_width/tput).
+dir_style="auto"
 show_activity=true
 activity_ttl_seconds=120
 activity_colour=true
@@ -405,25 +409,6 @@ STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 [ "${show_usage_weekly:-}" = "true" ] && show_usage_7d=true
 [ "${show_usage_weekly:-}" = "false" ] && show_usage_7d=false
 
-# ── Nerd Font glyphs (opt-in) ─────────────────────────────────
-# Encoded as raw UTF-8 bytes via `printf -v` so the script stays Bash 3.2-safe
-# (no \u escapes) and forks nothing; only built when nerd_font=true. Segments
-# fall back to their Unicode/empty icons otherwise. Glyph codepoints (standard
-# Nerd Font private-use area) are easy to retune in this one block.
-nf_branch="" nf_model="" nf_agent="" nf_fast="" nf_dirty="" nf_stash="" nf_wt=""
-PL_SEP=""
-if [ "$nerd_font" = "true" ]; then
-  printf -v nf_branch '\xee\x82\xa0 '   # U+E0A0 branch
-  printf -v nf_model  '\xef\x8b\x9b '   # U+F2DB chip
-  printf -v nf_agent  '\xef\x95\x84 '   # U+F544 robot
-  printf -v nf_fast   '\xef\x83\xa7 '   # U+F0E7 bolt
-  printf -v nf_dirty  '\xef\x81\x80 '   # U+F040 pencil
-  printf -v nf_stash  '\xef\x86\x87 '   # U+F187 archive
-  printf -v nf_wt     '\xef\x86\xbb '   # U+F1BB tree
-fi
-# Powerline separator glyph (U+E0B0). Used between segments when powerline=true.
-[ "$powerline" = "true" ] && printf -v PL_SEP '\xee\x82\xb0'
-
 # ── Post-config CLI Flags ─────────────────────────────────────
 # These flags need the resolved config (defaults + statusline.conf),
 # but must run BEFORE we read stdin, fetch caches, or hit the network.
@@ -437,6 +422,7 @@ case "${1:-}" in
       printf 'bar_gradient=%s\n'           "${bar_gradient}"
       printf 'bar_width=%s\n'              "${bar_width}"
       printf 'branch_max_length=%s\n'      "${branch_max_length}"
+      printf 'dir_style=%s\n'              "${dir_style}"
       printf 'colour_theme=%s\n'           "${colour_theme}"
       printf 'context_warn_threshold=%s\n' "${context_warn_threshold}"
       printf 'enable_truncation=%s\n'      "${enable_truncation}"
@@ -462,8 +448,6 @@ case "${1:-}" in
       printf 'show_fast_mode=%s\n'         "${show_fast_mode}"
       printf 'show_lines_changed=%s\n'     "${show_lines_changed}"
       printf 'show_model=%s\n'             "${show_model}"
-      printf 'nerd_font=%s\n'              "${nerd_font}"
-      printf 'powerline=%s\n'              "${powerline}"
       printf 'pr_link=%s\n'                "${pr_link}"
       printf 'show_pr=%s\n'                "${show_pr}"
       printf 'show_stash=%s\n'             "${show_stash}"
@@ -730,10 +714,10 @@ apply_theme() {
       CLR_BAR_MED="\033[0;33m" # yellow
       CLR_BAR_HIGH="\033[0;31m" # red
       CLR_PACE="\033[38;5;199m"  # hot pink pacing marker
-      CLR_RAMP0="\033[38;5;46m"  CLR_RAMP1="\033[38;5;112m" # todo-bar gradient
-      CLR_RAMP2="\033[38;5;178m" CLR_RAMP3="\033[38;5;208m" # green->orange
-      # Hex equivalents of the ramp codes above, for the smooth gradient bar.
-      RAMP_HEX="00ff00 87d700 d7af00 ff8700"
+      CLR_RAMP0="\033[38;5;40m"  CLR_RAMP1="\033[38;5;220m" # todo-bar gradient
+      CLR_RAMP2="\033[38;5;208m" CLR_RAMP3="\033[38;5;196m" # green->yellow->orange->red (heat)
+      # Hex stops for the smooth gradient bar — a green->red "heat" ramp.
+      RAMP_HEX="2ecc40 ffdc00 ff851b ff4136"
       CLR_RESET="\033[0m"
       ;;
   esac
@@ -856,6 +840,9 @@ model=""
 extract_block "$input" "model"; model_block=$REPLY
 if [ -n "$model_block" ]; then extract_from "$model_block" "display_name"; model=$REPLY; fi
 if [ -z "$model" ]; then extract "display_name"; model=$REPLY; fi
+# Drop the redundant " context" from window-size suffixes to save space:
+# "Opus 4.8 (1M context)" -> "Opus 4.8 (1M)". Only touches that exact pattern.
+model="${model/ context)/)}"
 
 # Context window usage: prefer context_window.used_percentage (new schema), fall back.
 # The fallback only runs when rate_limits is absent (old flat schema) to avoid
@@ -1496,17 +1483,24 @@ if [ -z "$model" ] && [ -z "$used" ]; then
 fi
 
 # Directory + Branch (combined, priority 1)
-dir_branch=""
+# dir_branch is the full form; dir_branch_base is the compact form (basename
+# only) used by dir_style=basename and by dir_style=auto when the line is too
+# wide. Both carry the same branch suffix.
+dir_branch="" dir_branch_base=""
 if [ "$show_directory" = "true" ]; then
   dir_branch+="${CLR_DIR}${short_cwd}${CLR_RESET}"
+  # Last path component, handling both / and \ separators (Windows cwd).
+  dir_base="${short_cwd##*/}"; dir_base="${dir_base##*\\}"
+  [ -z "$dir_base" ] && dir_base="$short_cwd"
+  dir_branch_base+="${CLR_DIR}${dir_base}${CLR_RESET}"
 fi
 if [ "$show_branch" = "true" ] && [ -n "$branch" ]; then
   branch_icon=""
   [ "$use_icons" = "true" ] && branch_icon="↱ "
-  [ "$nerd_font" = "true" ] && branch_icon="$nf_branch"
   dir_branch+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
+  dir_branch_base+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
 fi
-[ -n "$dir_branch" ] && add_seg "$dir_branch" 1
+if [ -n "$dir_branch" ]; then add_seg "$dir_branch" 1; dir_seg_idx=$(( seg_idx - 1 )); fi
 
 # Vim mode indicator (priority 3)
 if [ "$show_vim_mode" = "true" ]; then
@@ -1521,7 +1515,6 @@ fi
 if [ "$show_model" = "true" ]; then
   model_icon=""
   [ "$use_icons" = "true" ] && model_icon="◆ "
-  [ "$nerd_font" = "true" ] && model_icon="$nf_model"
   case "${model:-}" in
     *Haiku*)  model_clr="$CLR_ADD" ;;                # green (cheap)
     *Sonnet*) model_clr="$CLR_WARN" ;;               # yellow (mid)
@@ -1543,7 +1536,6 @@ if [ "$show_agent" = "true" ]; then
       sanitize "$agent_name"; agent_name=$REPLY
       agent_icon=""
       [ "$use_icons" = "true" ] && agent_icon="▸ "
-      [ "$nerd_font" = "true" ] && agent_icon="$nf_agent"
       add_seg "${CLR_MODEL}${agent_icon}${agent_name}${CLR_RESET}" 3
     fi
   fi
@@ -1569,7 +1561,6 @@ if [ "$show_fast_mode" = "true" ]; then
   if [[ $input =~ $fm_guard ]]; then
     fast_icon=""
     [ "$use_icons" = "true" ] && fast_icon="⚡ "
-    [ "$nerd_font" = "true" ] && fast_icon="$nf_fast"
     add_seg "${CLR_WARN}${fast_icon}fast${CLR_RESET}" 4
   fi
 fi
@@ -1736,7 +1727,6 @@ if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
   if [ "$auto_hide" != "true" ] || [ "$dirty_count" -gt 0 ] 2>/dev/null; then
     dirty_icon=""
     [ "$use_icons" = "true" ] && dirty_icon="● "
-    [ "$nerd_font" = "true" ] && dirty_icon="$nf_dirty"
     add_seg "${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}" 5 "git"
   fi
 fi
@@ -1759,7 +1749,6 @@ if [ "$show_stash" = "true" ]; then
   if [ "$auto_hide" != "true" ] || [ "$sc" -gt 0 ] 2>/dev/null; then
     stash_icon=""
     [ "$use_icons" = "true" ] && stash_icon="≡ "
-    [ "$nerd_font" = "true" ] && stash_icon="$nf_stash"
     add_seg "${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}" 6 "git"
   fi
 fi
@@ -1826,7 +1815,6 @@ fi
 if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
   wt_icon=""
   [ "$use_icons" = "true" ] && wt_icon="⊞ "
-  [ "$nerd_font" = "true" ] && wt_icon="$nf_wt"
   add_seg "${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}" 8
 fi
 
@@ -1894,11 +1882,12 @@ if [ -n "$update_available" ]; then
   add_seg "${CLR_ADD}${update_text}${CLR_RESET}" 9
 fi
 
-# ── Truncation ───────────────────────────────────────────────
-# When enabled, drop lowest-priority segments until output fits.
-if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
-  # Detect terminal width
-  term_width=""
+# ── Terminal width + responsive directory ────────────────────
+# Detect the usable width once (shared by dir_style=auto and truncation), then
+# collapse the directory to its basename for dir_style=basename, or for
+# dir_style=auto when the full line would overflow that width.
+term_width=""
+if [ "$dir_style" = "auto" ] || [ "$enable_truncation" = "true" ]; then
   if [ -n "$max_width" ]; then
     term_width="$max_width"
   else
@@ -1908,6 +1897,27 @@ if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
     [ -z "$term_width" ] && { term_width=$(tput cols 2>/dev/null) || true; }
     [ -z "$term_width" ] && term_width=120
   fi
+fi
+if [ -n "${dir_seg_idx:-}" ]; then
+  case "$dir_style" in
+    basename) seg_vals[$dir_seg_idx]="$dir_branch_base" ;;
+    auto)
+      # Total visible width of all segments (with the full path) + separators.
+      dir_total=0
+      for (( i=0; i<seg_idx; i++ )); do
+        [ "$i" -gt 0 ] && dir_total=$(( dir_total + 2 ))
+        visible_width "${seg_vals[$i]}"; dir_total=$(( dir_total + REPLY ))
+      done
+      if [ -n "$term_width" ] && [ "$dir_total" -gt "$term_width" ] 2>/dev/null; then
+        seg_vals[$dir_seg_idx]="$dir_branch_base"
+      fi
+      ;;
+  esac
+fi
+
+# ── Truncation ───────────────────────────────────────────────
+# When enabled, drop lowest-priority segments until output fits.
+if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
 
   # Mark segments as active (1) or dropped (0)
   for (( i=0; i<seg_idx; i++ )); do seg_active[$i]=1; done
@@ -1962,10 +1972,8 @@ first_seg=1
 current_group=""
 group_has_content=false
 
-# Inter-segment/inter-group separator. Powerline mode swaps the double space
-# for a fg-coloured arrow glyph (lite: no per-segment background fill).
+# Inter-segment/inter-group separator (double space).
 seg_sep="  "
-[ "$powerline" = "true" ] && [ -n "$PL_SEP" ] && seg_sep=" ${CLR_DIM}${PL_SEP}${CLR_RESET} "
 
 for (( i=0; i<seg_idx; i++ )); do
   if [ "$enable_truncation" = "true" ] && [ "${seg_active[$i]:-1}" = "0" ]; then

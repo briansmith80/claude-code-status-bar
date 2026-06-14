@@ -62,6 +62,21 @@ foreach ($helper in @('statusline-helper.js', 'statusline-subagent.js')) {
 Write-Host "  Files installed to: $TargetDir"
 Write-Host "  Version: $version"
 
+# ── Config template ───────────────────────────────────────────
+# Ship a commented reference template (always refreshed) and create the live
+# statusline.conf from it on first install ONLY - never overwrite an existing
+# one (user config survives updates). Every line is commented, so a fresh copy
+# changes nothing; it just makes the options discoverable and editable.
+$confExample = Join-Path $TargetDir 'statusline.conf.example'
+$confFile = Join-Path $TargetDir 'statusline.conf'
+try { Get-RepoFile -Name 'statusline.conf.example' -Dest $confExample } catch { }
+if ((Test-Path $confExample) -and -not (Test-Path $confFile)) {
+  Copy-Item -Path $confExample -Destination $confFile -Force
+  Write-Host "  Config created: $confFile (commented - edit to customise)"
+} elseif (Test-Path $confFile) {
+  Write-Host "  Config kept: $confFile (new options are in statusline.conf.example)"
+}
+
 # ── Runtime requirement: Git Bash ─────────────────────────────
 if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
   Write-Warning ("bash was not found on your PATH. The status bar runs via Git for Windows " +

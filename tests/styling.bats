@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 #
-# Opt-in styling (v2.15.0): gradient progress bars, the --demo theme preview,
-# and Nerd Font / Powerline glyphs. All three are off by default.
+# Opt-in styling: gradient progress bars (theme ramp or fixed "heat"), and the
+# --demo theme preview. Both off by default.
 
 load test_helper
 
@@ -24,11 +24,18 @@ bar_fill_colours() {
   [ "$(bar_fill_colours)" -ge 5 ]
 }
 
-@test "bar_gradient=false (default) uses a single bar colour" {
+@test "bar_gradient=false gives a single (flat) bar colour" {
   write_conf "colour_theme=tokyo-night" "bar_gradient=false"
   run_statusline_env "$GRAD_JSON" "STATUSLINE_TRUECOLOR=1"
   [ "$status" -eq 0 ]
   [ "$(bar_fill_colours)" -le 1 ]
+}
+
+@test "bar_gradient is on by default (gradient without setting it)" {
+  write_conf "colour_theme=tokyo-night"   # no bar_gradient line — use the default
+  run_statusline_env "$GRAD_JSON" "STATUSLINE_TRUECOLOR=1"
+  [ "$status" -eq 0 ]
+  [ "$(bar_fill_colours)" -ge 5 ]
 }
 
 @test "bar_gradient=heat uses a fixed green->red ramp regardless of theme" {
@@ -64,31 +71,4 @@ bar_fill_colours() {
   run_statusline_env "$JSON" "STATUSLINE_TRUECOLOR=1" "STATUSLINE_THEME=matrix"
   [ "$status" -eq 0 ]
   [[ "$output" == *"38;2;0;255;65"* ]]   # env matrix wins over both conf lines
-}
-
-@test "nerd_font=true swaps the Unicode segment icons for glyphs" {
-  write_conf "nerd_font=true"
-  run_statusline "$JSON"
-  [ "$status" -eq 0 ]
-  [[ "$output" != *$'\xe2\x97\x86'* ]]   # no ◆ (U+25C6) model icon
-  [[ "$output" == *$'\xef\x8b\x9b'* ]]   # has U+F2DB chip glyph
-}
-
-@test "nerd_font=false (default) keeps the Unicode segment icons" {
-  write_conf "nerd_font=false"
-  run_statusline "$JSON"
-  [[ "$output" == *$'\xe2\x97\x86'* ]]   # has ◆
-}
-
-@test "powerline=true inserts the arrow separator glyph" {
-  write_conf "powerline=true"
-  run_statusline "$JSON"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *$'\xee\x82\xb0'* ]]   # U+E0B0 powerline arrow
-}
-
-@test "powerline=false (default) uses plain spacing" {
-  write_conf "powerline=false"
-  run_statusline "$JSON"
-  [[ "$output" != *$'\xee\x82\xb0'* ]]
 }
