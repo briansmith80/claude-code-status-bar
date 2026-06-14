@@ -59,6 +59,7 @@ skip_if_windows() {
   printf 'echo new-command\n'   > "${remote_dir}/statusline-command.sh"
   printf '// new helper\n'      > "${remote_dir}/statusline-helper.js"
   printf '// new subagent\n'    > "${remote_dir}/statusline-subagent.js"
+  printf '# template marker\n'  > "${remote_dir}/statusline.conf.example"
 
   output="$(HOME="${TEST_HOME}" STATUSLINE_REPO_RAW="file://${remote_dir}" \
     bash "${STATUSLINE_SCRIPT}" --update 2>&1)"
@@ -71,8 +72,31 @@ skip_if_windows() {
   grep -q "new-command" "${TEST_HOME}/.claude/statusline-command.sh"
   grep -q "new helper"  "${TEST_HOME}/.claude/statusline-helper.js"
   grep -q "new subagent" "${TEST_HOME}/.claude/statusline-subagent.js"
+  # Refreshes the template and seeds statusline.conf when absent.
+  grep -q "template marker" "${TEST_HOME}/.claude/statusline.conf.example"
+  grep -q "template marker" "${TEST_HOME}/.claude/statusline.conf"
   # The update cache is cleared so the notice clears on the next render.
   [ ! -f "${TEST_HOME}/.claude/.statusline-update-cache" ]
+  rm -rf "${remote_dir}"
+}
+
+@test "--update refreshes the template but never overwrites an existing statusline.conf" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  write_conf "colour_theme=nord"   # user already has a config
+  remote_dir="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-remote-XXXXXX")"
+  printf '9.9.9\n'              > "${remote_dir}/VERSION"
+  printf 'echo x\n'             > "${remote_dir}/statusline-command.sh"
+  printf '// h\n'               > "${remote_dir}/statusline-helper.js"
+  printf '// s\n'               > "${remote_dir}/statusline-subagent.js"
+  printf '# template marker\n'  > "${remote_dir}/statusline.conf.example"
+
+  HOME="${TEST_HOME}" STATUSLINE_REPO_RAW="file://${remote_dir}" \
+    bash "${STATUSLINE_SCRIPT}" --update >/dev/null 2>&1
+
+  grep -q "template marker" "${TEST_HOME}/.claude/statusline.conf.example"  # refreshed
+  grep -q "colour_theme=nord" "${TEST_HOME}/.claude/statusline.conf"        # untouched
+  ! grep -q "template marker" "${TEST_HOME}/.claude/statusline.conf"
   rm -rf "${remote_dir}"
 }
 

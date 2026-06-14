@@ -416,7 +416,7 @@ When a new version is available you'll see `↑ <version>` in the bar (e.g. `↑
 bash ~/.claude/statusline-command.sh --update
 ```
 
-It downloads the latest script and helpers, swaps them in only once every file has downloaded, bumps the version, and leaves `statusline.conf` and your `settings.json` entries alone. Run `--check-update` first if you just want to see what's current versus latest.
+It downloads the latest script and helpers, swaps them in only once every file has downloaded, bumps the version, and leaves your `settings.json` entries alone. It also refreshes `statusline.conf.example` and, **only if you don't have a `statusline.conf` yet**, creates one from it — your existing config is never overwritten. Run `--check-update` first if you just want to see what's current versus latest.
 
 ### Automatic updates (opt-in)
 

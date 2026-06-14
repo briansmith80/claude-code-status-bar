@@ -137,6 +137,19 @@ perform_self_update() {
   chmod +x "${SCRIPT_DIR}/statusline-command.sh" 2>/dev/null || true
   printf '%s\n' "$new_ver" > "${SCRIPT_DIR}/.statusline-version"
   echo "  ✓ .statusline-version -> ${new_ver}"
+  # Best-effort: refresh the commented config template, and seed statusline.conf
+  # from it on first run ONLY — never overwrite an existing user config. Failure
+  # here never affects the update (the script + helpers are already in place).
+  local ex_tmp="${SCRIPT_DIR}/.statusline.conf.example.update.$$"
+  if http_get "${REPO_RAW}/statusline.conf.example" 20 > "$ex_tmp" 2>/dev/null && [ -s "$ex_tmp" ]; then
+    if mv -f "$ex_tmp" "${SCRIPT_DIR}/statusline.conf.example" 2>/dev/null; then
+      echo "  ✓ statusline.conf.example"
+      if [ ! -f "${SCRIPT_DIR}/statusline.conf" ] && cp "${SCRIPT_DIR}/statusline.conf.example" "${SCRIPT_DIR}/statusline.conf" 2>/dev/null; then
+        echo "  ✓ statusline.conf (created — edit to customise)"
+      fi
+    fi
+  fi
+  rm -f "$ex_tmp" 2>/dev/null || true
   return 0
 }
 

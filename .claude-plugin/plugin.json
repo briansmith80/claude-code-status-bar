@@ -1,6 +1,6 @@
 {
   "name": "claude-code-status-bar",
-  "version": "2.18.0",
+  "version": "2.18.1",
   "description": "Configurable status bar for Claude Code — usage limits, context window, git state, live activity, pacing markers, and 8 colour themes. Pure bash, zero dependencies.",
   "author": {
     "name": "briansmith80",

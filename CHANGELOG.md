@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.18.1] - 2026-06-14
+
+### Changed
+
+- **`--update` and `auto_update` now also deliver the commented config.** When they install a new version they refresh `statusline.conf.example` and create `statusline.conf` from it **only if absent** (never overwriting an existing one) — best-effort, so a failed template fetch never affects the update. Previously only fresh installs and installer re-runs seeded the starter config; now users who only ever self-update get it too, with their tweaks always taking precedence (the template is all-commented, so it pins nothing). 1 new BATS test (suite 123).
+
 ## [2.18.0] - 2026-06-14
 
 Better defaults out of the box (gradient bars, responsive layout), a commented config users can edit, a tidier model name, and the Nerd Font/Powerline experiment removed.
