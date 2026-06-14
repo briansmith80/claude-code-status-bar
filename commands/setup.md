@@ -106,10 +106,11 @@ If the output shows a formatted status line with colors, the installation is suc
 
 Ask the user if they want to customize their status bar. Available options:
 
-- **Theme**: default, nord, dracula, solarized, tokyo-night, catppuccin, matrix, mono
+- **Theme**: default, nord, dracula, solarized, tokyo-night, catppuccin, matrix, mono (preview them all first with `bash ~/.claude/statusline-command.sh --demo`)
 - **Live activity line**: Shows running tools, agents, and todo progress (enabled by default, requires Node.js)
 - **Usage pacing markers**: Shows where usage should be for even consumption (enabled by default)
 - **Toggle segments**: Each segment can be turned on/off
+- **Animated effects** (`activity_pulse`, `activity_scanner`): opt-in motion on line 2, off by default. If the user enables either, also set `refreshInterval: 3` on the `statusLine` block in `settings.json` (they only animate when the bar re-renders often; on the default interval they sit static). Merge it in without touching the rest of the block.
 
 If the user wants customization, create or update `~/.claude/statusline.conf` with their preferences.
 

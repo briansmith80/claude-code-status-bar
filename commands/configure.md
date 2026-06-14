@@ -57,10 +57,24 @@ Ask the user what they'd like to customize. Present these categories:
 - `activity_ttl_seconds` — Hide the live activity line when its cache is older than this (default: 120)
 - `activity_colour` — Per-segment theme colours on the activity line: spinner on running tools, heat-coloured elapsed times, red failures, completion flash, gradient todo bar. Set false for the classic all-dim line (default: true)
 - `activity_fresh_seconds` — Drop the activity line back to all-dim when its data is older than this, so stale info reads as stale (default: 45)
-- `activity_pulse` — Opt-in: the running tool/agent label breathes (alternates bold/faint each re-render) (default: false). Needs a low odd `refreshInterval` such as 3 to animate; an even value like 2 can leave the breath stuck.
-- `activity_scanner` — Opt-in: a small sweeping tracker bar appears on line 2 while something has been running over 30 seconds (default: false). Needs a low `refreshInterval` such as 3 to animate.
+- `activity_pulse` — Opt-in: the running tool/agent label breathes (alternates bold/faint each re-render) (default: false). Needs a low odd `refreshInterval` such as 3 to animate; this command offers to set that for you (see below).
+- `activity_scanner` — Opt-in: a small sweeping tracker bar appears on line 2 while something has been running over 30 seconds (default: false). Needs a low `refreshInterval` such as 3 to animate (see below).
 
-If the user turns on `activity_pulse` or `activity_scanner`, suggest they set `refreshInterval` (e.g. 3) on the `statusLine` block in `settings.json` so the effects animate. These effects barely move on the default `refreshInterval` of 60.
+**If the user enables `activity_pulse` or `activity_scanner`, offer to set `refreshInterval: 3` for them.** These effects are wall-clock driven, so they only animate when the bar re-renders often; on the default `refreshInterval` of 60 they sit static (not broken, just not moving). A value of `3` is low enough to animate, odd (so the pulse alternates instead of getting stuck on one beat), and safe on every platform (comfortably above the script's runtime). If the user agrees, merge `refreshInterval` into the existing `statusLine` block in `settings.json` without disturbing anything else, for example:
+
+```bash
+settings_file="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+node -e '
+const fs=require("fs"), f=process.argv[1];
+const s=JSON.parse(fs.readFileSync(f,"utf8"));
+if(!s.statusLine){console.error("No statusLine entry yet. Run /claude-code-status-bar:setup first."); process.exit(1);}
+s.statusLine.refreshInterval=3;
+fs.writeFileSync(f, JSON.stringify(s,null,2)+"\n");
+console.log("Set statusLine.refreshInterval=3");
+' "$settings_file"
+```
+
+(No Node.js available? Edit `settings.json` directly to add `"refreshInterval": 3` inside the `statusLine` block.) If the user would rather keep their current interval, leave it and tell them the effect stays static until they lower it.
 - `pr_link` — Wrap the PR segment in an OSC 8 hyperlink to the pull request (clickable in terminals that support links) (default: true)
 - `subagent_rows` — Set to false to keep Claude Code's default subagent panel rows (default: true)
 - `usage_cache_seconds` — OAuth fallback refresh interval in seconds; ignored when stdin provides rate limits (default: 600)
