@@ -430,7 +430,7 @@ STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 # docs/assets/themes/generate-theme-demos.sh renders the same scene to SVG.)
 if [ "${STATUSLINE_DEMO:-}" = "1" ]; then
   enable_truncation=false
-  dir_style=basename
+  dir_style="basename"
   show_dirty_count=false
   show_ahead_behind=false
   show_stash=false
