@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1007" height="44" viewBox="0 0 1007 44" role="img" aria-label="mono preview">
+  <title>mono theme preview</title>
+  <rect x="0.5" y="0.5" width="1006" height="43" rx="8" fill="#0d1117" stroke="#30363d"/>
+  <text x="16" y="27" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#c9d1d9">my-app on ↱ main  ◆ Opus 4.8 (1M)  ███████░░│ 78% of 1M  5hr (2h20m) ███░░│░░░░ 37%  wk (1d3h) ████████│░ 98%  $0.45</tspan></text>
+</svg>

@@ -17,8 +17,8 @@ install.ps1                # Windows PowerShell installer/updater — native JSO
 .claude-plugin/marketplace.json # Marketplace catalog (required by /plugin marketplace add)
 commands/setup.md          # Slash command: /claude-code-status-bar:setup
 commands/configure.md      # Slash command: /claude-code-status-bar:configure
-docs/assets/               # README images (banner dark/light, terminal demo SVGs)
-docs/assets/themes/        # per-theme palette swatch SVGs + generate-swatches.js (regenerate from apply_theme())
+docs/assets/               # README images (banner dark/light via generate-banner.js, terminal demo + social SVGs)
+docs/assets/themes/        # per-theme --demo preview SVGs + generate-theme-demos.sh (captures real --demo output) + ansi-to-svg.js
 README.md                  # User-facing docs
 ```
 

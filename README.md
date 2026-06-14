@@ -33,7 +33,7 @@ Pure bash core, no jq, no compiled binaries. One-line install. Eight colour them
 </div>
 
 ```
-~/my-app on ↱ main  ◆ Opus 4.6  ███████░│░ 78% of 200k  5hr (2pm) ███│░░░░░░ 37%  wk (fri,3am) ███████│░░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
+~/my-app on ↱ main  ◆ Opus 4.8 (1M)  ███████░░│ 78% of 1M  5hr (2h20m) ███░░│░░░░ 37%  wk (3d4h) ███████░│░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
 → Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests
 ```
 
@@ -60,7 +60,7 @@ Pure bash core, no jq, no compiled binaries. One-line install. Eight colour them
 - **Never blocks**: update checks, the usage API fallback, and transcript parsing all run in background subshells. The bar renders from caches.
 - **Config survives updates**: your overrides live in `~/.claude/statusline.conf`, which the installer never touches.
 - **Security by default**: restrictive file permissions (`umask 077`), OAuth tokens passed to curl via stdin rather than the command line, and ANSI/control-character sanitisation of branch names, paths, and transcript content.
-- **Tested**: 69 BATS tests run in CI on Linux, macOS, and Windows (MSYS2), plus ShellCheck and a PowerShell installer check, on every push to main and every pull request.
+- **Tested**: 124 BATS tests run in CI on Linux, macOS, and Windows (MSYS2), plus ShellCheck and a PowerShell installer check, on every push to main and every pull request.
 
 ## Requirements
 
@@ -211,7 +211,7 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Directory | `~/my-app` | `show_directory` | Prefers `workspace.current_dir`, falls back to `cwd`; home shown as `~` |
 | Branch | `on ↱ main` | `show_branch` | Short commit hash when detached; truncate long names with `branch_max_length` |
 | Vim mode | `NORMAL` | `show_vim_mode` | Only when Claude Code sends `vim.mode` |
-| Model | `◆ Opus 4.6` | `show_model` | Tier colours: Haiku green, Sonnet yellow, Opus orange, Fable purple (theme-aware) |
+| Model | `◆ Opus 4.8 (1M)` | `show_model` | Tier colours: Haiku green, Sonnet yellow, Opus orange, Fable purple (theme-aware); the redundant " context" is trimmed from the name |
 | Agent name | `▸ my-agent` | `show_agent` | Only when running with an agent |
 | Effort level | `eff:xhigh` | `show_effort` | Reasoning effort, when Claude Code sends `effort.level` (CC 2.1.133+) |
 | Fast mode | `⚡ fast` | `show_fast_mode` | Only when fast mode is on; yellow because it bills at a higher rate |
@@ -363,20 +363,41 @@ A few details worth knowing:
 
 ## Colour themes
 
-Eight built-in themes, spread across a saturation/temperature ladder so no two read alike. Each strip shows the theme's palette in the order the colours land on the bar: **directory · branch · model · Opus accent · additions · warnings/cost · removals · pacing marker**.
+Eight built-in themes, spread across a saturation/temperature ladder so no two read alike. Each preview below is a **real render** of the bar in that theme (the same output `--demo` prints), so you see the actual segment colours and the gradient progress bars in context:
 
-| Theme | Vibe | Palette |
-|-------|------|---------|
-| `default` | bold, bright primary | <img src="docs/assets/themes/default.svg" alt="default theme palette: cyan, magenta, blue, orange, green, yellow, red, pink" width="360"> |
-| `dracula` | neon, electric | <img src="docs/assets/themes/dracula.svg" alt="dracula theme palette: vivid purple, pink, cyan, green" width="360"> |
-| `tokyo-night` | deep midnight blue + neon | <img src="docs/assets/themes/tokyo-night.svg" alt="tokyo-night theme palette: royal blue, violet, cyan, hot pink" width="360"> |
-| `catppuccin` | soft warm pastel | <img src="docs/assets/themes/catppuccin.svg" alt="catppuccin theme palette: lavender, mauve, sky, peach" width="360"> |
-| `solarized` | earthy, vintage | <img src="docs/assets/themes/solarized.svg" alt="solarized theme palette: teal, violet, blue, amber" width="360"> |
-| `nord` | muted, cool steel | <img src="docs/assets/themes/nord.svg" alt="nord theme palette: steel blue, muted purple, sage, terracotta" width="360"> |
-| `matrix` | monochrome phosphor green | <img src="docs/assets/themes/matrix.svg" alt="matrix theme: monochrome digital-rain phosphor green" width="360"> |
-| `mono` | greyscale, no colour | <img src="docs/assets/themes/mono.svg" alt="mono theme: no colour, a neutral grey ramp" width="360"> |
+**`default`** · bold, bright primary
 
-The named themes render in **24-bit truecolour** when your terminal supports it (detected via `$COLORTERM`; force with `STATUSLINE_TRUECOLOR=1`/`0`), and fall back to the nearest **256-colour** otherwise, so Terminal.app and older terminals still get sensible, distinct colours. `default` is special: it uses your terminal's own ANSI palette (the swatch shows a representative set), so it tracks whatever scheme your terminal uses. `matrix` is a *Matrix* digital-rain tribute, monochrome phosphor green separated by brightness rather than hue (removals are a dim green, not red). `mono` emits no colour at all, and **any** theme degrades to plain text under [`NO_COLOR`](https://no-color.org/). (Swatches are generated by `docs/assets/themes/generate-swatches.js` from the palettes in `apply_theme()`.)
+<img src="docs/assets/themes/default-demo.svg" alt="default theme: cyan directory, magenta branch, orange Opus, green-to-red heat gradient bars" width="880">
+
+**`dracula`** · neon, electric
+
+<img src="docs/assets/themes/dracula-demo.svg" alt="dracula theme: purple directory, pink branch, neon green-to-orange gradient bars" width="880">
+
+**`tokyo-night`** · deep midnight blue + neon
+
+<img src="docs/assets/themes/tokyo-night-demo.svg" alt="tokyo-night theme: royal-blue directory, violet branch, peach Opus, green-to-peach gradient bars" width="880">
+
+**`catppuccin`** · soft warm pastel
+
+<img src="docs/assets/themes/catppuccin-demo.svg" alt="catppuccin theme: lavender directory, mauve branch, soft pastel green-to-pink gradient bars" width="880">
+
+**`solarized`** · earthy, vintage
+
+<img src="docs/assets/themes/solarized-demo.svg" alt="solarized theme: teal directory, violet branch, earthy olive-to-red gradient bars" width="880">
+
+**`nord`** · muted, cool steel
+
+<img src="docs/assets/themes/nord-demo.svg" alt="nord theme: steel-blue directory, muted-purple branch, sage-to-terracotta gradient bars" width="880">
+
+**`matrix`** · monochrome phosphor green
+
+<img src="docs/assets/themes/matrix-demo.svg" alt="matrix theme: monochrome phosphor green, dark-to-bright gradient bars" width="880">
+
+**`mono`** · greyscale, no colour
+
+<img src="docs/assets/themes/mono-demo.svg" alt="mono theme: greyscale, flat bars distinguished by block shading, no colour" width="880">
+
+The named themes render in **24-bit truecolour** when your terminal supports it (detected via `$COLORTERM`; force with `STATUSLINE_TRUECOLOR=1`/`0`), and fall back to the nearest **256-colour** otherwise, so Terminal.app and older terminals still get sensible, distinct colours. `default` is special: it uses your terminal's own ANSI palette (the preview shows a representative set), so it tracks whatever scheme your terminal uses; its bars use a green→red heat gradient. `matrix` is a *Matrix* digital-rain tribute, monochrome phosphor green separated by brightness rather than hue (removals are a dim green, not red). `mono` emits no colour at all (its bars stay flat, distinguished by the block glyph), and **any** theme degrades to plain text under [`NO_COLOR`](https://no-color.org/). The previews are generated by `docs/assets/themes/generate-theme-demos.sh`, which captures the real `statusline-command.sh --demo` output and converts it to SVG with `ansi-to-svg.js` (so they can never drift from what the bar actually prints).
 
 ### Changing the theme
 
@@ -520,7 +541,7 @@ claude-code-status-bar/
 ├── .github/workflows/
 │   ├── shellcheck.yml            # lint (pushes to main, PRs)
 │   └── tests.yml                 # BATS suite on Linux, macOS, Windows (MSYS2)
-├── tests/                        # 69 BATS tests across 9 files
+├── tests/                        # 124 BATS tests across 13 files
 ├── ROADMAP.md                    # feature roadmap & competitive landscape
 ├── SPRINTS.md                    # sprint plan
 └── CLAUDE.md                     # project guide for working on this repo with Claude Code
@@ -528,7 +549,7 @@ claude-code-status-bar/
 
 ## Testing
 
-A BATS suite under [`tests/`](tests/) covers schema parsing (old flat, new nested, and the CC 2.1.x shapes), segments, all seven themes, `NO_COLOR`, config overrides, context window formatting and compaction awareness, the live activity helper, the colourful activity line (token mapping, stale fade, injection safety, width trim), the git segments (branch, dirty, ahead/behind, stash, detached HEAD), and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
+A BATS suite under [`tests/`](tests/) covers schema parsing (old flat, new nested, and the CC 2.1.x shapes), segments, all eight themes (truecolour, the 256-colour fallback, and `NO_COLOR`), config overrides, context window formatting and compaction awareness, the live activity helper, the colourful activity line (token mapping, stale fade, injection safety, width trim), the git segments (branch, dirty, ahead/behind, stash, detached HEAD), the styling options (gradient bars, `dir_style`), the PR link, the self-update and `auto_update` paths, and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
 
 To run locally, install [bats-core](https://github.com/bats-core/bats-core):
 
@@ -573,19 +594,19 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.18.0**: Better defaults out of the box: gradient progress bars on by default, a responsive `dir_style=auto` that collapses a long path to its basename before any segment is dropped, a commented `statusline.conf` the installers create so every option is editable in place, a tidier `Opus 4.8 (1M)` model name, and removal of the short-lived Nerd Font/Powerline experiment.
+- **2.17.0**: `bar_gradient=heat`, a fixed green→yellow→orange→red ramp on any theme regardless of its palette.
+- **2.15.0**: Opt-in styling adapted from kcchien/claude-code-statusline: gradient progress bars and a `--demo` flag that previews any theme (or cycles all eight) with a realistic canned payload, no faked stdin.
+- **2.14.0**: The named themes redesigned in 24-bit truecolour (with a 256-colour fallback) and spread across a saturation/temperature ladder so no two read alike.
+- **2.13.0**: A `matrix` theme: monochrome digital-rain phosphor green, the eighth palette.
+- **2.12.0**: Opt-in `auto_update`: once the background check flags a newer release, the bar installs it in a detached, lock-serialised background process that never blocks rendering.
+- **2.11.0**: One-command self-update (`--update`, atomic staged downloads) and an update notice that shows the new version and links straight to its release notes.
+- **2.10.0**: Usage-bar labels count down by default (`5hr (2h20m)`); `usage_label=clock` keeps the reset-moment style.
 - **2.9.0**: Clickable PR segment (OSC 8 hyperlink to the pull request, `pr_link`), opt-in `activity_pulse` and `activity_scanner` effects for line 2, and tag-driven release automation.
 - **2.8.0**: 4.5x faster on Windows (~285ms per run, was ~1286ms): internal helpers return via globals instead of forked command substitutions, git work consolidated to two calls via porcelain v2, pure-bash sanitize and width maths, and fork-free countdown labels. New `--benchmark` flag and `STATUSLINE_PROFILE=1` per-phase profiling; first direct git-segment test coverage.
 - **2.7.0**: Colourful activity line: per-segment theme colours, a clock-driven spinner on running tools, heat-coloured elapsed times, completion flash, gradient todo bar, and stale-fade, with `activity_colour=false` restoring the classic all-dim look. Plus ANSI-aware width trimming and four long-standing fixes (quote truncation, `NO_COLOR` leak, BSD sed, non-UTF-8 locales).
-- **2.6.1**: Windows install hardening: settings.json gets quoted Windows-native paths (the MSYS `/c/...` form broke the subagent renderer under PowerShell/cmd spawns), both installers migrate their own older commands on re-run, and docs now state the renderer's real scope (Task-tool subagent rows only).
-- **2.6.0**: Compaction-aware context warnings (a `│` marker at the auto-compact point, `▲` timed to Claude Code's own warning), the `▲ 200k+` segment retired, and a native Windows PowerShell installer.
-- **2.5.0**: Subagent panel renderer: status icons, elapsed time, token cost, and live `tok/s` burn rate for every running Task-tool subagent.
-- **2.4.0**: Live activity overhaul: incremental transcript parsing, age-out of finished items, a `✗` failed-tool indicator, elapsed time on running tools, the `activity_ttl_seconds` config, and terminal-width trimming.
-- **2.3.0**: Countdown labels for usage bars (`usage_label=countdown`), a PR segment, worktree detection for any linked worktree, and per-session activity caches.
-- **2.2.0**: Claude Code 2.1.170 audit. Fable/Mythos models get a theme-aware purple tier colour, new effort level and fast mode segments, rate-limit parsing scoped to the `rate_limits` block, and ISO timestamp tolerance.
-- **2.1.1**: README overhaul with verified examples, a fix for doubled progress bars under `NO_COLOR`/mono, and the marketplace manifest for `/plugin marketplace add`.
-- **2.1.0**: BATS test suite, three-platform CI, and four new CLI flags (`--help`, `--version`, `--dump-config`, `--uninstall`).
-- **2.0.x**: theme-aware Opus colouring, `of 1M` formatting for million-token context windows, nested-JSON parsing fixes.
-- **2.0.0**: stdin-native rate limits, the live activity line, and plugin marketplace support.
+
+Older releases (2.0.0 through 2.6.1) are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
