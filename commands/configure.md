@@ -24,7 +24,7 @@ fi
 Ask the user what they'd like to customize. Present these categories:
 
 ### Themes
-- `colour_theme` — Pick one of: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `matrix`, `mono` (default: default)
+- `colour_theme` — Pick one of: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `matrix`, `mono` (default: default). Tip: preview every theme (with its gradient bars) in the terminal first by running `bash ~/.claude/statusline-command.sh --demo`.
 
 ### Segments (toggle on/off)
 - `show_directory` — Working directory
@@ -67,9 +67,9 @@ If the user turns on `activity_pulse` or `activity_scanner`, suggest they set `r
 - `auto_update` — Opt-in: when a newer version is detected, download and install it automatically in the background (atomic; never touches statusline.conf or settings.json) (default: false)
 - `bar_width` — Progress bar width in characters (default: 10)
 - `branch_max_length` — Truncate long branch names (default: unlimited)
-- `dir_style` — Directory display: `full` (whole path, default), `basename` (just the last folder), or `auto` (full when the line fits the terminal width, basename when it would overflow)
+- `dir_style` — Directory display: `auto` (full path when the line fits the terminal width, basename when it would overflow; the default), `full` (always the whole path), or `basename` (just the last folder)
 - `context_warn_threshold` — auto = warn within 20k tokens of Claude Code's auto-compact point (default); or a raw percentage like 80
-- `enable_truncation` — Drop segments on narrow terminals (default: false)
+- `enable_truncation` — Drop low-priority segments when the line is too wide for the terminal (default: true; pairs with `dir_style=auto` so the path collapses before any segment is dropped)
 - `max_width` — Override terminal width for truncation
 
 ### Grouping
