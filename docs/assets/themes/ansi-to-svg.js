@@ -72,22 +72,62 @@ function ansiToRuns(input) {
   return runs;
 }
 
+const FONT = "ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace";
+const CW = 8.4, FS = 14, PAD_X = 16, PAD_TOP = 13;
+const colsOf = runs => runs.reduce((n, r) => n + [...r.text].length, 0);
+const runsToTspans = runs =>
+  runs.map(r => `<tspan fill="${r.fg || DEFAULT_FG}">${esc(r.text)}</tspan>`).join('');
+
 function toSvg(input, opts = {}) {
   const runs = ansiToRuns(input);
-  const cols = runs.reduce((n, r) => n + [...r.text].length, 0);
-  const CW = 8.4, FS = 14, PAD_X = 16, PAD_TOP = 13;
-  const W = Math.ceil(PAD_X * 2 + cols * CW);
+  const W = Math.ceil(PAD_X * 2 + colsOf(runs) * CW);
   const H = opts.height || 44;
   const baseline = PAD_TOP + FS;
-  const tspans = runs
-    .map(r => `<tspan fill="${r.fg || DEFAULT_FG}">${esc(r.text)}</tspan>`)
-    .join('');
+  const tspans = runsToTspans(runs);
   const label = opts.label
     ? `<title>${esc(opts.label)} theme preview</title>` : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || 'status bar')} preview">
   ${label}
   <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="8" fill="#0d1117" stroke="#30363d"/>
-  <text x="${PAD_X}" y="${baseline}" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="${FS}">${tspans}</text>
+  <text x="${PAD_X}" y="${baseline}" xml:space="preserve" font-family="${FONT}" font-size="${FS}">${tspans}</text>
+</svg>
+`;
+}
+
+// Build ONE self-contained SVG that flip-books through several ANSI frames, the
+// way generate-demo-gif.js does but as a crisp, dependency-free vector. Each
+// frame is a <g> layer whose opacity is toggled on for its time slot with a
+// discrete SMIL <animate>, so the frames swap with no cross-fade (a true
+// flipbook). SMIL plays in <img>-embedded SVG on GitHub (no JS needed).
+//   frames: array of raw ANSI strings (first line of each is used)
+//   opts.delays: per-frame ms (defaults mirror the GIF: hold first/last longer)
+function toAnimatedSvg(frames, opts = {}) {
+  const runsPer = frames.map(f => ansiToRuns(f));
+  const W = Math.ceil(PAD_X * 2 + Math.max(...runsPer.map(colsOf)) * CW);
+  const H = opts.height || 44;
+  const baseline = PAD_TOP + FS;
+  const n = frames.length;
+  const delays = opts.delays || frames.map((_, i) => (i === n - 1 ? 1700 : i === 0 ? 900 : 680));
+  const total = delays.reduce((a, b) => a + b, 0);
+  // Cumulative boundaries in [0,1]: keyTimes has n+1 entries, values match.
+  const bounds = [0];
+  let acc = 0;
+  for (const d of delays) { acc += d; bounds.push(acc / total); }
+  bounds[bounds.length - 1] = 1;
+  const keyTimes = bounds.map(b => +b.toFixed(4)).join(';');
+  const dur = (total / 1000).toFixed(2) + 's';
+  const layers = runsPer.map((runs, i) => {
+    const values = bounds.map((_, k) => (k === i ? 1 : 0)).join(';');
+    return `  <g opacity="${i === 0 ? 1 : 0}">
+    <text x="${PAD_X}" y="${baseline}" xml:space="preserve" font-family="${FONT}" font-size="${FS}">${runsToTspans(runs)}</text>
+    <animate attributeName="opacity" calcMode="discrete" dur="${dur}" repeatCount="indefinite" keyTimes="${keyTimes}" values="${values}"/>
+  </g>`;
+  }).join('\n');
+  const label = opts.label ? `<title>${esc(opts.label)}</title>` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || 'status bar')} animated demo">
+  ${label}
+  <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="8" fill="#0d1117" stroke="#30363d"/>
+${layers}
 </svg>
 `;
 }
@@ -108,4 +148,4 @@ if (require.main === module) {
   else process.stdout.write(svg);
 }
 
-module.exports = { toSvg, ansiToRuns, visibleCols };
+module.exports = { toSvg, toAnimatedSvg, ansiToRuns, visibleCols };
