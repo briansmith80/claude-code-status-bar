@@ -19,7 +19,7 @@ Claude Code warns you about your rate limit and your full context window only on
 
 <div align="center">
 
-<img src="docs/assets/hero-demo.svg" alt="Animated demo: line 1's context bar fills green to red as a session progresses and the auto-compact warning fires while usage and cost climb; line 2 shows live tools, a running subagent, and the todo bar filling 0/5 to 5/5" width="880">
+<img src="docs/assets/hero-demo.svg?v=2" alt="Animated demo: line 1's context bar fills green to red as a session progresses and the auto-compact warning fires while usage and cost climb; line 2 shows live tools, a running subagent, and the todo bar filling 0/5 to 5/5" width="880">
 
 </div>
 
