@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="528" height="104" viewBox="0 0 528 104" role="img" aria-label="subagent panel preview">
+  <title>subagent panel theme preview</title>
+  <rect x="0.5" y="0.5" width="527" height="103" rx="8" fill="#0d1117" stroke="#30363d"/>
+  <text x="16" y="27" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#d29922">⚒</tspan><tspan fill="#c9d1d9"> research auth patterns   </tspan><tspan fill="#6e7681">52s · 13.5k tok · 275 tok/s ▆█▆█</tspan></text>
+  <text x="16" y="47" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#3fb950">✓</tspan><tspan fill="#c9d1d9"> audit error handling     </tspan><tspan fill="#6e7681">1m35s · 42k tok</tspan></text>
+  <text x="16" y="67" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#f85149">✗</tspan><tspan fill="#c9d1d9"> migrate config loader    </tspan><tspan fill="#6e7681">30s · 8.2k tok</tspan></text>
+  <text x="16" y="87" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#6e7681">◌</tspan><tspan fill="#c9d1d9"> write integration tests</tspan></text>
+</svg>

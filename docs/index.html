@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude-code-status-bar: a configurable status bar for Claude Code</title>
+<meta name="description" content="Quota burn, context fill, git state, live activity, and session cost under every Claude Code response. Pure bash, no jq, one-line install, eight colour themes.">
+<link rel="canonical" href="https://briansmith80.github.io/claude-code-status-bar/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%233fb950'/%3E%3Cstop offset='0.6' stop-color='%23f0883e'/%3E%3Cstop offset='1' stop-color='%23f85149'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='16' height='16' rx='4' fill='url(%23g)'/%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:title" content="claude-code-status-bar">
+<meta property="og:description" content="Real-time quota, context window, live activity, and session cost, right in your Claude Code status bar.">
+<meta property="og:url" content="https://briansmith80.github.io/claude-code-status-bar/">
+<meta property="og:image" content="https://briansmith80.github.io/claude-code-status-bar/assets/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #1c2128; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #d97757; --accent2: #f0883e;
+    --link: #58a6ff; --green: #3fb950; --red: #f85149; --radius: 12px; --maxw: 1160px;
+    /* status-bar palette (matches the rendered theme SVGs) */
+    --c-dir:#39c5cf; --c-branch:#bc8cff; --c-model:#ff8700; --c-label:#d29922;
+    --c-add:#3fb950; --c-del:#f85149; --c-marker:#ff00af; --c-empty:#6e7681; --c-info:#58a6ff;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 66px; overflow-x: hidden; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+  em { color: var(--text); font-style: normal; font-weight: 600; }
+
+  /* ── Nav ── */
+  header.nav { position: sticky; top: 0; z-index: 50; background: rgba(13,17,23,.82); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  .nav .wrap { display: flex; align-items: center; gap: 18px; height: 58px; }
+  .brand { font-weight: 700; font-size: 16px; color: var(--text); display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+  .brand .dot { width: 11px; height: 11px; border-radius: 3px; background: linear-gradient(135deg, var(--green), var(--accent2), #f85149); }
+  .nav nav { margin-left: auto; display: flex; gap: 18px; align-items: center; }
+  .nav nav a { color: var(--muted); font-size: 14px; }
+  .nav nav a:hover { color: var(--text); text-decoration: none; }
+  .nav nav a.active { color: var(--text); font-weight: 600; }
+  .nav .gh { color: var(--text); border: 1px solid var(--border); padding: 6px 13px; border-radius: 8px; background: var(--surface); }
+  #progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: var(--accent); transition: width .1s linear; }
+
+  /* ── Sections ── */
+  section { padding: 56px 0; border-top: 1px solid var(--border); }
+  h2 { font-size: clamp(24px, 4vw, 32px); letter-spacing: -.01em; margin: 0 0 10px; text-align: center; }
+  .sub { text-align: center; color: var(--muted); margin: 0 auto 34px; max-width: 680px; }
+  .kicker { text-align: center; color: var(--accent2); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: 12.5px; margin: 0 0 8px; }
+
+  /* ── Hero ── */
+  .hero { text-align: center; padding: 70px 0 40px; }
+  .hero h1 { font-size: clamp(26px, 7vw, 52px); line-height: 1.1; margin: 0 0 14px; letter-spacing: -.02em; overflow-wrap: break-word; color: #fff; }
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) { .hero h1 { background: linear-gradient(180deg, #fff, #b9c2cc); -webkit-background-clip: text; background-clip: text; color: transparent; } }
+  .hero .tag { font-size: clamp(17px, 2.6vw, 21px); color: var(--muted); max-width: 720px; margin: 0 auto 24px; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 6px 0 16px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 10px; font-weight: 600; font-size: 15px; border: 1px solid var(--border); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #1b0f0a; }
+  .btn.primary:hover { background: var(--accent2); text-decoration: none; }
+  .btn.ghost { background: var(--surface); color: var(--text); }
+  .btn.ghost:hover { border-color: var(--muted); text-decoration: none; }
+  .badges { display: flex; gap: 7px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+  .badges img { height: 20px; width: auto; }
+
+  /* Terminal mockup hero: the subagent panel + the two-line status bar in a window frame */
+  .terminal { max-width: 1080px; margin: 12px auto 4px; background: #0a0d13; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.5); text-align: left; }
+  .term-bar { display: flex; align-items: center; padding: 9px 14px; background: #161b22; border-bottom: 1px solid var(--border); }
+  .term-bar .dots { display: flex; gap: 7px; }
+  .term-bar .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .term-bar .title { margin: 0 auto; padding-right: 46px; color: var(--muted); font: 12.5px ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; }
+  .term-body { padding: 16px 18px 18px; overflow-x: auto; }
+  .term-body .bar { font-size: 10.5px; line-height: 1.95; }
+  .term-body .msg { color: var(--muted); white-space: normal; }
+  .term-sub { margin: 12px 0 2px; }
+  .term-rule { height: 1px; background: #21262d; margin: 12px 0; }
+  .term-prompt { border: 1px solid #2a313a; border-radius: 8px; padding: 9px 12px; margin: 14px 0 12px; font: 11px ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; color: var(--muted); }
+  .term-prompt .cursor { color: var(--text); }
+  @media (prefers-reduced-motion: no-preference) { .term-prompt .cursor { animation: blink 1.1s steps(1) infinite; } }
+
+  /* ── Cards / grids ── */
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; display: flex; align-items: center; gap: 9px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .card .ic { font-size: 19px; }
+  .note { color: var(--muted); font-size: 14px; text-align: center; max-width: 760px; margin: 28px auto 0; }
+
+  /* ── Code blocks + copy ── */
+  .codeblock { position: relative; background: #010409; border: 1px solid var(--border); border-radius: 8px; }
+  .codeblock pre { margin: 0; padding: 14px 64px 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.5; color: #e6edf3; }
+  .copy { position: absolute; top: 8px; right: 8px; background: var(--surface2); color: var(--muted); border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .copy:hover { color: var(--text); border-color: var(--muted); }
+  .copy.done { color: var(--green); border-color: var(--green); }
+
+  /* ── Status-bar mono renders (anatomy / before-after / examples) ── */
+  .barbox { background: #010409; border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; overflow-x: auto; }
+  .bar { font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace; font-size: 14px; line-height: 1.9; white-space: pre; color: var(--text); }
+  .bar .d{color:var(--c-dir)} .bar .br{color:var(--c-branch)} .bar .mo{color:var(--c-model)}
+  .bar .lb{color:var(--c-label)} .bar .ad{color:var(--c-add)} .bar .de{color:var(--c-del)}
+  .bar .mk{color:var(--c-marker)} .bar .em{color:var(--c-empty)} .bar .in{color:var(--c-info)} .bar .ok{color:var(--green)}
+  .bar .r0{color:#2ecc40}.bar .r1{color:#73d12b}.bar .r2{color:#b9d616}.bar .r3{color:#ffdc00}
+  .bar .r4{color:#ffc008}.bar .r5{color:#ffa311}.bar .r6{color:#ff851b}.bar .r7{color:#ff6f23}
+  .anatomy .bar { font-size: 10.5px; line-height: 1.95; }
+  .anatomy .seg { cursor: help; border-radius: 3px; transition: opacity .12s; outline: none; }
+  .anatomy:hover .seg { opacity: .4; }
+  .anatomy .seg:hover, .anatomy .seg:focus, .anatomy .seg.pin { opacity: 1; box-shadow: inset 0 -2px 0 var(--accent); }
+  .anatomy .seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
+  .readout { margin-top: 14px; min-height: 1.5em; color: var(--muted); font-size: 14.5px; text-align: center; }
+  .readout b { color: var(--text); }
+
+  /* ── Deep-dive split layout ── */
+  /* Stacked deep-dive: full-width visual, then points in two columns */
+  .deep-vis { width: 100%; max-width: 920px; margin: 0 auto 28px; display: block; border-radius: 10px; border: 1px solid var(--border); background: #010409; }
+  .points { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: 1fr; }
+  .points li { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; color: var(--muted); font-size: 14.5px; }
+  .points li b { color: var(--text); }
+  .before-after { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  .ba-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .ba-card .lab { font-size: 12.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 10px; }
+  .ba-card.good { border-color: #2f5a3a; }
+  .ba-card.bad .lab { color: var(--red); }
+  .ba-card.good .lab { color: var(--green); }
+
+  /* ── Theme switcher ── */
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 18px; }
+  .pill { font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; cursor: pointer; }
+  .pill:hover { color: var(--text); }
+  .pill.active { color: var(--text); border-color: var(--accent); background: rgba(217,119,87,.12); font-weight: 700; }
+  #theme-preview { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid var(--border); transition: opacity .18s; aspect-ratio: 1007 / 44; }
+  .conf-line { max-width: 360px; margin: 14px auto 0; }
+  .conf-line .codeblock pre { padding: 10px 56px 10px 14px; }
+  .noscript-themes { display: grid; gap: 12px; margin-top: 16px; }
+  .noscript-themes img { width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+
+  /* ── Config showcase / chips ── */
+  .two { display: grid; gap: 20px; grid-template-columns: 1fr; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; }
+
+  /* ── Comparison checklist ── */
+  .checklist { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
+  .check { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .check .tick { color: var(--green); font-weight: 700; flex: none; }
+  .check span { color: var(--muted); font-size: 14.5px; }
+  .check span b { color: var(--text); }
+
+  /* ── Trust strip ── */
+  .trust { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .trust .card h3 { font-size: 15px; }
+
+  /* ── Requirements ── */
+  .reqs { display: grid; gap: 16px; grid-template-columns: 1fr; max-width: 820px; margin: 0 auto; }
+  .reqs .card ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; }
+  .platforms { text-align: center; margin-top: 18px; color: var(--muted); font-size: 14px; }
+  .platforms span { display: inline-block; border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px; margin: 4px; background: var(--surface); color: var(--text); }
+
+  /* ── Install tabs ── */
+  .tabbar { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .tabbar button { background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 9px; padding: 9px 16px; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .tabbar button[aria-selected="true"] { color: var(--text); border-color: var(--accent); background: rgba(217,119,87,.12); }
+  .tabpanels { max-width: 760px; margin: 0 auto; }
+  .tabpanel { display: none; }
+  .tabpanel.active { display: block; }
+  .tabpanel h3 { margin: 0 0 10px; font-size: 15px; }
+
+  /* ── FAQ ── */
+  .faq { max-width: 800px; margin: 0 auto; }
+  .faq details { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; padding: 0 16px; }
+  .faq summary { cursor: pointer; padding: 14px 0; font-weight: 600; list-style: none; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::before { content: "+"; color: var(--accent); font-weight: 700; margin-right: 10px; }
+  .faq details[open] summary::before { content: "\2212"; }
+  .faq p { margin: 0 0 14px; color: var(--muted); font-size: 14.5px; }
+
+  /* ── Final CTA ── */
+  .cta-band { text-align: center; }
+  .cta-band .codeblock { max-width: 640px; margin: 0 auto 16px; }
+
+  /* ── Footer ── */
+  footer { border-top: 1px solid var(--border); padding: 36px 0; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--text); }
+
+  /* ── Toast ── */
+  #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--surface2); color: var(--text); border: 1px solid var(--accent); border-radius: 9px; padding: 9px 16px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 100; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Scroll reveal (JS-gated so no-JS shows everything) ── */
+  .reveal-on .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal-on .reveal.in { opacity: 1; transform: none; }
+
+  /* ── Spinner for the legend ── */
+  @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  .spin { color: var(--c-label); }
+  @media (prefers-reduced-motion: no-preference) { .spin { animation: blink 1s steps(1) infinite; } }
+
+  @media (min-width: 760px) {
+    .before-after { grid-template-columns: 1fr 1fr; }
+    .two { grid-template-columns: 1fr 1fr; }
+    .reqs { grid-template-columns: 1fr 1fr; }
+    .points { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) {
+    .nav nav a.hide-sm { display: none; }
+    .nav .wrap { gap: 12px; }
+    .nav nav { gap: 12px; }
+    .brand { font-size: 14px; }
+    .nav .gh { padding: 6px 11px; }
+    .codeblock pre { white-space: pre-wrap; word-break: break-all; padding-right: 16px; }
+    .copy { position: static; display: block; width: 100%; margin: 0; border-radius: 0 0 8px 8px; border-left: 0; border-right: 0; border-bottom: 0; padding: 10px 12px; font-size: 13px; }
+    .tabbar { gap: 6px; }
+    .tabbar button { flex: 1 1 auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <span class="brand"><span class="dot"></span>claude-code-status-bar</span>
+    <nav>
+      <a class="hide-sm" href="#features">Features</a>
+      <a class="hide-sm" href="#live">Live</a>
+      <a class="hide-sm" href="#themes">Themes</a>
+      <a class="hide-sm" href="#configure">Configure</a>
+      <a class="hide-sm" href="#why-bash">Why bash</a>
+      <a class="hide-sm" href="#faq">FAQ</a>
+      <a href="#install">Install</a>
+      <a class="gh" href="https://github.com/briansmith80/claude-code-status-bar">GitHub</a>
+    </nav>
+  </div>
+  <div id="progress"></div>
+</header>
+
+<main>
+  <!-- ── Hero ── -->
+  <section class="hero" style="border-top:0">
+    <div class="wrap">
+      <h1>A status bar for Claude Code</h1>
+      <p class="tag">Your quota burn, context fill, git state, and live activity, visible under every response.</p>
+      <div class="cta">
+        <a class="btn primary" href="#install">Install</a>
+        <a class="btn ghost" href="https://github.com/briansmith80/claude-code-status-bar">View on GitHub</a>
+      </div>
+      <div class="terminal" role="img" aria-label="The status bar inside a Claude Code session: a subagent panel showing running, completed, and queued agents with elapsed time and a live tokens-per-second rate, above the two-line status bar with directory, branch, model, context fill, 5-hour and weekly quota, git changes, duration, cost, and a live activity line with tool counts, a running subagent, and todo progress">
+        <div class="term-bar">
+          <span class="dots"><i style="background:#ff5f56"></i><i style="background:#ffbd2e"></i><i style="background:#27c93f"></i></span>
+          <span class="title">Claude Code &#183; ~/my-app</span>
+        </div>
+        <div class="term-body" aria-hidden="true">
+          <div class="bar"><span class="mo">&#10043;</span> Wrangled the signup flow for 2m 14s</div>
+          <div class="bar msg">&#9679; Added form validation to SignupForm.tsx and wired up the API. Two subagents reviewed it; the test suite is running now.</div>
+          <div class="term-prompt"><span class="ok">&#10095;</span> <span class="cursor">&#9612;</span></div>
+          <div class="bar" id="hero-l1"><span class="d">~/my-app</span> <span class="br">on &#8625; main</span>  <span class="mo">&#9670; Opus 4.8 (1M)</span>  <span class="r0">&#9608;</span><span class="r1">&#9608;</span><span class="r2">&#9608;</span><span class="r3">&#9608;</span><span class="r4">&#9608;</span><span class="r5">&#9608;</span><span class="r6">&#9608;</span><span class="em">&#9617;&#9617;</span><span class="mk">&#9474;</span> <span class="lb">78% of 1M</span>  <span class="lb">5hr (2h20m)</span> <span class="r0">&#9608;</span><span class="r2">&#9608;</span><span class="r4">&#9608;</span><span class="em">&#9617;&#9617;</span><span class="mk">&#9474;</span><span class="em">&#9617;&#9617;&#9617;&#9617;</span> <span class="lb">37%</span>  <span class="lb">wk (3d4h)</span> <span class="r0">&#9608;</span><span class="r2">&#9608;</span><span class="r4">&#9608;</span><span class="r6">&#9608;</span><span class="r7">&#9608;</span><span class="r7">&#9608;</span><span class="r7">&#9608;</span><span class="em">&#9617;</span><span class="mk">&#9474;</span> <span class="lb">72%</span>  <span class="ad">+42</span> <span class="de">-7</span>  <span class="lb">&#9679; 3 dirty</span>  <span class="em">&#8595;2 &#8593;1</span>  <span class="em">12m</span>  <span class="lb">$0.45</span></div>
+          <div class="bar" id="hero-l2"><span class="in">&#8594;</span> Edit SignupForm.tsx  <span class="em">[Edit 5 &#183; Read 4 &#183; Bash 2]</span>  <span class="em">&#9474;</span>  <span class="lb">&#9874; research 12s</span>  <span class="em">&#9474;</span>  <span class="r0">&#9608;</span><span class="r4">&#9608;</span><span class="em">&#9617;&#9617;&#9617;</span> <span class="em">2/5 Add tests</span></div>
+          <div class="bar"><span class="d">&#9205;&#9205; auto mode on</span> <span class="em">(shift+tab to cycle) &#183; &#8592; for agents</span></div>
+          <div class="bar"><span class="lb">&#9874;</span> research auth patterns   <span class="em">52s &#183; 13.5k tok &#183; 275 tok/s &#9606;&#9608;&#9606;&#9608;</span></div>
+          <div class="bar"><span class="ok">&#10003;</span> audit error handling     <span class="em">1m35s &#183; 42k tok</span></div>
+          <div class="bar"><span class="em">&#9676; write integration tests</span></div>
+        </div>
+      </div>
+      <p class="note">Pure bash, no jq, no compiled binaries. Works on macOS, Linux, and Windows.</p>
+      <div class="badges">
+        <img src="https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml/badge.svg" alt="ShellCheck">
+        <img src="https://github.com/briansmith80/claude-code-status-bar/actions/workflows/tests.yml/badge.svg" alt="Tests">
+        <img src="https://img.shields.io/github/v/release/briansmith80/claude-code-status-bar?label=version&color=blue" alt="Version">
+        <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT">
+        <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555" alt="Platform">
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Problem ── -->
+  <section id="problem" class="reveal">
+    <div class="wrap">
+      <h2>Claude Code warns you too late</h2>
+      <p class="sub">The built-in status line is reactive. You learn the context window is full when it auto-compacts mid-task, and you learn you are near a rate limit once you are already throttled.</p>
+      <div class="before-after">
+        <div class="ba-card bad">
+          <div class="lab">Built-in line, after the fact</div>
+          <div class="barbox" aria-hidden="true"><div class="bar"><span class="em">~/my-app  Opus 4.8  60% context</span></div></div>
+          <p class="note" style="margin-top:12px;text-align:left">You find out the window is full once it compacts mid-task, and that you are rate limited once you are throttled. No pacing, no cost trend, no view of what Claude is doing.</p>
+        </div>
+        <div class="ba-card good">
+          <div class="lab">This bar, in time to act</div>
+          <div class="barbox" aria-hidden="true"><div class="bar"><span class="d">~/my-app</span> <span class="br">on &#8625; main</span>  <span class="mo">&#9670; Opus 4.8</span>  <span class="r0">&#9608;</span><span class="r2">&#9608;</span><span class="r4">&#9608;</span><span class="r6">&#9608;</span><span class="r7">&#9608;</span><span class="em">&#9617;</span><span class="mk">&#9474;</span> <span class="mk">&#9650;</span> <span class="lb">88%</span>  <span class="ad">37%</span><span class="mk">&#9474;</span> <span class="lb">5h</span>  <span class="lb">$0.45</span></div></div>
+          <p class="note" style="margin-top:12px;text-align:left">The climbing context bar, the auto-compact marker, the pacing markers, and the pre-compact triangle give you runway.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Anatomy ── -->
+  <section id="anatomy" class="reveal">
+    <div class="wrap">
+      <h2>Every character earns its place</h2>
+      <p class="sub">This is the real two-line bar, nothing mocked up. Every segment is there for a reason.</p>
+      <div class="barbox anatomy">
+        <div class="bar" id="anatomy-bar"><span class="seg d" data-tip="Working directory. Responsive: full path when it fits, basename when it does not.">~/my-app</span> <span class="seg br" data-tip="Current git branch.">on &#8625; main</span>  <span class="seg mo" data-tip="Model name, coloured by tier (Haiku green, Sonnet yellow, Opus orange, Fable purple).">&#9670; Opus 4.8 (1M)</span>  <span class="seg" data-tip="Context fill. The bar is colour-coded and the | marks the exact point Claude Code will auto-compact."><span class="r0">&#9608;</span><span class="r1">&#9608;</span><span class="r2">&#9608;</span><span class="r3">&#9608;</span><span class="r4">&#9608;</span><span class="r5">&#9608;</span><span class="r6">&#9608;</span><span class="em">&#9617;&#9617;</span><span class="mk">&#9474;</span> <span class="lb">78% of 1M</span></span>  <span class="seg" data-tip="5-hour quota. The | is your pacing target: where usage should be for even consumption across the window."><span class="lb">5hr (2h20m)</span> <span class="r0">&#9608;</span><span class="r2">&#9608;</span><span class="r4">&#9608;</span><span class="em">&#9617;&#9617;</span><span class="mk">&#9474;</span><span class="em">&#9617;&#9617;&#9617;&#9617;</span> <span class="lb">37%</span></span>  <span class="seg" data-tip="Weekly quota, also with a pacing marker."><span class="lb">wk (3d4h)</span> <span class="r0">&#9608;</span><span class="r2">&#9608;</span><span class="r4">&#9608;</span><span class="r6">&#9608;</span><span class="r7">&#9608;</span><span class="em">&#9617;&#9617;</span><span class="mk">&#9474;</span> <span class="lb">72%</span></span>  <span class="seg" data-tip="Lines added and removed this session."><span class="ad">+42</span> <span class="de">-7</span></span>  <span class="seg" data-tip="Uncommitted changes in the working tree."><span class="lb">&#9679; 3 dirty</span></span>  <span class="seg" data-tip="Commits behind and ahead of the upstream branch."><span class="em">&#8595;2 &#8593;1</span></span>  <span class="seg em" data-tip="Session duration.">12m</span>  <span class="seg lb" data-tip="Session cost in USD, colour-coded.">$0.45</span>
+<span class="seg in" data-tip="The most recent or currently running tool.">&#8594; Edit SignupForm.tsx</span>  <span class="seg em" data-tip="Top tool counts for the whole session.">[Edit 5 &#183; Read 4 &#183; Bash 2]</span>  <span class="em">&#9474;</span>  <span class="seg lb" data-tip="A running subagent and its elapsed time.">&#9874; research 12s</span>  <span class="em">&#9474;</span>  <span class="seg" data-tip="Todo progress and the current step."><span class="r0">&#9608;</span><span class="r4">&#9608;</span><span class="em">&#9617;&#9617;&#9617;</span> <span class="em">2/5 Add tests</span></span></div>
+      </div>
+      <div class="readout" id="readout">Hover or tap any segment to see what it means. Zero-valued and missing segments auto-hide, so your real bar is usually shorter than this.</div>
+    </div>
+  </section>
+
+  <!-- ── Feature grid ── -->
+  <section id="features" class="reveal">
+    <div class="wrap">
+      <h2>What it shows</h2>
+      <p class="sub">A skimmable map of what lands under every response.</p>
+      <div class="grid">
+        <div class="card"><h3><span class="ic">&#128202;</span> Quota</h3><p>5-hour and weekly usage with pacing markers showing where you should be for even consumption.</p></div>
+        <div class="card"><h3><span class="ic">&#129504;</span> Context</h3><p>A colour-coded bar that warns before auto-compact, not after, with a marker at the compact point.</p></div>
+        <div class="card"><h3><span class="ic">&#9889;</span> Live activity</h3><p>A second line of running tools, subagents, and todo progress, updated as Claude works.</p></div>
+        <div class="card"><h3><span class="ic">&#128181;</span> Cost</h3><p>Session cost and an optional burn rate, colour-coded.</p></div>
+        <div class="card"><h3><span class="ic">&#127919;</span> Pacing markers</h3><p>Each quota bar gains a marker for where you should be, so 37% reads as on track or running hot at a glance.</p></div>
+        <div class="card"><h3><span class="ic">&#9650;</span> Auto-compact aware</h3><p>Marks the exact token point Claude Code will compact at and warns 20k tokens early.</p></div>
+        <div class="card"><h3><span class="ic">&#9874;</span> Subagent panel</h3><p>A status icon, elapsed, token cost, and a live tok/s rate per Task subagent.</p></div>
+        <div class="card"><h3><span class="ic">&#127793;</span> Git state</h3><p>Branch, lines changed, dirty count, ahead and behind, stash, and a clickable PR segment coloured by review state.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Live activity deep dive ── -->
+  <section id="live" class="reveal">
+    <div class="wrap">
+      <p class="kicker">Deep dive &#183; Live activity</p>
+      <h2>A live feed of what Claude is doing</h2>
+      <p class="sub">An optional second line, parsed incrementally from the transcript by a Node.js helper. It never blocks the bar, and without Node.js it simply turns off.</p>
+      <img class="deep-vis" src="assets/line2-activity-loop.svg" loading="lazy" style="aspect-ratio:847/44" alt="Animated live activity line cycling through running tools, a subagent, and a filling todo bar">
+      <ul class="points">
+        <li><b>Running now</b> sits behind an animated spinner <span class="spin mono">&#10299;</span> in the warning colour; past 5 seconds its elapsed time appears, heat-coloured green, then yellow, then red, so a stuck command turns red on its own.</li>
+        <li><b>The last finished tool</b> shows with an arrow and flashes green with a check for a few seconds; <b>a failure</b> stays visible with a red cross for five minutes.</li>
+        <li><b>Tool counts</b> for the session, <b>running and finished subagents</b> with elapsed time, and a <b>gradient todo bar</b> with the current step.</li>
+        <li><b>Stale reads as stale:</b> when the cache ages past 45 seconds the whole line fades to dim.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── Subagent panel deep dive ── -->
+  <section id="subagent" class="reveal">
+    <div class="wrap">
+      <p class="kicker">Deep dive &#183; Subagent panel</p>
+      <h2>A subagent panel with a live burn rate</h2>
+      <p class="sub">It restyles Claude Code's Task-subagent rows to match your theme and adds live numbers, including a tok/s rate and a sparkline computed from the per-tick token samples.</p>
+      <img class="deep-vis" src="assets/subagent-panel-demo.svg" loading="lazy" style="aspect-ratio:528/104;max-width:600px" alt="Subagent panel rows: a running agent with elapsed time, tokens, and a tok/s rate plus sparkline; a completed agent; a failed agent; a queued agent">
+      <ul class="points">
+        <li>Each row gets a <b>status icon</b> (<span class="bar" style="color:var(--c-label)">&#9874;</span> running, <span class="bar" style="color:var(--green)">&#10003;</span> done, <span class="bar" style="color:var(--red)">&#10007;</span> failed, <span class="bar" style="color:var(--c-empty)">&#9676;</span> queued), elapsed time, token cost, and a <b>live tok/s rate</b> with a sparkline, so a runaway agent is visible before it finishes.</li>
+        <li>Rows are padded into an aligned column and <b>trimmed to the panel width</b>, dropping the sparkline first, then the rate, so they never wrap.</li>
+        <li>On any error it <b>prints nothing</b> and Claude Code falls back to its default rows, so it can never break your panel. Set <code>subagent_rows=false</code> to keep the defaults.</li>
+        <li><b>Scope:</b> Claude Code 2.1.170 delegates only Task-tool subagent rows; workflow and background-task rows keep its built-in style.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── Quota + context mechanics ── -->
+  <section id="quota-context" class="reveal">
+    <div class="wrap">
+      <h2>The two mechanics that let you act in time</h2>
+      <p class="sub">Pacing markers turn a percentage into a decision, and the context warning mirrors Claude Code's real auto-compact maths.</p>
+      <div class="two">
+        <div class="card">
+          <h3>Pacing markers</h3>
+          <div class="barbox" aria-hidden="true"><div class="bar"><span class="lb">5hr (2h20m)</span> <span class="r0">&#9608;</span><span class="r2">&#9608;</span><span class="r4">&#9608;</span><span class="em">&#9617;&#9617;</span><span class="mk">&#9474;</span><span class="em">&#9617;&#9617;&#9617;&#9617;</span> <span class="lb">37%</span></div></div>
+          <p style="color:var(--muted);font-size:14.5px;margin:12px 0 0">Each usage bar carries a marker for where your consumption should be for even use across the window. Bar behind the marker means you have headroom; past it means you are ahead of pace and may hit the limit early.</p>
+        </div>
+        <div class="card">
+          <h3>Compaction-aware context</h3>
+          <div class="barbox" aria-hidden="true"><div class="bar"><span class="r0">&#9608;</span><span class="r1">&#9608;</span><span class="r3">&#9608;</span><span class="r5">&#9608;</span><span class="r6">&#9608;</span><span class="r7">&#9608;</span><span class="em">&#9617;</span><span class="mk">&#9474;</span> <span class="mk">&#9650;</span> <span class="lb">81%</span></div></div>
+          <p style="color:var(--muted);font-size:14.5px;margin:12px 0 0">The bar marks the exact token point where Claude Code auto-compacts and fires a triangle within 20k tokens of it, on any window size. It honours your <code>autoCompactWindow</code> and <code>DISABLE_AUTO_COMPACT</code> settings. Limits are read stdin-native at zero network cost on Claude Code 2.1+, with an OAuth fallback for older versions.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Themes (interactive switcher) ── -->
+  <section id="themes" class="reveal">
+    <div class="wrap">
+      <h2>Eight truecolour themes</h2>
+      <p class="sub">Match the bar to your terminal. Each preview is a real render of the bar, the same output <code>--demo</code> prints.</p>
+      <div class="pills" id="pills" role="group" aria-label="Theme"></div>
+      <img id="theme-preview" src="assets/themes/default-demo.svg" alt="default theme preview" loading="lazy">
+      <div class="conf-line">
+        <div class="codeblock">
+          <button type="button" class="copy" id="conf-copy" data-clip="colour_theme=default">Copy</button>
+          <pre id="conf-pre">colour_theme=default</pre>
+        </div>
+      </div>
+      <p class="note">The six named themes store exact hex palettes and render in 24-bit truecolour, falling back to nearest 256-colour. <code>default</code> tracks your terminal's own palette; <code>matrix</code> is a monochrome phosphor-green tribute; <code>mono</code> and <code>NO_COLOR</code> drop all colour. Preview every theme live in your terminal with <code>--demo</code>, no config changes.</p>
+      <noscript>
+        <div class="noscript-themes">
+          <img src="assets/themes/dracula-demo.svg" alt="dracula"><img src="assets/themes/tokyo-night-demo.svg" alt="tokyo-night"><img src="assets/themes/nord-demo.svg" alt="nord"><img src="assets/themes/matrix-demo.svg" alt="matrix">
+        </div>
+      </noscript>
+    </div>
+  </section>
+
+  <!-- ── Configurability ── -->
+  <section id="configure" class="reveal">
+    <div class="wrap">
+      <h2>Build exactly the bar you want</h2>
+      <p class="sub">Around 21 line-1 segments, each individually toggleable, all from one commented file that survives updates.</p>
+      <div class="two">
+        <div>
+          <div class="codeblock">
+            <button type="button" class="copy" data-clip="colour_theme=tokyo-night&#10;bar_gradient=true        # true | flat | heat&#10;usage_label=countdown    # countdown | clock&#10;dir_style=auto           # auto | full | basename&#10;show_cost_rate=true&#10;auto_update=false">Copy</button>
+            <pre>colour_theme=tokyo-night
+bar_gradient=true        # true | flat | heat
+usage_label=countdown    # countdown | clock
+dir_style=auto           # auto | full | basename
+show_cost_rate=true
+auto_update=false</pre>
+          </div>
+          <p style="color:var(--muted);font-size:14px;margin:14px 0 0">Overrides live in a fully commented <code>statusline.conf</code>, created on first install and never overwritten by updates. <code>--dump-config</code> prints the resolved settings; the <code>/claude-code-status-bar:configure</code> slash command edits it all conversationally.</p>
+        </div>
+        <div>
+          <p style="color:var(--muted);font-size:14px;margin:0 0 12px">Every segment, on or off:</p>
+          <div class="chips">
+            <span class="chip">Directory</span><span class="chip">Branch</span><span class="chip">Vim mode</span><span class="chip">Model</span><span class="chip">Agent</span><span class="chip">Effort</span><span class="chip">Fast mode</span><span class="chip">Context</span><span class="chip">Tokens</span><span class="chip">5-hour</span><span class="chip">Weekly</span><span class="chip">Lines</span><span class="chip">Dirty</span><span class="chip">Ahead/behind</span><span class="chip">Stash</span><span class="chip">PR</span><span class="chip">Duration</span><span class="chip">Worktree</span><span class="chip">Cost</span><span class="chip">Cost rate</span><span class="chip">Update notice</span>
+          </div>
+          <p style="color:var(--muted);font-size:13.5px;margin:16px 0 0">Responsive by default: on a narrow terminal the path collapses to its basename, then low-priority segments drop, before any metric is lost.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Comparison ── -->
+  <section id="comparison" class="reveal">
+    <div class="wrap">
+      <h2>A richer layer on top of the built-in line</h2>
+      <p class="sub">A strict superset of Claude Code's status line, not a competitor. Built on its own statusLine and subagentStatusLine hooks, and it degrades gracefully.</p>
+      <div class="checklist">
+        <div class="check"><span class="tick">&#10003;</span><span>A <b>pre-compact marker and warning</b> instead of a post-compact surprise.</span></div>
+        <div class="check"><span class="tick">&#10003;</span><span><b>Pacing markers</b> on the quota bars instead of a bare number.</span></div>
+        <div class="check"><span class="tick">&#10003;</span><span>A colourful <b>live activity line</b> and a <b>subagent panel with a tok/s rate</b>.</span></div>
+        <div class="check"><span class="tick">&#10003;</span><span><b>Cost</b> with an optional burn rate, and a <b>clickable PR segment</b> coloured by review state.</span></div>
+        <div class="check"><span class="tick">&#10003;</span><span><b>Eight truecolour themes</b> with a 256-colour and NO_COLOR fallback.</span></div>
+        <div class="check"><span class="tick">&#10003;</span><span><b>Stdin-native rate limits</b> with an OAuth fallback for older Claude Code.</span></div>
+        <div class="check"><span class="tick">&#10003;</span><span><b>Pure bash</b>, no jq, no compiled binaries; one-line install on macOS, Linux, and Windows, plus the plugin marketplace.</span></div>
+        <div class="check"><span class="tick">&#10003;</span><span>Config that <b>survives updates</b>, and a measured render of roughly <b>285ms on Windows</b> and well under 100ms elsewhere.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Trust / why bash ── -->
+  <section id="why-bash" class="reveal">
+    <div class="wrap">
+      <h2>Pure bash. Nothing to compile, nothing to hide.</h2>
+      <p class="sub">Points that matter for a tool that runs on every response and can read your OAuth token.</p>
+      <div class="trust">
+        <div class="card"><h3>Pure bash, no jq, no binaries</h3><p>Core runs on bash 3.2+, so it works on stock macOS. JSON is parsed with bash regex; there is nothing compiled to audit.</p></div>
+        <div class="card"><h3>Never blocks the bar</h3><p>Every network call, the version check, the OAuth usage fallback, and transcript parsing, runs in a background subshell. The bar only reads caches, even offline.</p></div>
+        <div class="card"><h3>124 tests on 3 platforms in CI</h3><p>124 automated BATS tests across 13 files run on Linux, macOS, and Windows on every change, plus ShellCheck linting. MIT licensed.</p></div>
+        <div class="card"><h3>Security-hardened</h3><p>Cache and temp files use <code>umask 077</code>, the OAuth token is passed to curl on stdin so it never appears in the process list, and all branch names, paths, and transcript text are stripped of control characters before printing.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Requirements ── -->
+  <section id="requirements" class="reveal">
+    <div class="wrap">
+      <h2>What you need</h2>
+      <p class="sub">Only bash and curl, both already required by Claude Code on every OS.</p>
+      <div class="reqs">
+        <div class="card"><h3>Required</h3><ul><li><b>bash</b> and <b>curl</b> (already required by Claude Code)</li><li><b>Claude Code 2.1+</b> for stdin-native rate limits</li></ul></div>
+        <div class="card"><h3>Optional</h3><ul><li><b>git</b> for the git segments</li><li><b>Node.js</b> for the live activity line and subagent panel</li></ul></div>
+      </div>
+      <div class="platforms"><span>macOS</span><span>Linux</span><span>Windows (Git Bash)</span></div>
+      <p class="note">One honest caveat: on Windows the script takes around 285ms, so keep <code>refreshInterval</code> at 2 or higher there. A value below the script's own runtime can blank the bar.</p>
+    </div>
+  </section>
+
+  <!-- ── Install (tabs) ── -->
+  <section id="install" class="reveal">
+    <div class="wrap">
+      <h2>Install</h2>
+      <p class="sub">The status bar appears after the next Claude Code response, not immediately.</p>
+      <div class="tabbar" role="tablist">
+        <button type="button" role="tab" id="tab-mac" aria-controls="panel-mac" data-tab="mac" aria-selected="true">macOS / Linux</button>
+        <button type="button" role="tab" id="tab-win" aria-controls="panel-win" data-tab="win" aria-selected="false">Windows</button>
+        <button type="button" role="tab" id="tab-plugin" aria-controls="panel-plugin" data-tab="plugin" aria-selected="false">Plugin</button>
+      </div>
+      <div class="tabpanels">
+        <div class="tabpanel active" id="panel-mac" role="tabpanel" aria-labelledby="tab-mac" tabindex="0" data-panel="mac">
+          <h3>macOS / Linux (or Git Bash on Windows)</h3>
+          <div class="codeblock"><button type="button" class="copy" data-clip="curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash">Copy</button><pre>curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash</pre></div>
+        </div>
+        <div class="tabpanel" id="panel-win" role="tabpanel" aria-labelledby="tab-win" tabindex="0" data-panel="win">
+          <h3>Windows (PowerShell)</h3>
+          <div class="codeblock"><button type="button" class="copy" data-clip="irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex">Copy</button><pre>irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex</pre></div>
+        </div>
+        <div class="tabpanel" id="panel-plugin" role="tabpanel" aria-labelledby="tab-plugin" tabindex="0" data-panel="plugin">
+          <h3>Claude Code plugin system</h3>
+          <div class="codeblock"><button type="button" class="copy" data-clip="/plugin marketplace add briansmith80/claude-code-status-bar&#10;/plugin install claude-code-status-bar&#10;/claude-code-status-bar:setup">Copy</button><pre>/plugin marketplace add briansmith80/claude-code-status-bar
+/plugin install claude-code-status-bar
+/claude-code-status-bar:setup</pre></div>
+        </div>
+      </div>
+      <p class="note">Re-running either installer is always safe, and it is also how you update. After installing, preview a theme with <code>bash ~/.claude/statusline-command.sh --demo</code>.</p>
+    </div>
+  </section>
+
+  <!-- ── Updating ── -->
+  <section id="updating" class="reveal">
+    <div class="wrap">
+      <h2>Updates take one command, or none</h2>
+      <p class="sub">A background check every 6 hours, a clickable update notice, and an atomic self-update that never touches your config.</p>
+      <div class="two">
+        <div>
+          <div class="barbox" aria-hidden="true"><div class="bar"><span class="em">... &#9474; 12m &#9474; $0.45</span>  <span class="ad">&#8593; 2.18.1</span></div></div>
+          <p style="color:var(--muted);font-size:14px;margin:12px 0 0">When a new version is available you see an up-arrow notice in the bar, a clickable link straight to that release's notes.</p>
+        </div>
+        <div>
+          <div class="codeblock"><button type="button" class="copy" data-clip="bash ~/.claude/statusline-command.sh --update">Copy</button><pre>bash ~/.claude/statusline-command.sh --update</pre></div>
+          <p style="color:var(--muted);font-size:14px;margin:12px 0 0">It swaps files in only once every download succeeds, and leaves your <code>settings.json</code> and <code>statusline.conf</code> alone. Prefer hands-off? Set <code>auto_update=true</code>. Off by default, so the tool never replaces itself unasked.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ── -->
+  <section id="faq" class="reveal">
+    <div class="wrap">
+      <h2>Frequently asked</h2>
+      <p class="sub">The short version: it is fast, it never blocks the bar, and it leaves your config alone.</p>
+      <div class="faq">
+        <details><summary>Does it slow Claude Code down?</summary><p>No. Around 285ms per render on Windows under MSYS bash and well under 100ms on macOS and Linux, and every network call runs in the background so the bar only reads caches.</p></details>
+        <details><summary>Do I need jq or Node.js?</summary><p>No jq, ever. Node.js is needed only for the optional activity line and subagent panel; without it, everything else works.</p></details>
+        <details><summary>Will an update overwrite my config?</summary><p>No. <code>statusline.conf</code> is never overwritten by updates.</p></details>
+        <details><summary>Why does the bar say "Starting" or not appear yet?</summary><p>It renders after the next Claude Code response, not on launch, and shows a dim "Starting" placeholder until Claude Code sends model and context data.</p></details>
+        <details><summary>Does it work on Windows?</summary><p>Yes, through Git for Windows, which Claude Code on Windows already requires, with a native PowerShell installer.</p></details>
+        <details><summary>Where does usage data come from, and is my token safe?</summary><p>Stdin-native on Claude Code 2.1+ with zero network cost. The OAuth fallback for older versions reads your existing Claude Code token and passes it to curl on stdin, so it never appears in the process list. That token needs the <code>user:profile</code> scope a browser sign-in grants.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Final CTA ── -->
+  <section id="final-cta" class="reveal">
+    <div class="wrap cta-band">
+      <h2>Put the numbers under every response</h2>
+      <p class="sub">One line to install. It appears after your next Claude Code response.</p>
+      <div class="codeblock"><button type="button" class="copy" data-clip="curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash">Copy</button><pre>curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash</pre></div>
+      <div class="cta">
+        <a class="btn primary" href="#install">Other install options</a>
+        <a class="btn ghost" href="https://github.com/briansmith80/claude-code-status-bar">View on GitHub</a>
+      </div>
+      <p class="note">Pure bash, eight truecolour themes, 124 tests across three platforms, and it never blocks the bar.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>MIT licensed &#183; built for <a href="https://code.claude.com">Claude Code</a></span>
+    <span>
+      <a href="https://github.com/briansmith80/claude-code-status-bar">GitHub</a> &#183;
+      <a href="https://github.com/briansmith80/claude-code-status-bar#readme">README</a> &#183;
+      <a href="https://github.com/briansmith80/claude-code-status-bar/blob/main/CHANGELOG.md">Changelog</a> &#183;
+      <a href="https://github.com/briansmith80/claude-code-status-bar/releases">Releases</a>
+    </span>
+  </div>
+</footer>
+
+<div id="toast">Copied</div>
+
+<script>
+(function () {
+  var toast = document.getElementById('toast');
+  function showToast(msg) {
+    toast.textContent = msg || 'Copied';
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { toast.classList.remove('show'); }, 1400);
+  }
+  function copyText(text, btn) {
+    function done() {
+      if (btn) { var o = btn.textContent; btn.textContent = 'Copied'; btn.classList.add('done'); setTimeout(function () { btn.textContent = o; btn.classList.remove('done'); }, 1500); }
+      showToast('Copied to clipboard');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+  }
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () { copyText(btn.getAttribute('data-clip'), btn); });
+  });
+
+  // ── Theme switcher ──
+  var THEMES = ['default', 'dracula', 'tokyo-night', 'catppuccin', 'solarized', 'nord', 'matrix', 'mono'];
+  var pills = document.getElementById('pills');
+  var preview = document.getElementById('theme-preview');
+  var confPre = document.getElementById('conf-pre');
+  var confCopy = document.getElementById('conf-copy');
+  if (pills && preview) {
+    THEMES.forEach(function (t) { var i = new Image(); i.src = 'assets/themes/' + t + '-demo.svg'; }); // preload
+    var current = 0;
+    function select(idx) {
+      idx = (idx + THEMES.length) % THEMES.length;
+      current = idx;
+      var t = THEMES[idx];
+      preview.style.opacity = '0';
+      setTimeout(function () { preview.src = 'assets/themes/' + t + '-demo.svg'; preview.alt = t + ' theme preview'; preview.style.opacity = '1'; }, 120);
+      confPre.textContent = 'colour_theme=' + t;
+      confCopy.setAttribute('data-clip', 'colour_theme=' + t);
+      Array.prototype.forEach.call(pills.children, function (p, i) {
+        p.classList.toggle('active', i === idx);
+        p.setAttribute('aria-pressed', i === idx ? 'true' : 'false');
+      });
+    }
+    THEMES.forEach(function (t, i) {
+      var b = document.createElement('button');
+      b.className = 'pill'; b.textContent = t; b.type = 'button';
+      b.addEventListener('click', function () { select(i); });
+      pills.appendChild(b);
+    });
+    pills.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') { select(current + 1); pills.children[current].focus(); }
+      else if (e.key === 'ArrowLeft') { select(current - 1); pills.children[current].focus(); }
+    });
+    select(0);
+  }
+
+  // ── Install tabs ──
+  var tabs = document.querySelectorAll('.tabbar [role="tab"]');
+  var panels = document.querySelectorAll('.tabpanel');
+  function selectTab(name) {
+    tabs.forEach(function (t) { t.setAttribute('aria-selected', t.getAttribute('data-tab') === name ? 'true' : 'false'); });
+    panels.forEach(function (p) { p.classList.toggle('active', p.getAttribute('data-panel') === name); });
+  }
+  tabs.forEach(function (t) { t.addEventListener('click', function () { selectTab(t.getAttribute('data-tab')); }); });
+  try { if (/Win/i.test(navigator.platform)) selectTab('win'); } catch (e) {}
+
+  // ── Anatomy readout ──
+  var readout = document.getElementById('readout');
+  var defaultTip = readout ? readout.innerHTML : '';
+  document.querySelectorAll('.anatomy .seg').forEach(function (seg) {
+    seg.setAttribute('tabindex', '0');
+    var tip = seg.getAttribute('data-tip');
+    seg.setAttribute('aria-label', tip);
+    function show() { if (readout) readout.innerHTML = '<b>' + tip + '</b>'; }
+    function clear() { if (readout) readout.innerHTML = defaultTip; }
+    seg.addEventListener('mouseenter', show);
+    seg.addEventListener('focus', show);
+    seg.addEventListener('mouseleave', clear);
+    seg.addEventListener('blur', clear);
+    seg.addEventListener('click', function () {
+      document.querySelectorAll('.anatomy .seg.pin').forEach(function (s) { s.classList.remove('pin'); });
+      seg.classList.add('pin'); show();
+    });
+  });
+
+  // ── Scroll progress + scroll-spy + reveal ──
+  var progress = document.getElementById('progress');
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(function () {
+      var h = document.documentElement;
+      var p = h.scrollTop / (h.scrollHeight - h.clientHeight || 1);
+      if (progress) progress.style.width = (p * 100) + '%';
+      ticking = false;
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  var navLinks = {};
+  document.querySelectorAll('.nav nav a[href^="#"]').forEach(function (a) { navLinks[a.getAttribute('href').slice(1)] = a; });
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduce) document.body.classList.add('reveal-on');
+
+  if ('IntersectionObserver' in window) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting && navLinks[e.target.id]) {
+          Object.keys(navLinks).forEach(function (k) { navLinks[k].classList.remove('active'); });
+          navLinks[e.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    document.querySelectorAll('main section[id]').forEach(function (s) { spy.observe(s); });
+
+    if (!reduce) {
+      var rev = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); rev.unobserve(e.target); } });
+      }, { rootMargin: '0px 0px -10% 0px' });
+      document.querySelectorAll('.reveal').forEach(function (s) { rev.observe(s); });
+    }
+  }
+
+  // ── Animate the hero status bar through a session (DOM flipbook, reduced-motion aware) ──
+  (function () {
+    var l1 = document.getElementById('hero-l1'), l2 = document.getElementById('hero-l2');
+    if (!l1 || !l2 || reduce) return;
+    var BLK = '█', DSH = '░', MK = '│';
+    function bar(pct, width, markerCell) {
+      var filled = Math.round(pct / 100 * width), out = '';
+      for (var i = 0; i < width; i++) {
+        out += i < filled ? '<span class="r' + Math.round(i / (width - 1) * 7) + '">' + BLK + '</span>' : '<span class="em">' + DSH + '</span>';
+        if (i === markerCell) out += '<span class="mk">' + MK + '</span>';
+      }
+      return out;
+    }
+    function l1html(f) {
+      var warn = f.ctx >= 85 ? '<span class="mk">▲</span> ' : '';
+      return '<span class="d">~/my-app</span> <span class="br">on ↱ main</span>  <span class="mo">◆ Opus 4.8 (1M)</span>  '
+        + warn + bar(f.ctx, 9, 8) + ' <span class="lb">' + f.ctx + '% of 1M</span>  '
+        + '<span class="lb">5hr (2h20m)</span> ' + bar(f.h5, 9, 4) + ' <span class="lb">' + f.h5 + '%</span>  '
+        + '<span class="lb">wk (3d4h)</span> ' + bar(f.wk, 9, 7) + ' <span class="lb">' + f.wk + '%</span>  '
+        + '<span class="ad">+42</span> <span class="de">-7</span>  <span class="lb">● 3 dirty</span>  <span class="em">↓2 ↑1</span>  <span class="em">' + f.dur + '</span>  <span class="lb">$' + f.cost + '</span>';
+    }
+    function l2html(f) {
+      var w = 5, td = '';
+      for (var i = 0; i < w; i++) td += i < f.done ? '<span class="r' + Math.round(i / (w - 1) * 7) + '">' + BLK + '</span>' : '<span class="em">' + DSH + '</span>';
+      td += ' <span class="em">' + (f.done >= w ? w + '/' + w : f.done + '/' + w + ' ' + f.todo) + '</span>';
+      return '<span class="in">→</span> ' + f.tool + '  <span class="em">[' + f.counts + ']</span>  <span class="em">' + MK + '</span>  <span class="lb">⚒ research ' + f.ra + 's</span>  <span class="em">' + MK + '</span>  ' + td;
+    }
+    var F = [
+      { ctx: 18, h5: 9, wk: 21, cost: '0.06', dur: '2m', done: 0, todo: 'Map the auth flow', counts: 'Read 3', tool: 'Read package.json', ra: 5 },
+      { ctx: 34, h5: 15, wk: 23, cost: '0.13', dur: '4m', done: 1, todo: 'Add validation', counts: 'Read 6 · Grep 2', tool: 'Grep useAuth', ra: 12 },
+      { ctx: 52, h5: 23, wk: 26, cost: '0.22', dur: '6m', done: 2, todo: 'Wire up the API', counts: 'Read 8 · Edit 3 · Grep 3', tool: 'Edit SignupForm.tsx', ra: 19 },
+      { ctx: 68, h5: 31, wk: 29, cost: '0.31', dur: '8m', done: 3, todo: 'Write tests', counts: 'Read 10 · Edit 5 · Bash 3', tool: 'Bash npm test', ra: 26 },
+      { ctx: 82, h5: 38, wk: 31, cost: '0.40', dur: '10m', done: 4, todo: 'Ship it', counts: 'Read 11 · Edit 7 · Bash 4', tool: 'Edit api.ts', ra: 33 },
+      { ctx: 93, h5: 44, wk: 33, cost: '0.49', dur: '12m', done: 5, todo: '', counts: 'Read 12 · Edit 9 · Bash 5', tool: 'Write README.md', ra: 38 }
+    ];
+    var i = 0;
+    (function tick() {
+      var f = F[i];
+      l1.innerHTML = l1html(f);
+      l2.innerHTML = l2html(f);
+      var hold = i === F.length - 1 ? 1800 : (i === 0 ? 1000 : 760);
+      i = (i + 1) % F.length;
+      setTimeout(tick, hold);
+    })();
+  })();
+})();
+</script>
+</body>
+</html>

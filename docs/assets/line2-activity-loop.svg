@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="847" height="44" viewBox="0 0 847 44" role="img" aria-label="live activity line animated demo">
+  <title>live activity line</title>
+  <rect x="0.5" y="0.5" width="846" height="43" rx="8" fill="#0d1117" stroke="#30363d"/>
+  <g opacity="1">
+    <text x="16" y="27" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#39c5cf">→</tspan><tspan fill="#6e7681"> </tspan><tspan fill="#3fb950">✓ Read package.json</tspan><tspan fill="#6e7681">  [Read 3]</tspan></text>
+    <animate attributeName="opacity" calcMode="discrete" dur="5.32s" repeatCount="indefinite" keyTimes="0;0.1692;0.297;0.4248;0.5526;0.6805;1" values="1;0;0;0;0;0;0"/>
+  </g>
+  <g opacity="0">
+    <text x="16" y="27" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#d29922">⠴</tspan><tspan fill="#6e7681"> </tspan><tspan fill="#d29922">Grep</tspan><tspan fill="#6e7681"> useAuth...  │  [Read 6 · Grep 3 · Bash 2]  │  ░░░░░ 0/5 Map the auth flow</tspan></text>
+    <animate attributeName="opacity" calcMode="discrete" dur="5.32s" repeatCount="indefinite" keyTimes="0;0.1692;0.297;0.4248;0.5526;0.6805;1" values="0;1;0;0;0;0;0"/>
+  </g>
+  <g opacity="0">
+    <text x="16" y="27" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#39c5cf">→</tspan><tspan fill="#6e7681"> Edit SignupForm.tsx  [Read 8 · Edit 3 · Grep 3]  │  </tspan><tspan fill="#d29922">⚒ research</tspan><tspan fill="#6e7681"> </tspan><tspan fill="#3fb950">8s</tspan><tspan fill="#6e7681">  │  </tspan><tspan fill="#00d700">█</tspan><tspan fill="#ff0000">█</tspan><tspan fill="#6e7681">░░░ 2/5 Wire up the API</tspan></text>
+    <animate attributeName="opacity" calcMode="discrete" dur="5.32s" repeatCount="indefinite" keyTimes="0;0.1692;0.297;0.4248;0.5526;0.6805;1" values="0;0;1;0;0;0;0"/>
+  </g>
+  <g opacity="0">
+    <text x="16" y="27" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#d29922">⠋</tspan><tspan fill="#6e7681"> </tspan><tspan fill="#d29922">Bash</tspan><tspan fill="#6e7681"> npm test </tspan><tspan fill="#3fb950">6s</tspan><tspan fill="#6e7681">  │  [Read 10 · Edit 5 · Grep 3]  │  </tspan><tspan fill="#d29922">⚒ research</tspan><tspan fill="#6e7681"> </tspan><tspan fill="#3fb950">19s</tspan><tspan fill="#6e7681">  │  </tspan><tspan fill="#00d700">█</tspan><tspan fill="#ff8700">█</tspan><tspan fill="#ff0000">█</tspan><tspan fill="#6e7681">░░ 3/5 Write tests</tspan></text>
+    <animate attributeName="opacity" calcMode="discrete" dur="5.32s" repeatCount="indefinite" keyTimes="0;0.1692;0.297;0.4248;0.5526;0.6805;1" values="0;0;0;1;0;0;0"/>
+  </g>
+  <g opacity="0">
+    <text x="16" y="27" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#39c5cf">→</tspan><tspan fill="#6e7681"> Edit api.ts  [Read 11 · Edit 7 · Bash 4]  │  ⚒ research </tspan><tspan fill="#3fb950">✓</tspan><tspan fill="#6e7681">  │  </tspan><tspan fill="#00d700">█</tspan><tspan fill="#ffd700">█</tspan><tspan fill="#ff8700">█</tspan><tspan fill="#ff0000">█</tspan><tspan fill="#6e7681">░ 4/5 Ship it</tspan></text>
+    <animate attributeName="opacity" calcMode="discrete" dur="5.32s" repeatCount="indefinite" keyTimes="0;0.1692;0.297;0.4248;0.5526;0.6805;1" values="0;0;0;0;1;0;0"/>
+  </g>
+  <g opacity="0">
+    <text x="16" y="27" xml:space="preserve" font-family="ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" font-size="14"><tspan fill="#39c5cf">→</tspan><tspan fill="#6e7681"> </tspan><tspan fill="#3fb950">✓ Write README.md</tspan><tspan fill="#6e7681">  [Read 12 · Edit 8 · Bash 5]  │  </tspan><tspan fill="#00d700">█</tspan><tspan fill="#ffd700">█</tspan><tspan fill="#ff8700">██</tspan><tspan fill="#ff0000">█</tspan><tspan fill="#6e7681"> 5/5</tspan></text>
+    <animate attributeName="opacity" calcMode="discrete" dur="5.32s" repeatCount="indefinite" keyTimes="0;0.1692;0.297;0.4248;0.5526;0.6805;1" values="0;0;0;0;0;1;0"/>
+  </g>
+</svg>
