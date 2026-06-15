@@ -10,3 +10,10 @@ statusline.conf
 
 # Windows/MSYS crash artifacts
 *.stackdump
+
+# Node deps + lockfile for the demo/asset generators (npm i @resvg/resvg-js gifenc)
+node_modules/
+package-lock.json
+
+# Scratch output from regenerating assets
+docs/assets/_preview*

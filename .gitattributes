@@ -1,0 +1,58 @@
+# .gitattributes
+#
+# 1) Normalize line endings, which kills the recurring "LF will be replaced by
+#    CRLF" warnings on Windows commits. The index is already pure LF, so a
+#    one-time `git add --renormalize .` after this lands is a content no-op.
+# 2) Hide dev tooling, generated assets, internal docs, and the test suite from
+#    GitHub's language bar and collapse them in diffs (linguist-*), and keep
+#    them out of release source archives (export-ignore).
+#
+# The install path is untouched: install.sh / install.ps1 / the plugin fetch
+# individual raw files, never a tarball, so export-ignore never affects users.
+
+# ── Line endings ──
+* text=auto eol=lf
+*.ps1 text eol=crlf
+
+# ── Binary image assets (never diffed, never in the language bar) ──
+*.png binary
+*.gif binary
+
+# ── Generated images: drop from the language bar + collapse diffs ──
+# All .svg/.png/.gif live under docs/assets, so a basename rule is safe and
+# also covers docs/assets/themes/ (which docs/assets/**.svg would miss).
+*.svg linguist-generated
+*.png linguist-generated
+*.gif linguist-generated
+
+# ── Image/demo generator scripts: dev-only, off the bar, out of archives ──
+docs/assets/*.js        linguist-vendored export-ignore
+docs/assets/*.sh        linguist-vendored export-ignore
+docs/assets/themes/*.js linguist-vendored export-ignore
+docs/assets/themes/*.sh linguist-vendored export-ignore
+
+# ── Non-published generated assets: also exclude from release archives ──
+docs/assets/hero-demo.gif      export-ignore
+docs/assets/terminal-demo.svg  export-ignore
+docs/assets/social-preview.png export-ignore
+docs/assets/social-preview.svg export-ignore
+
+# ── Owner-keep: banner pair + its generator stay fully normal ──
+# (last matching attribute wins, so these reset linguist + export-ignore)
+docs/assets/banner-dark.svg    -linguist-generated -export-ignore
+docs/assets/banner-light.svg   -linguist-generated -export-ignore
+docs/assets/generate-banner.js -linguist-vendored -export-ignore
+
+# ── Internal docs: keep in tree, out of stats/diffs/archives ──
+CLAUDE.md  linguist-documentation export-ignore
+ROADMAP.md linguist-documentation export-ignore
+SPRINTS.md linguist-documentation export-ignore
+
+# ── CHANGELOG is user/release-facing (release.yml parses it): docs only ──
+CHANGELOG.md linguist-documentation
+
+# ── Dev plumbing: keep in tree + CI, hide from the bar, out of archives ──
+tests/**       linguist-vendored export-ignore
+.github/**     export-ignore
+.gitattributes export-ignore
+.gitignore     export-ignore

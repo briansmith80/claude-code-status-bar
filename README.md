@@ -520,7 +520,7 @@ claude-code-status-bar/
 ├── statusline-helper.js          # optional Node.js transcript parser (live activity line)
 ├── statusline-subagent.js        # optional Node.js renderer for the subagent panel rows
 ├── docs/
-│   └── assets/                   # README images (hero, banner, terminal demo, per-theme previews under themes/)
+│   └── assets/                   # README images + generators (hero, animated demo, per-theme previews under themes/)
 ├── commands/
 │   ├── setup.md                  # /claude-code-status-bar:setup
 │   └── configure.md              # /claude-code-status-bar:configure
