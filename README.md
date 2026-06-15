@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/banner-concept.svg" alt="claude-code-status-bar: real-time Claude Code usage, context window, live activity, and session cost, right in your status bar" width="880">
+<img src="docs/assets/hero.svg" alt="claude-code-status-bar: real-time Claude Code usage, context window, live activity, and session cost, right in your status bar" width="880">
 
 [![ShellCheck](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/shellcheck.yml)
 [![Tests](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/tests.yml/badge.svg)](https://github.com/briansmith80/claude-code-status-bar/actions/workflows/tests.yml)
@@ -23,10 +23,6 @@ Claude Code tells you about your rate limit when you hit it, and about your cont
 - **What has this session cost?** Session cost and burn rate, colour-coded.
 
 Pure bash core, no jq, no compiled binaries. One-line install. Eight colour themes. Works on macOS, Linux, and Windows (Git Bash / MSYS2). Every network call runs in the background, so the bar itself never blocks.
-
-<div align="center">
-  <img src="docs/assets/terminal-demo.svg" alt="Terminal demo: line 1 shows directory, branch, model, context bar, 5-hour and weekly usage with pacing markers, git state, duration and cost; line 2 shows the last tool, tool counts, a running subagent, and todo progress" width="830">
-</div>
 
 ```
 ~/my-app on ↱ main  ◆ Opus 4.8 (1M)  ███████░░│ 78% of 1M  5hr (2h20m) ███░░│░░░░ 37%  wk (3d4h) ███████░│░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
@@ -156,7 +152,7 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 | `⚒ research ✓ (2)` | Finished subagents (and how many) |
 | `██░░░ 2/5 Add tests` | Todo progress; filled cells shade through a per-theme gradient |
 
-The spinner picks its frame from the clock, so it advances at whatever rate Claude Code re-runs the script: each event-driven re-render, plus the `refreshInterval` statusLine setting if you set one. **Pick a `refreshInterval` comfortably above the script's runtime on your machine** (`bash ~/.claude/statusline-command.sh --benchmark` measures it). Claude Code aborts an in-flight run when the next one starts, and an aborted run blanks the whole bar, so an interval that's too low erases the status line entirely. On macOS/Linux the script runs in well under 100ms and `1` is fine; on Windows (MSYS bash) a run takes ~300ms since v2.8.0, so `2` is comfortable there. When the cached activity ages past `activity_fresh_seconds` (default 45) the colours drop back to all-dim, so stale data reads as stale, powerlevel10k style. Set `activity_colour=false` to keep the classic all-dim line permanently; `NO_COLOR` and the mono theme degrade to plain text automatically.
+The spinner advances each time the bar re-renders, so it animates faster with a lower `refreshInterval` (see [Label style](#label-style-reset-time-or-countdown) for how to set one safely). When the cached activity ages past `activity_fresh_seconds` (default 45) the colours drop back to all-dim, so stale data reads as stale. Set `activity_colour=false` for the classic all-dim line; `NO_COLOR` and the mono theme degrade to plain text automatically.
 
 Good to know:
 
@@ -213,8 +209,8 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Fast mode | `⚡ fast` | `show_fast_mode` | Only when fast mode is on; yellow because it bills at a higher rate |
 | Context bar | `███████░│░ 78% of 200k` | `show_context_bar` | Green under 50%, yellow 50-79%, red 80%+. The `│` marker sits at the auto-compact point; `▲` appears within 20k tokens of it (see below) |
 | Token counts | `45k in 12k out` | `show_tokens` *(off)* | Tokens in the current context (cumulative session totals before CC 2.1.132) |
-| 5-hour usage | `5hr (2pm) ███│░░░░░░ 37%` | `show_usage_5h` | Rolling 5-hour window with reset time and pacing marker |
-| Weekly usage | `wk (fri,3am) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with reset day/time and pacing marker |
+| 5-hour usage | `5hr (2h20m) ███│░░░░░░ 37%` | `show_usage_5h` | Rolling 5-hour window with countdown to reset and pacing marker |
+| Weekly usage | `wk (3d4h) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with countdown to reset and pacing marker |
 | Lines changed | `+42 -7` | `show_lines_changed` | Session lines added (green) and removed (red) |
 | Dirty count | `● 3 dirty` | `show_dirty_count` | Staged + unstaged + untracked files |
 | Ahead/behind | `↓2 ↑1` | `show_ahead_behind` | Commits behind/ahead of upstream; hidden when there is no upstream |
@@ -224,7 +220,7 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Worktree | `⊞ hotfix` | `show_worktree` | Worktree name; covers `--worktree` sessions and any linked git worktree (CC 2.1.145+) |
 | Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
 | Cost rate | `$2.10/hr` | `show_cost_rate` *(off)* | Burn rate; appears once the session is over a minute old |
-| Update notice | `↑ 2.11.0` | *(automatic)* | Background version check against GitHub every 6 hours; shows the new version, links to its release notes, and `--update` installs it |
+| Update notice | `↑ 2.19.0` | *(automatic)* | Background version check against GitHub every 6 hours; shows the new version, links to its release notes, and `--update` installs it |
 | Live activity | *(line 2, see above)* | `show_activity` | Running tools, tool counts, subagents, todo progress; `activity_colour=false` for the classic all-dim look |
 
 Before the first API response of a session, the bar shows a dim `Starting...` placeholder. That is normal; the real segments appear as soon as Claude Code sends model and context data.
@@ -234,11 +230,11 @@ Before the first API response of a session, the bar shows a dim `Starting...` pl
 The bar shows your Anthropic usage limits as colour-coded progress bars with reset labels:
 
 ```
-5hr (2pm) ███│░░░░░░ 37%  wk (fri,3am) ███████│░░ 72%
+5hr (2h20m) ███│░░░░░░ 37%  wk (3d4h) ███████│░░ 72%
 ```
 
-- **5hr**: the rolling 5-hour window, with its reset time (`2pm`).
-- **wk**: the rolling 7-day window, with its reset day and time (`fri,3am`).
+- **5hr**: the rolling 5-hour window, with the time remaining until reset (`2h20m`).
+- **wk**: the rolling 7-day window, with the time remaining until reset (`3d4h`).
 - **`│` pacing marker**: where your usage *should* be for even consumption across the window. Bar past the marker means you are ahead of pace and may hit the limit early; behind it means you have headroom.
 - **`~` suffix** (e.g. `37%~`): the data came from the OAuth fallback and is stale (more than two refresh intervals old).
 
@@ -281,93 +277,41 @@ The token must have the `user:profile` scope, which browser sign-in grants autom
 
 ## Configuration
 
-The installers create `~/.claude/statusline.conf` for you on first install — a fully commented copy of [`statusline.conf.example`](statusline.conf.example) with every option and its default, so you can just uncomment and edit the lines you want. It's **never overwritten** by updates (the `.example` is refreshed so new options show up). Set only the lines you want to change. Every key is shown below with its default:
+The installers create `~/.claude/statusline.conf` on first install: a fully commented copy of [`statusline.conf.example`](statusline.conf.example) with every option and its default. Uncomment and edit the lines you want; it's **never overwritten** by updates. Confirm resolved values any time with `--dump-config`. A few common ones:
 
 ```bash
 # ~/.claude/statusline.conf
-
-# ── Theme ────────────────────────────────────────────────
 colour_theme=default        # default | nord | dracula | solarized | tokyo-night | catppuccin | matrix | mono
-
-# ── Segment toggles ──────────────────────────────────────
-show_directory=true
-show_branch=true
-show_vim_mode=true
-show_model=true
-show_agent=true
-show_context_bar=true
-show_tokens=false           # opt-in
-show_effort=true            # reasoning effort, e.g. eff:xhigh (needs CC 2.1.133+)
-show_fast_mode=true         # ⚡ fast indicator while fast mode is on
-show_usage_5h=true
-show_usage_7d=true
-show_lines_changed=true
-show_dirty_count=true
-show_ahead_behind=true
-show_stash=true
-show_pr=true
-show_duration=true
-show_worktree=true
-show_cost=true
-show_cost_rate=false        # opt-in; shows after the session is a minute old
-show_activity=true          # the live line 2 (requires Node.js)
-activity_colour=true        # per-segment colours, spinner, flash, heat, gradient
-activity_fresh_seconds=45   # drop line 2 back to all-dim when data is older than this
-activity_ttl_seconds=120    # hide line 2 when its cache is older than this
-activity_pulse=false        # opt-in: the running label breathes (bold/faint alternation); see note below on refreshInterval
-activity_scanner=false      # opt-in: KITT-style tracker while something runs >30s; see note below on refreshInterval
-pr_link=true                # PR segment links to the pull request (OSC 8 hyperlink)
-subagent_rows=true          # styled subagent panel rows (requires Node.js)
-
-# ── Display ──────────────────────────────────────────────
-use_icons=true              # ↱ ◆ ▸ ● ≡ ⊞ ↑ prefixes and the ▲ context warning
-auto_hide=true              # hide zero-valued segments
-bar_width=10                # progress bar width in characters
-bar_gradient=true           # progress-bar gradient (on by default): true = theme ramp; false = flat; heat = fixed green→red
-branch_max_length=          # truncate long branch names with … (empty = no limit)
-dir_style=auto              # auto (full when it fits, basename when narrow — default) | full | basename
-context_warn_threshold=auto # auto = ▲ within 20k tokens of auto-compact; or a raw % like 80
-
-# ── Truncation for narrow terminals ──────────────────────
-enable_truncation=true      # drop low-priority segments when line 1 is too wide (default on; pairs with dir_style=auto)
-max_width=                  # width budget (empty = auto: tput cols, then $COLUMNS, then 120)
-
-# ── Grouping ─────────────────────────────────────────────
-use_groups=false            # bracket related segments together
-group_open="["
-group_close="]"
-
-# ── Usage limits ─────────────────────────────────────────
-usage_label=countdown       # countdown = time remaining (2h20m, default); clock = reset moment (2pm)
-usage_cache_seconds=600     # OAuth fallback refresh interval (ignored when stdin provides limits)
-
-# ── Updates ──────────────────────────────────────────────
-auto_update=false           # opt-in: install new versions automatically in the background
+bar_gradient=true           # true = theme ramp | false = flat | heat = fixed green→red
+usage_label=countdown       # countdown (2h20m) | clock (2pm)
+dir_style=auto              # auto (responsive) | full | basename
+show_cost_rate=false        # opt-in: $/hr burn rate
+auto_update=false           # opt-in: install new versions in the background
 ```
+
+The full list (every segment toggle, the activity-line options, grouping, and timing) lives in [`statusline.conf.example`](statusline.conf.example), which the installers drop into `~/.claude/statusline.conf` for you.
 
 A few details worth knowing:
 
-- **Gradient bars** (`bar_gradient`, on by default): the progress bars are coloured along the active theme's gradient — a smooth, per-cell interpolation (the `default` theme uses a green→red heat ramp). It's pure-bash integer maths with no measurable cost, and a no-op under `mono`/`NO_COLOR`. Set `bar_gradient=false` for flat single-colour bars (the classic look), or `bar_gradient=heat` to force a fixed green→yellow→orange→red ramp on any theme. Preview any of them with `--demo`.
-
-- **Context warnings are compaction-aware**: Claude Code auto-compacts at a fixed reserve below the window (not at a percentage), which lands at roughly 83% of a 200k window but almost 97% of a 1M window. With `context_warn_threshold=auto` (the default), the `│` marker on the context bar shows that point and `▲` appears within 20k tokens of it, matching Claude Code's own context-low timing. The maths honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting from `/autocompact`, and `DISABLE_AUTO_COMPACT` (which removes the marker and falls back to a raw 80% rule). Set a number instead of `auto` to keep the old fixed-percentage behaviour. When `▲` appears, a `/compact` at your next natural stopping point beats letting auto-compact summarize mid-task.
-- **Animated effects need a low `refreshInterval`**: the spinner, the `activity_scanner` sweep, and the `activity_pulse` breath are all driven by the wall clock, so they only visibly move when the bar re-renders often. If you enable `activity_pulse` or `activity_scanner`, set a low **odd** `refreshInterval` such as `3` on the `statusLine` block (see the [usage-label section](#label-style-reset-time-or-countdown)). Odd matters for the pulse: its breath toggles on each whole second, so an even interval like `2` can keep sampling the same beat and leave it stuck bold or faint. On the default `refreshInterval: 60` these effects sit still, which is why both ship off by default.
-- **`NO_COLOR`**: when the [`NO_COLOR`](https://no-color.org/) environment variable is set, all colours are disabled regardless of theme.
-- **Truncation order**: with `enable_truncation=true`, segments are dropped tier by tier, least important first: the update notice, then worktree, then duration, then ahead/behind, stash and the PR number, then effort, tokens, lines changed and dirty count, then fast mode, cost and cost rate, then vim mode, model, agent and the usage bars, then the context bar, and last of all directory and branch.
-- **Groups**: with `use_groups=true`, related segments are bracketed: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`. Directory/branch, vim, agent, effort, fast mode, tokens, worktree, and the update notice stay outside groups. Brackets wrap contiguous runs, so an ungrouped segment sitting between group members (an agent name or a worktree) splits the bracket around itself.
-- **Legacy alias**: `show_usage_weekly` from older configs still works as an alias for `show_usage_7d`.
-- **Trust level**: the config is sourced as bash, so treat it like your `.bashrc`: only put your own settings in it.
+- **Gradient bars** (`bar_gradient`, on by default): each filled cell is interpolated along the theme's gradient (the `default` theme uses a green→red heat ramp). `false` gives flat bars; `heat` forces green→red on any theme. No-op under `mono`/`NO_COLOR`. Preview with `--demo`.
+- **Context warnings are compaction-aware**: Claude Code auto-compacts at a fixed reserve below the window (~83% of a 200k window, ~97% of a 1M one). With `context_warn_threshold=auto` (default) the `│` marker sits at that point and `▲` fires within 20k tokens of it. Honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting, and `DISABLE_AUTO_COMPACT`; set a number to use a fixed percentage instead.
+- **Animated effects** (opt-in `activity_pulse`, `activity_scanner`): need a low **odd** `refreshInterval` such as `3` to animate, otherwise they sit static. `/claude-code-status-bar:configure` can set it for you (see [Label style](#label-style-reset-time-or-countdown)).
+- **Narrow terminals**: with `enable_truncation=true` (default) low-priority segments drop tier by tier (update notice first, directory and branch last), after `dir_style=auto` has already collapsed the path to its basename.
+- **Groups**: `use_groups=true` brackets related segments: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`.
+- **Trust level**: the config is sourced as bash, so treat it like your `.bashrc` and only put your own settings in it. (`show_usage_weekly` still works as an alias for `show_usage_7d`.)
 
 ## Colour themes
 
-<div align="center">
-  <img src="docs/assets/banner-dark.svg" alt="claude-code-status-bar shown across four themes: default, tokyo-night, dracula, matrix" width="760">
-</div>
+Eight built-in themes, spread across a saturation/temperature ladder so no two read alike. Each preview is a **real render** of the bar in that theme (the same output `--demo` prints):
 
-Eight built-in themes, spread across a saturation/temperature ladder so no two read alike. Each preview below is a **real render** of the bar in that theme (the same output `--demo` prints), so you see the actual segment colours and the gradient progress bars in context:
-
-**`default`** · bold, bright primary
+**`default`** · bold, bright primary heat gradient
 
 <img src="docs/assets/themes/default-demo.svg" alt="default theme: cyan directory, magenta branch, orange Opus, green-to-red heat gradient bars" width="880">
+
+<details>
+<summary><strong>Preview the other seven themes</strong> (dracula · tokyo-night · catppuccin · solarized · nord · matrix · mono)</summary>
+
+<br>
 
 **`dracula`** · neon, electric
 
@@ -397,7 +341,9 @@ Eight built-in themes, spread across a saturation/temperature ladder so no two r
 
 <img src="docs/assets/themes/mono-demo.svg" alt="mono theme: greyscale, flat bars distinguished by block shading, no colour" width="880">
 
-The named themes render in **24-bit truecolour** when your terminal supports it (detected via `$COLORTERM`; force with `STATUSLINE_TRUECOLOR=1`/`0`), and fall back to the nearest **256-colour** otherwise, so Terminal.app and older terminals still get sensible, distinct colours. `default` is special: it uses your terminal's own ANSI palette (the preview shows a representative set), so it tracks whatever scheme your terminal uses; its bars use a green→red heat gradient. `matrix` is a *Matrix* digital-rain tribute, monochrome phosphor green separated by brightness rather than hue (removals are a dim green, not red). `mono` emits no colour at all (its bars stay flat, distinguished by the block glyph), and **any** theme degrades to plain text under [`NO_COLOR`](https://no-color.org/). The previews are generated by `docs/assets/themes/generate-theme-demos.sh`, which captures the real `statusline-command.sh --demo` output and converts it to SVG with `ansi-to-svg.js` (so they can never drift from what the bar actually prints).
+</details>
+
+The named themes render in **24-bit truecolour** when your terminal supports it (force with `STATUSLINE_TRUECOLOR=1`/`0`), falling back to the nearest **256-colour**. `default` tracks your terminal's own ANSI palette; `matrix` is a monochrome phosphor-green tribute (removals are dim green, not red); `mono` and [`NO_COLOR`](https://no-color.org/) drop all colour. Preview any theme live with `--demo`.
 
 ### Changing the theme
 
@@ -431,13 +377,13 @@ The script normally runs with no arguments, fed JSON on stdin by Claude Code. Th
 
 ## Updating
 
-When a new version is available you'll see `↑ <version>` in the bar (e.g. `↑ 2.11.0`), clickable through to that release's notes. The check runs in the background every 6 hours and never slows anything down. The simplest way to update is the built-in self-update (works in bash and PowerShell alike, as do all the [CLI flags](#cli-flags)):
+When a new version is available you'll see `↑ <version>` in the bar (e.g. `↑ 2.19.0`), clickable through to that release's notes. The check runs in the background every 6 hours and never slows anything down. The simplest way to update is the built-in self-update (works in bash and PowerShell alike, as do all the [CLI flags](#cli-flags)):
 
 ```bash
 bash ~/.claude/statusline-command.sh --update
 ```
 
-It downloads the latest script and helpers, swaps them in only once every file has downloaded, bumps the version, and leaves your `settings.json` entries alone. It also refreshes `statusline.conf.example` and, **only if you don't have a `statusline.conf` yet**, creates one from it — your existing config is never overwritten. Run `--check-update` first if you just want to see what's current versus latest.
+It downloads the latest script and helpers, swaps them in only once every file has downloaded, bumps the version, and leaves your `settings.json` entries alone. It also refreshes `statusline.conf.example` and, **only if you don't have a `statusline.conf` yet**, creates one from it; your existing config is never overwritten. Run `--check-update` first if you just want to see what's current versus latest.
 
 ### Automatic updates (opt-in)
 

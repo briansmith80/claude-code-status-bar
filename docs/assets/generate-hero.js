@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// CONCEPT / brainstorm hero graphic -> docs/assets/banner-concept.svg
-// Mirrors a marketing-hero layout (logo + headline + subtitle + product panel +
-// feature columns + footer) but the product panel is the REAL status bar, lifted
-// verbatim from terminal-demo.svg. Separate filename so the live banners are
-// untouched while we iterate on look and feel.
+// README hero graphic -> docs/assets/hero.svg
+// A marketing-hero layout (logo + headline + subtitle + product panel +
+// feature columns + footer) where the product panel is the REAL status bar,
+// lifted verbatim from terminal-demo.svg so it cannot drift from what the tool
+// prints. This is the image at the top of the README.
 //   node docs/assets/generate-hero.js
 
 const fs = require('fs');
@@ -77,5 +77,5 @@ ${feat}
   <text x="${CX}" y="730" text-anchor="middle" font-family="${SANS}" font-size="17"><tspan fill="#9aa4b2">Better visibility. </tspan><tspan fill="#e6edf3">Smarter sessions. </tspan><tspan fill="#d97757">Better outcomes.</tspan></text>
 </svg>
 `;
-fs.writeFileSync(path.join(dir, 'banner-concept.svg'), svg);
-console.log('wrote banner-concept.svg', W + 'x' + H);
+fs.writeFileSync(path.join(dir, 'hero.svg'), svg);
+console.log('wrote hero.svg', W + 'x' + H);
