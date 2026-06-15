@@ -15,56 +15,21 @@
 
 ---
 
-Claude Code tells you about your rate limit when you hit it, and about your context window when it is nearly full. By then it is usually too late to do anything graceful about either. This status bar puts the numbers you normally discover too late where you can always see them, so you can answer four questions at a glance:
-
-- **Am I burning through my 5-hour or weekly quota too fast?** Usage bars with pacing markers show where you *should* be for even consumption.
-- **How full is the context window?** A colour-coded bar warns you before quality degrades.
-- **What is Claude actually doing right now?** A live second line shows running tools, subagents, and task progress.
-- **What has this session cost?** Session cost and burn rate, colour-coded.
-
-Pure bash core, no jq, no compiled binaries. One-line install. Eight colour themes. Works on macOS, Linux, and Windows (Git Bash / MSYS2). Every network call runs in the background, so the bar itself never blocks.
+Claude Code warns you about your rate limit and your full context window only once it's already too late to act gracefully. This status bar keeps those numbers, plus your git state, session cost, and what Claude is doing right now, under every response:
 
 ```
 ~/my-app on ↱ main  ◆ Opus 4.8 (1M)  ███████░░│ 78% of 1M  5hr (2h20m) ███░░│░░░░ 37%  wk (3d4h) ███████░│░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
 → Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests
 ```
 
-**Contents:** [Highlights](#highlights) · [Requirements](#requirements) · [Install](#install) ·
-[The two-line layout](#the-two-line-layout) · [Subagent status line](#subagent-status-line) ·
-[Segments](#segments) ·
-[Usage limits & pacing](#usage-limits--pacing) · [Configuration](#configuration) ·
-[CLI flags](#cli-flags) · [Updating](#updating) · [Uninstall](#uninstall) ·
-[How it works](#how-it-works) · [Repository layout](#repository-layout) · [Testing](#testing) ·
-[Troubleshooting](#troubleshooting) · [Security](#security) · [Changelog](#changelog) ·
-[License](#license)
+<sub>**Line 1:** dir · branch · model · context fill · 5h + weekly quota · git state · duration · cost   •   **Line 2:** live tool · tool counts · subagent · todos</sub>
 
----
+- **Quota**: 5-hour and weekly usage with pacing markers showing where you *should* be for even consumption.
+- **Context**: a colour-coded bar that warns *before* auto-compact, not after.
+- **Live activity**: a second line of running tools, subagents, and todo progress.
+- **Cost**: session cost and burn rate, colour-coded.
 
-## Highlights
-
-- **21 line-one segments** plus a live activity line, individually toggleable (all except the automatic update notice).
-- **Auto-compact awareness**: the context bar carries a `│` marker at the point where Claude Code will auto-compact, and the `▲` warning fires when you are within 20k tokens of it, on any window size. No other status line gets this right.
-- **Pacing markers** on the usage bars: a `│` shows where your usage *should* be for even consumption across the window, so "37% used" becomes "37% used and comfortably under pace".
-- **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
-- **Subagent panel rows**: while Task-tool subagents run, the agent panel shows status icons, elapsed time, token cost, and a live `tok/s` burn rate per task.
-- **Pure bash core** (bash 3.2+, stock macOS works). JSON is parsed with bash regex, so there is no jq dependency to install on Windows.
-- **Eight colour themes**: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `matrix`, `mono`, plus full [`NO_COLOR`](https://no-color.org/) support.
-- **Never blocks**: update checks, the usage API fallback, and transcript parsing all run in background subshells. The bar renders from caches.
-- **Config survives updates**: your overrides live in `~/.claude/statusline.conf`, which the installer never touches.
-- **Security by default**: restrictive file permissions (`umask 077`), OAuth tokens passed to curl via stdin rather than the command line, and ANSI/control-character sanitisation of branch names, paths, and transcript content.
-- **Tested**: 124 BATS tests run in CI on Linux, macOS, and Windows (MSYS2), plus ShellCheck and a PowerShell installer check, on every push to main and every pull request.
-
-## Requirements
-
-| Dependency | Needed for | Required? |
-|------------|-----------|-----------|
-| bash 3.2+ | Everything (stock macOS bash works; Windows gets it from Git for Windows, which Claude Code requires anyway) | Yes |
-| curl *or* wget | Install, update check, OAuth usage fallback (`curl.exe` ships with Windows 10+) | Yes |
-| git | Branch, dirty count, ahead/behind, and stash segments | Optional |
-| Node.js 14+ | Live activity line (line 2) and subagent panel rows | Optional |
-| python3 | Pretty-printed `--dump-stdin` output; installer fallback for the `settings.json` merge | Optional |
-
-Claude Code 2.1+ sends usage limits and the transcript path directly to the status bar. On older versions, usage limits fall back to the OAuth API and the activity line is unavailable. Segments whose data Claude Code does not send (vim mode, agent name, token counts) simply stay hidden.
+Pure bash, no jq, no compiled binaries, one-line install, eight colour themes. Works on macOS, Linux, and Windows (Git Bash); every network call runs in the background, so the bar itself never blocks. Backed by 124 automated tests on all three platforms (plus ShellCheck) in CI.
 
 ## Install
 
@@ -80,17 +45,31 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex
 ```
 
-The status bar appears after the next Claude Code response. Re-running either installer is always safe, and it is also how you update.
+**The status bar appears after the next Claude Code response** (not immediately). It needs only `bash` and `curl`, both already required by Claude Code on every OS; `git` and `Node.js` are optional and just light up extra segments. Re-running either installer is always safe, and it's also how you update.
 
-> **Windows notes:** the status bar runs through Git for Windows, which Claude Code on Windows already requires; the PowerShell installer checks for `bash` and tells you what to do if it is missing. Avoid piping `curl.exe` output straight into `bash` from PowerShell: PowerShell 5.1 re-encodes pipeline data between native programs and can corrupt the script. If you prefer the bash installer from PowerShell, run it as one unit instead: `bash -c "curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash"`
+**Pick a theme** (optional): set `colour_theme` in `~/.claude/statusline.conf` or run `/claude-code-status-bar:configure`, and preview all eight with `bash ~/.claude/statusline-command.sh --demo`.
 
-Both installers are non-interactive and transparent about what they do:
+<details>
+<summary>What the installer does (non-interactive, safe to re-run)</summary>
+
+<br>
 
 1. Download `statusline-command.sh`, the two optional Node.js helpers (`statusline-helper.js` for the activity line, `statusline-subagent.js` for the agent panel rows), and the version file into `~/.claude/`.
 2. Create `~/.claude/settings.json` with a `statusLine` entry (plus a `subagentStatusLine` entry when Node.js is available), or merge the missing entries into your existing file **without touching your other settings**. The bash installer merges using node, python3, or python; the PowerShell installer does it natively.
 3. Existing `statusLine` and `subagentStatusLine` entries are left untouched, with one exception: commands this installer itself wrote in an older format (MSYS-style `/c/...` or unquoted paths, which fail under some spawn shells on Windows) are upgraded in place on re-run. Migrating from another status line? Remove your old entry first, then re-run the installer.
 4. If the bash installer finds no JSON-capable interpreter, it prints the exact snippets to paste into `settings.json` yourself.
 5. Clear the update-check cache so the new version is picked up immediately.
+
+</details>
+
+<details>
+<summary>Windows notes</summary>
+
+<br>
+
+The status bar runs through Git for Windows, which Claude Code on Windows already requires; the PowerShell installer checks for `bash` and tells you what to do if it is missing. Avoid piping `curl.exe` output straight into `bash` from PowerShell: PowerShell 5.1 re-encodes pipeline data between native programs and can corrupt the script. If you prefer the bash installer from PowerShell, run it as one unit instead: `bash -c "curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash"`
+
+</details>
 
 ### Plugin install
 
@@ -109,7 +88,10 @@ The plugin ships two slash commands:
 | `/claude-code-status-bar:setup` | Guided install: copies the files from the plugin cache (no network download), configures `settings.json` (asking before replacing an existing `statusLine` entry), runs a smoke test, and offers to set a theme and toggles. |
 | `/claude-code-status-bar:configure` | Interactive editor for `~/.claude/statusline.conf`: themes, segment toggles, display options, and grouping, written as a minimal diff against the defaults. |
 
-### Manual install
+<details>
+<summary><strong>Manual install</strong> (without the installer)</summary>
+
+<br>
 
 1. Download the files to `~/.claude/`:
 
@@ -132,6 +114,19 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 }
 ```
 
+</details>
+
+**Jump to:** [Configuration](#configuration) · [Colour themes](#colour-themes) · [Segments](#segments) · [CLI flags](#cli-flags) · [Updating](#updating) · [Troubleshooting](#troubleshooting)
+
+## Highlights
+
+- **Auto-compact awareness**: the context bar marks the exact point where Claude Code will auto-compact and fires a `▲` warning within 20k tokens of it, on any window size.
+- **Pacing markers**: a `│` on each usage bar shows where your usage *should* be for even consumption, so "37% used" becomes "37% used and comfortably under pace".
+- **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
+- **Subagent panel rows**: a status icon, elapsed time, token cost, and a live `tok/s` burn rate for every running Task-tool subagent.
+- **Pure bash, no jq**: bash 3.2+ (stock macOS works); JSON is parsed with bash regex, so there's nothing to compile or install on Windows.
+- **Never blocks**: update checks, the usage fallback, and transcript parsing all run in background subshells; the bar renders from caches.
+
 ## The two-line layout
 
 **Line 1** is the metrics bar: directory, branch, model, context, usage limits, git state, duration, cost.
@@ -152,9 +147,12 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 | `⚒ research ✓ (2)` | Finished subagents (and how many) |
 | `██░░░ 2/5 Add tests` | Todo progress; filled cells shade through a per-theme gradient |
 
-The spinner advances each time the bar re-renders, so it animates faster with a lower `refreshInterval` (see [Label style](#label-style-reset-time-or-countdown) for how to set one safely). When the cached activity ages past `activity_fresh_seconds` (default 45) the colours drop back to all-dim, so stale data reads as stale. Set `activity_colour=false` for the classic all-dim line; `NO_COLOR` and the mono theme degrade to plain text automatically.
+The spinner advances each time the bar re-renders, so it animates faster with a lower `refreshInterval` (see [Label style](#label-style-reset-time-or-countdown)). When the cached activity ages past `activity_fresh_seconds` (default 45) the colours drop back to all-dim, so stale data reads as stale. Set `activity_colour=false` for the classic all-dim line; `NO_COLOR` and the mono theme degrade to plain text automatically.
 
-Good to know:
+<details>
+<summary>Activity-line details</summary>
+
+<br>
 
 - The line appears only when there is activity to show. It hides when the cached activity is older than `activity_ttl_seconds` (default 120, chosen to stay above typical `refreshInterval` values) and reappears once the helper has re-parsed the transcript.
 - Completed tools, failures, and finished subagents stop being displayed five minutes after they finish; the tool counts cover the whole session.
@@ -164,66 +162,7 @@ Good to know:
 - Each session gets its own activity cache (keyed by Claude Code's session ID), so parallel Claude Code windows never show each other's activity. Stale per-session caches are swept automatically after a day.
 - Disable it entirely with `show_activity=false` in your config.
 
-## Subagent status line
-
-While agents, workflows, or background tasks run, Claude Code shows an agent panel below the prompt. The optional `statusline-subagent.js` renderer (installed and wired automatically when Node.js is available) restyles the subagent rows in that panel, the ones spawned through the Task tool, to match the status bar and adds live numbers:
-
-```
-⚒ Audit the usage parsing code  1m24s · 12.4k tok · 354 tok/s ▄▅▆▇▇▆█
-✓ Verify the rate-limit fix     3m2s · 48.1k tok
-✗ security review               41s · 2k tok
-```
-
-- **Status at a glance**: `⚒` running (yellow), `✓` done (green), `✗` failed (red), `◌` queued (dim), using your `colour_theme` and honouring `NO_COLOR`.
-- **Elapsed time** per task, ticking with each panel refresh (roughly every 5 seconds).
-- **Token cost and burn rate**: Claude Code samples each task's token count on every refresh; the renderer turns those samples into a `tok/s` rate plus a small sparkline, so a runaway agent is visible before it finishes.
-- **Aligned and width-aware**: descriptions are padded into a column across rows, and each row is trimmed to the panel width (the sparkline is dropped first, then the rate).
-- **Fail-safe**: on any error or unexpected input the script prints nothing and Claude Code falls back to its default rows. Set `subagent_rows=false` in `statusline.conf` to keep the defaults permanently.
-- **Scope**: Claude Code only delegates Task-tool subagent rows to custom renderers (verified against CC 2.1.170). Workflow and background-task rows are drawn by a separate panel path and keep Claude Code's built-in style. The renderer already handles those task shapes, so they will light up if a later Claude Code starts sending them.
-
-The installer wires this into `settings.json` when Node.js is present, leaving any existing entry untouched:
-
-```json
-{
-  "subagentStatusLine": {
-    "type": "command",
-    "command": "node ~/.claude/statusline-subagent.js"
-  }
-}
-```
-
-On Windows, use a quoted Windows-native path instead of `~` (for example `node \"C:/Users/name/.claude/statusline-subagent.js\"`). Claude Code may spawn this command via PowerShell or cmd, which neither expand `~` nor resolve MSYS-style `/c/...` paths for node, so those forms fail silently and the panel keeps its default rows. The installers write the native form for you.
-
-## Segments
-
-All segments are on by default except token counts and cost rate. Zero-valued segments auto-hide (configurable via `auto_hide`), and segments whose data is missing are simply omitted, so your actual bar is usually shorter than this table.
-
-| Segment | Looks like | Toggle | Notes |
-|---------|-----------|--------|-------|
-| Directory | `~/my-app` | `show_directory` | Prefers `workspace.current_dir`, falls back to `cwd`; home shown as `~` |
-| Branch | `on ↱ main` | `show_branch` | Short commit hash when detached; truncate long names with `branch_max_length` |
-| Vim mode | `NORMAL` | `show_vim_mode` | Only when Claude Code sends `vim.mode` |
-| Model | `◆ Opus 4.8 (1M)` | `show_model` | Tier colours: Haiku green, Sonnet yellow, Opus orange, Fable purple (theme-aware); the redundant " context" is trimmed from the name |
-| Agent name | `▸ my-agent` | `show_agent` | Only when running with an agent |
-| Effort level | `eff:xhigh` | `show_effort` | Reasoning effort, when Claude Code sends `effort.level` (CC 2.1.133+) |
-| Fast mode | `⚡ fast` | `show_fast_mode` | Only when fast mode is on; yellow because it bills at a higher rate |
-| Context bar | `███████░│░ 78% of 200k` | `show_context_bar` | Green under 50%, yellow 50-79%, red 80%+. The `│` marker sits at the auto-compact point; `▲` appears within 20k tokens of it (see below) |
-| Token counts | `45k in 12k out` | `show_tokens` *(off)* | Tokens in the current context (cumulative session totals before CC 2.1.132) |
-| 5-hour usage | `5hr (2h20m) ███│░░░░░░ 37%` | `show_usage_5h` | Rolling 5-hour window with countdown to reset and pacing marker |
-| Weekly usage | `wk (3d4h) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with countdown to reset and pacing marker |
-| Lines changed | `+42 -7` | `show_lines_changed` | Session lines added (green) and removed (red) |
-| Dirty count | `● 3 dirty` | `show_dirty_count` | Staged + unstaged + untracked files |
-| Ahead/behind | `↓2 ↑1` | `show_ahead_behind` | Commits behind/ahead of upstream; hidden when there is no upstream |
-| Stash count | `≡ stash:2` | `show_stash` | Git stash entries |
-| Pull request | `PR #1234` | `show_pr` | Open PR for the branch (CC 2.1.145+); colour = review state: green approved, yellow pending, red changes requested, dim draft. Clickable (links to the PR) in terminals with OSC 8 support; `pr_link=false` disables |
-| Duration | `12m` / `1h23m` | `show_duration` | Session duration |
-| Worktree | `⊞ hotfix` | `show_worktree` | Worktree name; covers `--worktree` sessions and any linked git worktree (CC 2.1.145+) |
-| Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
-| Cost rate | `$2.10/hr` | `show_cost_rate` *(off)* | Burn rate; appears once the session is over a minute old |
-| Update notice | `↑ 2.19.0` | *(automatic)* | Background version check against GitHub every 6 hours; shows the new version, links to its release notes, and `--update` installs it |
-| Live activity | *(line 2, see above)* | `show_activity` | Running tools, tool counts, subagents, todo progress; `activity_colour=false` for the classic all-dim look |
-
-Before the first API response of a session, the bar shows a dim `Starting...` placeholder. That is normal; the real segments appear as soon as Claude Code sends model and context data.
+</details>
 
 ## Usage limits & pacing
 
@@ -233,16 +172,20 @@ The bar shows your Anthropic usage limits as colour-coded progress bars with res
 5hr (2h20m) ███│░░░░░░ 37%  wk (3d4h) ███████│░░ 72%
 ```
 
-- **5hr**: the rolling 5-hour window, with the time remaining until reset (`2h20m`).
-- **wk**: the rolling 7-day window, with the time remaining until reset (`3d4h`).
+- **5hr** / **wk**: the rolling 5-hour and 7-day windows, each with the time remaining until reset.
 - **`│` pacing marker**: where your usage *should* be for even consumption across the window. Bar past the marker means you are ahead of pace and may hit the limit early; behind it means you have headroom.
 - **`~` suffix** (e.g. `37%~`): the data came from the OAuth fallback and is stale (more than two refresh intervals old).
 
 ### Label style: reset time or countdown
 
-By default the label shows the time remaining until reset: `5hr (2h20m)`, `wk (3d4h)`. Set `usage_label=clock` in your config to show the reset moment instead: `5hr (2pm)`, `wk (fri,3am)`.
+By default the label counts down the time remaining (`5hr (2h20m)`, `wk (3d4h)`). Set `usage_label=clock` to show the reset moment instead (`5hr (2pm)`, `wk (fri,3am)`).
 
-The status bar re-renders when Claude Code triggers it (after responses and state changes), so a countdown can sit stale while you are away. Claude Code can also re-run the status bar on a timer via `refreshInterval` (seconds) on the `statusLine` block. **Fresh installs set `refreshInterval: 60` automatically** (so the default countdown stays current and the activity line's elapsed times keep moving). The installer only sets it when it first writes the `statusLine` block, so an existing `refreshInterval` is never overwritten. Tune or remove it in `~/.claude/settings.json`:
+<details>
+<summary>Keeping the countdown fresh with <code>refreshInterval</code></summary>
+
+<br>
+
+The bar re-renders when Claude Code triggers it (after responses and state changes), so a countdown can sit stale while you are away. Claude Code can also re-run the bar on a timer via `refreshInterval` (seconds) on the `statusLine` block. **Fresh installs set `refreshInterval: 60` automatically**; the installer only sets it when it first writes the `statusLine` block, so an existing value is never overwritten. Tune or remove it in `~/.claude/settings.json`:
 
 ```json
 {
@@ -254,18 +197,17 @@ The status bar re-renders when Claude Code triggers it (after responses and stat
 }
 ```
 
-On Windows the script takes longer to run (~285ms), so keep `refreshInterval` at `2` or higher there; a value below the script's own runtime can blank the bar.
+On Windows the script takes ~285ms to run, so keep `refreshInterval` at `2` or higher there; a value below the script's own runtime can blank the bar. Animated effects (`activity_pulse`, `activity_scanner`) need a low **odd** value such as `3` to animate.
 
-### Where the data comes from
+</details>
 
-1. **Stdin (preferred)**: Claude Code 2.1+ sends `rate_limits` directly in the JSON it pipes to the status bar. Real-time, zero network requests, no configuration.
-2. **OAuth API (fallback)**: on older Claude Code versions, the script fetches `api.anthropic.com/api/oauth/usage` in a background subshell, cached for 10 minutes (`usage_cache_seconds`). On repeated failures it backs off exponentially, up to 30 minutes, tracked in `~/.claude/.statusline-usage-backoff`.
+<details>
+<summary>Where the usage data comes from (and the OAuth fallback)</summary>
 
-If neither source has data, the usage segments are hidden. Run `--dump-stdin` (see [CLI flags](#cli-flags)) to check which fields your Claude Code version sends.
+<br>
 
-### Credentials (OAuth fallback only)
-
-The fallback reads your existing Claude Code token; nothing extra to configure:
+1. **Stdin (preferred)**: Claude Code 2.1+ sends `rate_limits` directly in the JSON it pipes to the bar. Real-time, zero network requests, no configuration.
+2. **OAuth API (fallback)**: older Claude Code versions don't send `rate_limits`, so the script fetches them from `api.anthropic.com/api/oauth/usage` in a background subshell, cached for 10 minutes (`usage_cache_seconds`); on repeated failures it backs off exponentially, up to 30 minutes (tracked in `~/.claude/.statusline-usage-backoff`). It reads your existing Claude Code token, so nothing extra is needed:
 
 | Platform | Credential source |
 |----------|------------------|
@@ -274,6 +216,10 @@ The fallback reads your existing Claude Code token; nothing extra to configure:
 | Windows / MSYS2 | `~/.claude/.credentials.json` |
 
 The token must have the `user:profile` scope, which browser sign-in grants automatically. Tokens created with `claude setup-token` only have `user:inference` and will not work; quit all Claude Code instances and restart to trigger a fresh browser OAuth login.
+
+If neither source has data, the usage segments are hidden. Run `--dump-stdin` (see [CLI flags](#cli-flags)) to check which fields your Claude Code version sends.
+
+</details>
 
 ## Configuration
 
@@ -289,16 +235,21 @@ show_cost_rate=false        # opt-in: $/hr burn rate
 auto_update=false           # opt-in: install new versions in the background
 ```
 
-The full list (every segment toggle, the activity-line options, grouping, and timing) lives in [`statusline.conf.example`](statusline.conf.example), which the installers drop into `~/.claude/statusline.conf` for you.
+The full list (every segment toggle, the activity-line options, grouping, and timing) lives in [`statusline.conf.example`](statusline.conf.example).
 
-A few details worth knowing:
+<details>
+<summary>Configuration notes worth knowing</summary>
+
+<br>
 
 - **Gradient bars** (`bar_gradient`, on by default): each filled cell is interpolated along the theme's gradient (the `default` theme uses a green→red heat ramp). `false` gives flat bars; `heat` forces green→red on any theme. No-op under `mono`/`NO_COLOR`. Preview with `--demo`.
 - **Context warnings are compaction-aware**: Claude Code auto-compacts at a fixed reserve below the window (~83% of a 200k window, ~97% of a 1M one). With `context_warn_threshold=auto` (default) the `│` marker sits at that point and `▲` fires within 20k tokens of it. Honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting, and `DISABLE_AUTO_COMPACT`; set a number to use a fixed percentage instead.
-- **Animated effects** (opt-in `activity_pulse`, `activity_scanner`): need a low **odd** `refreshInterval` such as `3` to animate, otherwise they sit static. `/claude-code-status-bar:configure` can set it for you (see [Label style](#label-style-reset-time-or-countdown)).
+- **Animated effects** (opt-in `activity_pulse`, `activity_scanner`): need a low **odd** `refreshInterval` such as `3` to animate, otherwise they sit static. `/claude-code-status-bar:configure` can set it for you.
 - **Narrow terminals**: with `enable_truncation=true` (default) low-priority segments drop tier by tier (update notice first, directory and branch last), after `dir_style=auto` has already collapsed the path to its basename.
 - **Groups**: `use_groups=true` brackets related segments: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`.
 - **Trust level**: the config is sourced as bash, so treat it like your `.bashrc` and only put your own settings in it. (`show_usage_weekly` still works as an alias for `show_usage_7d`.)
+
+</details>
 
 ## Colour themes
 
@@ -343,63 +294,21 @@ Eight built-in themes, spread across a saturation/temperature ladder so no two r
 
 </details>
 
-The named themes render in **24-bit truecolour** when your terminal supports it (force with `STATUSLINE_TRUECOLOR=1`/`0`), falling back to the nearest **256-colour**. `default` tracks your terminal's own ANSI palette; `matrix` is a monochrome phosphor-green tribute (removals are dim green, not red); `mono` and [`NO_COLOR`](https://no-color.org/) drop all colour. Preview any theme live with `--demo`.
-
-### Changing the theme
-
-Add or edit the `colour_theme` line in `~/.claude/statusline.conf` (the file is created on first install; make it if it isn't there):
-
-```bash
-colour_theme=tokyo-night    # default | nord | dracula | solarized | tokyo-night | catppuccin | matrix | mono
-```
-
-Or run the `/claude-code-status-bar:configure` slash command and pick a theme interactively. Either way it takes effect on the next status-bar render (after Claude Code's next response), no restart needed. Confirm it applied with:
-
-```bash
-bash ~/.claude/statusline-command.sh --dump-config | grep colour_theme
-```
-
-## CLI flags
-
-The script normally runs with no arguments, fed JSON on stdin by Claude Code. The flags exist for setup, diagnostics, and removal:
-
-| Flag | Description |
-|------|-------------|
-| `--help`, `-h` | Show usage info and exit. |
-| `--version`, `-v` | Print the installed version and exit. |
-| `--check-update` | Clear the update cache and synchronously check GitHub for a newer version. Prints current and latest, plus the `--update` command if an update exists. |
-| `--update` | Download and install the latest version in place: overwrites `statusline-command.sh` and the two Node helpers, bumps `.statusline-version`, and clears the update cache. Each file is staged and only swapped in once every download succeeds, so a failed fetch changes nothing. Never touches `statusline.conf` or `settings.json`. |
-| `--dump-config` | Print the resolved configuration (defaults merged with your `statusline.conf`) as sorted `key=value` lines. The fastest answer to "why isn't my override taking effect?" |
-| `--dump-stdin` | Echo the JSON Claude Code sends (pretty-printed when a working python3 is on PATH) plus a YES/NO report of detected fields: `rate_limits`, `transcript_path`, nested `model`, nested `context_window`. Pipe JSON in: `echo '<json>' \| bash ~/.claude/statusline-command.sh --dump-stdin` |
-| `--benchmark [N]` | Time N end-to-end runs (default 5) against a realistic canned payload and report min/avg/max, for picking a safe `refreshInterval`. Needs GNU date `%N` (Linux/MSYS2). Add `STATUSLINE_PROFILE=1` to any run for a per-phase breakdown on stderr. |
-| `--demo [theme]` | Preview a theme with a realistic canned payload, e.g. `--demo tokyo-night`. With no argument (or `all`) it cycles all eight themes, each labelled. Renders without touching your `statusline.conf`. Handy after changing `colour_theme` or `bar_gradient`. |
-| `--uninstall` | Interactively remove all installed files. See [Uninstall](#uninstall). |
+The named themes render in **24-bit truecolour** when your terminal supports it (force with `STATUSLINE_TRUECOLOR=1`/`0`), falling back to the nearest **256-colour**. `default` tracks your terminal's own ANSI palette; `matrix` is a monochrome phosphor-green tribute (removals are dim green, not red); `mono` and [`NO_COLOR`](https://no-color.org/) drop all colour. Set `colour_theme` in `statusline.conf` (or run `/claude-code-status-bar:configure`); it takes effect on the next render, and `--dump-config | grep colour_theme` confirms it applied.
 
 ## Updating
 
-When a new version is available you'll see `↑ <version>` in the bar (e.g. `↑ 2.19.0`), clickable through to that release's notes. The check runs in the background every 6 hours and never slows anything down. The simplest way to update is the built-in self-update (works in bash and PowerShell alike, as do all the [CLI flags](#cli-flags)):
+When a new version is available you'll see `↑ <version>` in the bar (e.g. `↑ 2.18.1`), clickable through to that release's notes. The check runs in the background every 6 hours. The simplest way to update is the built-in self-update:
 
 ```bash
 bash ~/.claude/statusline-command.sh --update
 ```
 
-It downloads the latest script and helpers, swaps them in only once every file has downloaded, bumps the version, and leaves your `settings.json` entries alone. It also refreshes `statusline.conf.example` and, **only if you don't have a `statusline.conf` yet**, creates one from it; your existing config is never overwritten. Run `--check-update` first if you just want to see what's current versus latest.
+It downloads the latest script and helpers, swaps them in only once every file has downloaded, bumps the version, and leaves your `settings.json` entries alone. It also refreshes `statusline.conf.example` and, **only if you don't have a `statusline.conf` yet**, creates one from it; your existing config is never overwritten. Run `--check-update` first to see what's current versus latest. (Too old to have `--update`? Re-running the [installer](#install) also updates in place.)
 
 ### Automatic updates (opt-in)
 
-Set `auto_update=true` in `statusline.conf` and the bar installs new versions for you: once the background check flags a newer release, it runs the same self-update in a detached background process (it never blocks rendering), serialised with a lock so parallel sessions don't all download at once. A failed or interrupted download changes nothing, and `statusline.conf`/`settings.json` are never touched. It stays off by default so the tool never replaces its own executable without you asking; leave it off if you prefer to review releases before updating.
-
-Re-running the installer also updates in place and is the way to go if your install is too old to have `--update`:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.sh | bash
-```
-
-```powershell
-irm https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main/install.ps1 | iex
-```
-
-> Right after a release, GitHub's raw CDN can serve the previous version for a few minutes. If `--update` or `--check-update` reports an older version than expected, wait five minutes and try again.
+Set `auto_update=true` in `statusline.conf` and the bar installs new versions for you: once the background check flags a newer release, it runs the same self-update in a detached background process (it never blocks rendering), serialised with a lock so parallel sessions don't all download at once. A failed or interrupted download changes nothing, and `statusline.conf`/`settings.json` are never touched. It stays off by default so the tool never replaces its own executable without you asking.
 
 ## Uninstall
 
@@ -411,6 +320,8 @@ It lists what will be deleted and asks for confirmation, prompts **separately** 
 
 <details>
 <summary>Manual removal, if you prefer</summary>
+
+<br>
 
 ```bash
 rm -f ~/.claude/statusline-command.sh
@@ -430,7 +341,128 @@ Then remove the `"statusLine"` block from `~/.claude/settings.json`.
 
 </details>
 
-## How it works
+## Segments
+
+All segments are on by default except token counts and cost rate. Zero-valued segments auto-hide (configurable via `auto_hide`), and segments whose data is missing are simply omitted, so your actual bar is usually shorter than the full list.
+
+<details>
+<summary>All 21 line-one segments</summary>
+
+<br>
+
+| Segment | Looks like | Toggle | Notes |
+|---------|-----------|--------|-------|
+| Directory | `~/my-app` | `show_directory` | Prefers `workspace.current_dir`, falls back to `cwd`; home shown as `~` |
+| Branch | `on ↱ main` | `show_branch` | Short commit hash when detached; truncate long names with `branch_max_length` |
+| Vim mode | `NORMAL` | `show_vim_mode` | Only when Claude Code sends `vim.mode` |
+| Model | `◆ Opus 4.8 (1M)` | `show_model` | Tier colours: Haiku green, Sonnet yellow, Opus orange, Fable purple (theme-aware); the redundant " context" is trimmed from the name |
+| Agent name | `▸ my-agent` | `show_agent` | Only when running with an agent |
+| Effort level | `eff:xhigh` | `show_effort` | Reasoning effort, when Claude Code sends `effort.level` (CC 2.1.133+) |
+| Fast mode | `⚡ fast` | `show_fast_mode` | Only when fast mode is on; yellow because it bills at a higher rate |
+| Context bar | `███████░│░ 78% of 200k` | `show_context_bar` | Green under 50%, yellow 50-79%, red 80%+. The `│` marker sits at the auto-compact point; `▲` appears within 20k tokens of it |
+| Token counts | `45k in 12k out` | `show_tokens` *(off)* | Tokens in the current context (cumulative session totals before CC 2.1.132) |
+| 5-hour usage | `5hr (2h20m) ███│░░░░░░ 37%` | `show_usage_5h` | Rolling 5-hour window with countdown to reset and pacing marker |
+| Weekly usage | `wk (3d4h) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with countdown to reset and pacing marker |
+| Lines changed | `+42 -7` | `show_lines_changed` | Session lines added (green) and removed (red) |
+| Dirty count | `● 3 dirty` | `show_dirty_count` | Staged + unstaged + untracked files |
+| Ahead/behind | `↓2 ↑1` | `show_ahead_behind` | Commits behind/ahead of upstream; hidden when there is no upstream |
+| Stash count | `≡ stash:2` | `show_stash` | Git stash entries |
+| Pull request | `PR #1234` | `show_pr` | Open PR for the branch (CC 2.1.145+); colour = review state: green approved, yellow pending, red changes requested, dim draft. Clickable in terminals with OSC 8 support; `pr_link=false` disables |
+| Duration | `12m` / `1h23m` | `show_duration` | Session duration |
+| Worktree | `⊞ hotfix` | `show_worktree` | Worktree name; covers `--worktree` sessions and any linked git worktree (CC 2.1.145+) |
+| Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
+| Cost rate | `$2.10/hr` | `show_cost_rate` *(off)* | Burn rate; appears once the session is over a minute old |
+| Update notice | `↑ 2.18.1` | *(automatic)* | Background version check against GitHub every 6 hours; shows the new version, links to its release notes, and `--update` installs it |
+| Live activity | *(line 2, see above)* | `show_activity` | Running tools, tool counts, subagents, todo progress; `activity_colour=false` for the classic all-dim look |
+
+</details>
+
+Before the first API response of a session, the bar shows a dim `Starting...` placeholder. That is normal; the real segments appear as soon as Claude Code sends model and context data.
+
+## CLI flags
+
+The script normally runs with no arguments, fed JSON on stdin by Claude Code. The flags are for setup, diagnostics, and removal; the handy ones are `--update`, `--demo`, `--check-update`, and `--uninstall`.
+
+<details>
+<summary>All CLI flags</summary>
+
+<br>
+
+| Flag | Description |
+|------|-------------|
+| `--help`, `-h` | Show usage info and exit. |
+| `--version`, `-v` | Print the installed version and exit. |
+| `--check-update` | Clear the update cache and synchronously check GitHub for a newer version. Prints current and latest, plus the `--update` command if an update exists. |
+| `--update` | Download and install the latest version in place: overwrites `statusline-command.sh` and the two Node helpers, bumps `.statusline-version`, and clears the update cache. Each file is staged and only swapped in once every download succeeds, so a failed fetch changes nothing. Never touches `statusline.conf` or `settings.json`. |
+| `--dump-config` | Print the resolved configuration (defaults merged with your `statusline.conf`) as sorted `key=value` lines. The fastest answer to "why isn't my override taking effect?" |
+| `--dump-stdin` | Echo the JSON Claude Code sends (pretty-printed when a working python3 is on PATH) plus a YES/NO report of detected fields: `rate_limits`, `transcript_path`, nested `model`, nested `context_window`. Pipe JSON in: `echo '<json>' \| bash ~/.claude/statusline-command.sh --dump-stdin` |
+| `--benchmark [N]` | Time N end-to-end runs (default 5) against a realistic canned payload and report min/avg/max, for picking a safe `refreshInterval`. Needs GNU date `%N` (Linux/MSYS2). Add `STATUSLINE_PROFILE=1` to any run for a per-phase breakdown on stderr. |
+| `--demo [theme]` | Preview a theme with a realistic canned payload, e.g. `--demo tokyo-night`. With no argument (or `all`) it cycles all eight themes, each labelled. Renders without touching your `statusline.conf`. |
+| `--uninstall` | Interactively remove all installed files. See [Uninstall](#uninstall). |
+
+</details>
+
+## Subagent status line
+
+While Task-tool subagents run, Claude Code shows an agent panel below the prompt. The optional `statusline-subagent.js` renderer (wired automatically when Node.js is available) restyles those rows to match the status bar and adds live numbers:
+
+```
+⚒ Audit the usage parsing code  1m24s · 12.4k tok · 354 tok/s ▄▅▆▇▇▆█
+✓ Verify the rate-limit fix     3m2s · 48.1k tok
+✗ security review               41s · 2k tok
+```
+
+<details>
+<summary>How the subagent rows work</summary>
+
+<br>
+
+- **Status at a glance**: `⚒` running (yellow), `✓` done (green), `✗` failed (red), `◌` queued (dim), using your `colour_theme` and honouring `NO_COLOR`.
+- **Elapsed time** per task, ticking with each panel refresh (roughly every 5 seconds).
+- **Token cost and burn rate**: Claude Code samples each task's token count on every refresh; the renderer turns those samples into a `tok/s` rate plus a small sparkline, so a runaway agent is visible before it finishes.
+- **Aligned and width-aware**: descriptions are padded into a column across rows, and each row is trimmed to the panel width (the sparkline is dropped first, then the rate).
+- **Fail-safe**: on any error or unexpected input the script prints nothing and Claude Code falls back to its default rows. Set `subagent_rows=false` in `statusline.conf` to keep the defaults permanently.
+- **Scope**: Claude Code only delegates Task-tool subagent rows to custom renderers (verified against CC 2.1.170). Workflow and background-task rows are drawn by a separate panel path and keep Claude Code's built-in style.
+
+The installer wires this into `settings.json` when Node.js is present, leaving any existing entry untouched. On Windows it writes a quoted Windows-native path instead of `~` (e.g. `node "C:/Users/name/.claude/statusline-subagent.js"`), because Claude Code may spawn the command via PowerShell or cmd, which don't expand `~` or resolve MSYS `/c/...` paths for node.
+
+```json
+{
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "node ~/.claude/statusline-subagent.js"
+  }
+}
+```
+
+</details>
+
+## Troubleshooting
+
+- **The bar doesn't appear at all.** Check that `~/.claude/settings.json` has the `statusLine` entry (the installer skips this step if any `statusLine` entry already exists, including one from a different status line). Then wait for the next Claude Code response; the bar renders after responses, not on launch.
+- **The bar disappeared after setting a low `refreshInterval`.** Claude Code aborts an in-flight statusLine run when the next one starts, and an aborted run blanks the bar. If the interval is below the script's runtime, every run is aborted and nothing ever renders. Measure with `--benchmark` (~285ms on Windows under MSYS bash, well under 100ms on macOS/Linux), then pick an interval comfortably above it: `2`+ on Windows, `1` elsewhere.
+- **The bar just says `Starting...`** Normal. It means Claude Code hasn't sent model or context data yet, which happens at the start of every session.
+- **A segment I enabled isn't showing.** Most segments auto-hide when their value is zero or their data is missing. Run `--dump-config` to confirm your override took effect, and `--dump-stdin` to see which fields your Claude Code version actually sends.
+- **Usage segments are missing.** On Claude Code 2.1+ they should appear automatically from stdin. For the OAuth fallback, check credentials exist (see [Where the usage data comes from](#usage-limits--pacing)), then clear the caches: `rm -f ~/.claude/.statusline-usage-cache ~/.claude/.statusline-usage-backoff`. After repeated failures the script waits up to 30 minutes before retrying.
+- **Usage shows `~` after the percentage.** The OAuth data is stale. Usually transient; if it persists, clear the two cache files above.
+- **The activity line never appears.** It needs Node.js on `PATH`, `~/.claude/statusline-helper.js`, and a Claude Code version that sends `transcript_path` (`--dump-stdin` reports this as YES/NO). It also lags one refresh behind and hides when its cache is older than `activity_ttl_seconds` (default 120).
+- **`--check-update` shows an old version right after a release.** GitHub's raw CDN caches for a few minutes. Try again shortly.
+
+## Security
+
+Points that matter for a tool that runs on every response and can read your OAuth token:
+
+- All cache and temp files are created with `umask 077` (owner-readable only).
+- The OAuth token is passed to curl via `--config -` on stdin, so it never appears in the process list. The wget fallback can't do this (curl is strongly preferred) and runs with `--max-redirect=0` to prevent token leakage on redirects.
+- Branch names, paths, worktree names, and all transcript-derived text are stripped of ANSI escapes and control characters before being printed.
+- `~/.claude/statusline.conf` is sourced as bash; it has the same trust level as your `.bashrc`. The helper stores activity summaries, not transcript content (tool names, file basenames, and short snippets, 30-50 chars at most).
+
+## More
+
+<details>
+<summary>How it works</summary>
+
+<br>
 
 Claude Code pipes a JSON payload to the script on every refresh. The script parses it with bash regex (no jq), builds the segments, and prints one or two lines. Everything slow happens in background subshells that write caches; the bar only ever reads caches, so it never waits on the network or on transcript parsing.
 
@@ -463,7 +495,12 @@ Files at `~/.claude/` after install:
 
 All caches are created with `umask 077`, so they are readable only by you.
 
-## Repository layout
+</details>
+
+<details>
+<summary>Repository layout</summary>
+
+<br>
 
 ```
 claude-code-status-bar/
@@ -477,7 +514,7 @@ claude-code-status-bar/
 ├── statusline-helper.js          # optional Node.js transcript parser (live activity line)
 ├── statusline-subagent.js        # optional Node.js renderer for the subagent panel rows
 ├── docs/
-│   └── assets/                   # README images (banner, terminal demo)
+│   └── assets/                   # README images (hero, banner, terminal demo, per-theme previews under themes/)
 ├── commands/
 │   ├── setup.md                  # /claude-code-status-bar:setup
 │   └── configure.md              # /claude-code-status-bar:configure
@@ -493,66 +530,37 @@ claude-code-status-bar/
 └── CLAUDE.md                     # project guide for working on this repo with Claude Code
 ```
 
-## Testing
+</details>
 
-A BATS suite under [`tests/`](tests/) covers schema parsing (old flat, new nested, and the CC 2.1.x shapes), segments, all eight themes (truecolour, the 256-colour fallback, and `NO_COLOR`), config overrides, context window formatting and compaction awareness, the live activity helper, the colourful activity line (token mapping, stale fade, injection safety, width trim), the git segments (branch, dirty, ahead/behind, stash, detached HEAD), the styling options (gradient bars, `dir_style`), the PR link, the self-update and `auto_update` paths, and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
+<details>
+<summary>Running the tests</summary>
 
-To run locally, install [bats-core](https://github.com/bats-core/bats-core):
+<br>
+
+A BATS suite under [`tests/`](tests/) covers schema parsing, segments, all eight themes (truecolour, 256-colour fallback, and `NO_COLOR`), config overrides, context window formatting and compaction awareness, the live activity helper, the colourful activity line, the git segments, the styling options, the PR link, the self-update and `auto_update` paths, and the subagent panel renderer. Each test runs in a sandboxed `HOME`, so your real config and credentials are never touched. CI runs the suite on Linux, macOS, and Windows (MSYS2), plus ShellCheck.
 
 ```bash
 brew install bats-core            # macOS
 sudo apt-get install -y bats      # Debian / Ubuntu
-# Windows (Git Bash / MSYS2): no pacman package; run bats-core from a clone
+# Windows (Git Bash / MSYS2): no pacman package; clone bats-core
 git clone --depth 1 https://github.com/bats-core/bats-core.git ~/bats-core
-```
 
-Then from the repo root:
-
-```bash
 bats tests/                       # macOS / Linux
 ~/bats-core/bin/bats tests/       # Windows
 ```
 
 See [`tests/README.md`](tests/README.md) for layout details.
 
-## Troubleshooting
-
-- **The bar doesn't appear at all.** Check that `~/.claude/settings.json` has the `statusLine` entry (the installer skips this step if any `statusLine` entry already exists, including one from a different status line). Then wait for the next Claude Code response; the bar renders after responses, not on launch.
-- **The bar disappeared after setting a low `refreshInterval`.** Claude Code aborts an in-flight statusLine run when the next one starts, and an aborted run blanks the bar. If the interval is below the script's runtime, every run is aborted and nothing ever renders. Measure with `--benchmark` (since v2.8.0: ~300ms on Windows under MSYS bash, well under 100ms on macOS/Linux), then pick an interval comfortably above it: `2`+ on Windows, `1` elsewhere.
-- **The bar just says `Starting...`** Normal. It means Claude Code hasn't sent model or context data yet, which happens at the start of every session.
-- **A segment I enabled isn't showing.** Most segments auto-hide when their value is zero or their data is missing. Run `bash ~/.claude/statusline-command.sh --dump-config` to confirm your override took effect, and `--dump-stdin` to see which fields your Claude Code version actually sends.
-- **Usage segments are missing.** On Claude Code 2.1+ they should appear automatically from stdin. For the OAuth fallback: check credentials exist (see [Credentials](#credentials-oauth-fallback-only)), then clear the caches and let them refresh: `rm -f ~/.claude/.statusline-usage-cache ~/.claude/.statusline-usage-backoff`. The backoff file matters: after repeated failures the script waits up to 30 minutes before retrying.
-- **Usage shows `~` after the percentage.** The OAuth data is stale. Usually transient; if it persists, clear the two cache files above.
-- **The activity line never appears.** It needs Node.js on `PATH`, `~/.claude/statusline-helper.js`, and a Claude Code version that sends `transcript_path` (`--dump-stdin` reports this as YES/NO). Also note it lags one refresh behind and hides when its cache is older than `activity_ttl_seconds` (default 120).
-- **`--check-update` shows an old version right after a release.** GitHub's raw CDN caches for a few minutes. Try again shortly.
-
-## Security
-
-Points that matter for a tool that runs on every response and can read your OAuth token:
-
-- All cache and temp files are created with `umask 077` (owner-readable only).
-- The OAuth token is passed to curl via `--config -` on stdin, so it never appears in the process list. The wget fallback cannot do this and passes the header as a command-line argument, so curl is strongly preferred; wget also runs with `--max-redirect=0` to prevent token leakage on redirects.
-- Branch names, paths, worktree names, and all transcript-derived text are stripped of ANSI escapes and control characters before being printed to your terminal.
-- `~/.claude/statusline.conf` is sourced as bash. It has the same trust level as your `.bashrc`.
-- The helper and its caches store activity summaries, not transcript content: tool names, file basenames, short command and pattern snippets (30 characters at most), and todo or agent description snippets (50 characters at most).
+</details>
 
 ## Changelog
 
-Release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
+Full release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
-- **2.18.0**: Better defaults out of the box: gradient progress bars on by default, a responsive `dir_style=auto` that collapses a long path to its basename before any segment is dropped, a commented `statusline.conf` the installers create so every option is editable in place, a tidier `Opus 4.8 (1M)` model name, and removal of the short-lived Nerd Font/Powerline experiment.
-- **2.17.0**: `bar_gradient=heat`, a fixed green→yellow→orange→red ramp on any theme regardless of its palette.
-- **2.15.0**: Opt-in styling adapted from kcchien/claude-code-statusline: gradient progress bars and a `--demo` flag that previews any theme (or cycles all eight) with a realistic canned payload, no faked stdin.
+- **2.18.1**: `--update` and `auto_update` now also seed the commented `statusline.conf` (only when absent), so self-update-only users get the starter config too.
+- **2.18.0**: Better defaults out of the box: gradient bars on by default, a responsive `dir_style=auto` that collapses a long path before any segment is dropped, a commented `statusline.conf` the installers create, and a tidier `Opus 4.8 (1M)` model name.
 - **2.14.0**: The named themes redesigned in 24-bit truecolour (with a 256-colour fallback) and spread across a saturation/temperature ladder so no two read alike.
-- **2.13.0**: A `matrix` theme: monochrome digital-rain phosphor green, the eighth palette.
-- **2.12.0**: Opt-in `auto_update`: once the background check flags a newer release, the bar installs it in a detached, lock-serialised background process that never blocks rendering.
-- **2.11.0**: One-command self-update (`--update`, atomic staged downloads) and an update notice that shows the new version and links straight to its release notes.
-- **2.10.0**: Usage-bar labels count down by default (`5hr (2h20m)`); `usage_label=clock` keeps the reset-moment style.
-- **2.9.0**: Clickable PR segment (OSC 8 hyperlink to the pull request, `pr_link`), opt-in `activity_pulse` and `activity_scanner` effects for line 2, and tag-driven release automation.
-- **2.8.0**: 4.5x faster on Windows (~285ms per run, was ~1286ms): internal helpers return via globals instead of forked command substitutions, git work consolidated to two calls via porcelain v2, pure-bash sanitize and width maths, and fork-free countdown labels. New `--benchmark` flag and `STATUSLINE_PROFILE=1` per-phase profiling; first direct git-segment test coverage.
-- **2.7.0**: Colourful activity line: per-segment theme colours, a clock-driven spinner on running tools, heat-coloured elapsed times, completion flash, gradient todo bar, and stale-fade, with `activity_colour=false` restoring the classic all-dim look. Plus ANSI-aware width trimming and four long-standing fixes (quote truncation, `NO_COLOR` leak, BSD sed, non-UTF-8 locales).
-
-Older releases (2.0.0 through 2.6.1) are in [CHANGELOG.md](CHANGELOG.md).
+- **2.11.0 / 2.12.0**: One-command self-update (`--update`, atomic staged downloads) and opt-in `auto_update`, plus an update notice that links straight to the release notes.
 
 ## License
 
