@@ -17,6 +17,12 @@
 
 Claude Code warns you about your rate limit and your full context window only once it's already too late to act gracefully. This status bar keeps those numbers, plus your git state, session cost, and what Claude is doing right now, under every response:
 
+<div align="center">
+
+<img src="docs/assets/hero-demo.gif" alt="Animated demo: the context bar fills green to red as a session progresses, the auto-compact warning fires, and usage and cost climb" width="880">
+
+</div>
+
 ```
 ~/my-app on ↱ main  ◆ Opus 4.8 (1M)  ███████░░│ 78% of 1M  5hr (2h20m) ███░░│░░░░ 37%  wk (3d4h) ███████░│░ 72%  +42 -7  ● 3 dirty  ↓2 ↑1  12m  $0.45
 → Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests

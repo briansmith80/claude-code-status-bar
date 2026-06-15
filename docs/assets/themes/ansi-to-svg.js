@@ -92,10 +92,20 @@ function toSvg(input, opts = {}) {
 `;
 }
 
-const inFile = process.argv[2];
-const outFile = process.argv[3];
-const label = process.argv[4];
-const input = (inFile && inFile !== '-') ? fs.readFileSync(inFile, 'utf8') : fs.readFileSync(0, 'utf8');
-const svg = toSvg(input, { label });
-if (outFile) { fs.writeFileSync(outFile, svg); console.log('wrote', outFile); }
-else process.stdout.write(svg);
+// Visible column count (ignoring escapes / newlines), for padding frames to an
+// equal width when assembling an animation.
+function visibleCols(input) {
+  return ansiToRuns(input).reduce((n, r) => n + [...r.text].length, 0);
+}
+
+if (require.main === module) {
+  const inFile = process.argv[2];
+  const outFile = process.argv[3];
+  const label = process.argv[4];
+  const input = (inFile && inFile !== '-') ? fs.readFileSync(inFile, 'utf8') : fs.readFileSync(0, 'utf8');
+  const svg = toSvg(input, { label });
+  if (outFile) { fs.writeFileSync(outFile, svg); console.log('wrote', outFile); }
+  else process.stdout.write(svg);
+}
+
+module.exports = { toSvg, ansiToRuns, visibleCols };
