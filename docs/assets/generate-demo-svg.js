@@ -18,7 +18,7 @@ if (!dir) { console.error('usage: generate-demo-svg.js <frames-dir> [out.svg]');
 
 const frames = fs.readdirSync(dir)
   .filter(f => f.endsWith('.ansi')).sort()
-  .map(f => fs.readFileSync(path.join(dir, f), 'utf8').split('\n')[0]);
+  .map(f => fs.readFileSync(path.join(dir, f), 'utf8'));
 
 fs.writeFileSync(out, toAnimatedSvg(frames, { label: 'claude-code-status-bar' }));
 console.log('wrote', out, frames.length + ' frames');

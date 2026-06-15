@@ -73,39 +73,63 @@ function ansiToRuns(input) {
 }
 
 const FONT = "ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace";
-const CW = 8.4, FS = 14, PAD_X = 16, PAD_TOP = 13;
+const CW = 8.4, FS = 14, LH = 20, PAD_X = 16, PAD_TOP = 13, PAD_BOTTOM = 17;
 const colsOf = runs => runs.reduce((n, r) => n + [...r.text].length, 0);
 const runsToTspans = runs =>
   runs.map(r => `<tspan fill="${r.fg || DEFAULT_FG}">${esc(r.text)}</tspan>`).join('');
 
+// Split multi-line terminal output into one run-list per visible line. The bar
+// prints line 1 (metrics) and, when there is live activity, line 2; each line
+// is parsed independently. Trailing blank lines are dropped so a frame with no
+// activity collapses back to a single row.
+function splitLines(input) {
+  const ls = String(input).replace(/\r\n/g, '\n').split('\n').map(l => ansiToRuns(l));
+  while (ls.length > 1 && colsOf(ls[ls.length - 1]) === 0) ls.pop();
+  return ls;
+}
+
+const heightFor = lineCount => PAD_TOP + FS + (lineCount - 1) * LH + PAD_BOTTOM;
+
+// One <text> per line, stacked by line height.
+const linesToTexts = lines => lines
+  .map((runs, i) => `<text x="${PAD_X}" y="${PAD_TOP + FS + i * LH}" xml:space="preserve" font-family="${FONT}" font-size="${FS}">${runsToTspans(runs)}</text>`)
+  .join('\n  ');
+
+// Pixel dimensions for a set of frames (the widest line and tallest frame),
+// so every frame in an animation rasterises to identical dimensions.
+function measure(frames) {
+  const linesPer = frames.map(splitLines);
+  const cols = Math.max(...linesPer.map(ls => Math.max(...ls.map(colsOf))));
+  const lineCount = Math.max(...linesPer.map(ls => ls.length));
+  return { cols, lineCount, width: Math.ceil(PAD_X * 2 + cols * CW), height: heightFor(lineCount) };
+}
+
 function toSvg(input, opts = {}) {
-  const runs = ansiToRuns(input);
-  const W = Math.ceil(PAD_X * 2 + colsOf(runs) * CW);
-  const H = opts.height || 44;
-  const baseline = PAD_TOP + FS;
-  const tspans = runsToTspans(runs);
+  const lines = splitLines(input);
+  const cols = opts.cols || Math.max(...lines.map(colsOf));
+  const W = Math.ceil(PAD_X * 2 + cols * CW);
+  const H = opts.height || heightFor(lines.length);
   const label = opts.label
     ? `<title>${esc(opts.label)} theme preview</title>` : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || 'status bar')} preview">
   ${label}
   <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="8" fill="#0d1117" stroke="#30363d"/>
-  <text x="${PAD_X}" y="${baseline}" xml:space="preserve" font-family="${FONT}" font-size="${FS}">${tspans}</text>
+  ${linesToTexts(lines)}
 </svg>
 `;
 }
 
 // Build ONE self-contained SVG that flip-books through several ANSI frames, the
 // way generate-demo-gif.js does but as a crisp, dependency-free vector. Each
-// frame is a <g> layer whose opacity is toggled on for its time slot with a
-// discrete SMIL <animate>, so the frames swap with no cross-fade (a true
-// flipbook). SMIL plays in <img>-embedded SVG on GitHub (no JS needed).
-//   frames: array of raw ANSI strings (first line of each is used)
+// frame is a <g> layer (which may carry two rows: metrics line + activity line)
+// whose opacity is toggled on for its time slot with a discrete SMIL <animate>,
+// so the frames swap with no cross-fade (a true flipbook). SMIL plays in
+// <img>-embedded SVG on GitHub (no JS needed).
+//   frames: array of raw ANSI strings (each may be one or two lines)
 //   opts.delays: per-frame ms (defaults mirror the GIF: hold first/last longer)
 function toAnimatedSvg(frames, opts = {}) {
-  const runsPer = frames.map(f => ansiToRuns(f));
-  const W = Math.ceil(PAD_X * 2 + Math.max(...runsPer.map(colsOf)) * CW);
-  const H = opts.height || 44;
-  const baseline = PAD_TOP + FS;
+  const linesPer = frames.map(splitLines);
+  const { width: W, height: H } = measure(frames);
   const n = frames.length;
   const delays = opts.delays || frames.map((_, i) => (i === n - 1 ? 1700 : i === 0 ? 900 : 680));
   const total = delays.reduce((a, b) => a + b, 0);
@@ -116,10 +140,10 @@ function toAnimatedSvg(frames, opts = {}) {
   bounds[bounds.length - 1] = 1;
   const keyTimes = bounds.map(b => +b.toFixed(4)).join(';');
   const dur = (total / 1000).toFixed(2) + 's';
-  const layers = runsPer.map((runs, i) => {
+  const layers = linesPer.map((lines, i) => {
     const values = bounds.map((_, k) => (k === i ? 1 : 0)).join(';');
     return `  <g opacity="${i === 0 ? 1 : 0}">
-    <text x="${PAD_X}" y="${baseline}" xml:space="preserve" font-family="${FONT}" font-size="${FS}">${runsToTspans(runs)}</text>
+    ${linesToTexts(lines)}
     <animate attributeName="opacity" calcMode="discrete" dur="${dur}" repeatCount="indefinite" keyTimes="${keyTimes}" values="${values}"/>
   </g>`;
   }).join('\n');
@@ -132,8 +156,8 @@ ${layers}
 `;
 }
 
-// Visible column count (ignoring escapes / newlines), for padding frames to an
-// equal width when assembling an animation.
+// Visible column count of the first line (ignoring escapes), kept for callers
+// that measure a single-line chip.
 function visibleCols(input) {
   return ansiToRuns(input).reduce((n, r) => n + [...r.text].length, 0);
 }
@@ -148,4 +172,4 @@ if (require.main === module) {
   else process.stdout.write(svg);
 }
 
-module.exports = { toSvg, toAnimatedSvg, ansiToRuns, visibleCols };
+module.exports = { toSvg, toAnimatedSvg, measure, splitLines, ansiToRuns, visibleCols };
