@@ -114,7 +114,7 @@ Shipped after Sprint 4, driven by Claude Code audits and user-visible polish. Fu
 
 ---
 
-## v2.10.0 – v2.18.0 — Continuous releases :white_check_mark:
+## v2.10.0 – v2.19.0 — Continuous releases :white_check_mark:
 
 Driven by user feedback. Full detail in [CHANGELOG.md](CHANGELOG.md):
 
@@ -129,6 +129,8 @@ Driven by user feedback. Full detail in [CHANGELOG.md](CHANGELOG.md):
 | v2.16.x | Smooth per-cell gradient bars; `--demo` fills bars so the full ramp shows |
 | v2.17.0 | `bar_gradient=heat` (fixed green→red ramp on any theme) |
 | v2.18.0 | `default` theme gradient → green→red heat; `bar_gradient` **on by default** (`false` = flat); `dir_style=full/basename/auto` (responsive path collapse); model name drops the redundant "context"; nerd_font/powerline removed |
+| v2.18.1 | `--update`/`auto_update` also refresh `statusline.conf.example` and seed `statusline.conf` when absent |
+| v2.19.0 | Customizable multi-line layout (`layout` presets + `line1`/`line2`/`line3` token overrides, up to 3 lines; `activity` now a placeable token); `icon_set=modern` refreshed glyphs; installer `refreshInterval` back-fill — all opt-in, default byte-identical |
 
 ---
 

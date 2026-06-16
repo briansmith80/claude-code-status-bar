@@ -140,10 +140,21 @@ if (-not (Test-Path $settingsFile)) {
         }
       }
     }
-    if ($added.Count -gt 0 -or $migrated.Count -gt 0) {
+    # Older installs (pre-v2.10.1) created a statusLine block with no
+    # refreshInterval, so the bar only refreshed on new messages (countdown
+    # labels and the live activity line went stale while idle). Add the default
+    # to an existing block that lacks one; a value the user set is never touched.
+    $refreshAdded = $false
+    $slProp = $json.PSObject.Properties['statusLine']
+    if ($slProp -and $slProp.Value -and -not $slProp.Value.PSObject.Properties['refreshInterval']) {
+      $slProp.Value | Add-Member -NotePropertyName 'refreshInterval' -NotePropertyValue 60
+      $refreshAdded = $true
+    }
+    if ($added.Count -gt 0 -or $migrated.Count -gt 0 -or $refreshAdded) {
       Write-NoBomFile -Path $settingsFile -Content (($json | ConvertTo-Json -Depth 50) + "`n")
       if ($added.Count -gt 0) { Write-Host "  Updated settings ($($added -join ', ')): $settingsFile" }
       if ($migrated.Count -gt 0) { Write-Host "  Migrated to Windows-native quoted paths ($($migrated -join ', ')): $settingsFile" }
+      if ($refreshAdded) { Write-Host "  Added statusLine.refreshInterval (60): $settingsFile" }
     } else {
       Write-Host "  settings.json already configured - skipped."
     }

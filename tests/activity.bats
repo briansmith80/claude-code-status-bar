@@ -105,6 +105,8 @@ run_helper() {
   assert_plain_not_contains "MARKER_STALE"
 }
 
+# Under the default `classic` layout the activity line is always row 2, so
+# `sed -n '2p'` is valid here. Custom layouts (v2.19.0+) can relocate it.
 @test "line 2 is trimmed to COLUMNS" {
   require_node
   cp "${REPO_ROOT}/statusline-helper.js" "${TEST_HOME}/.claude/statusline-helper.js"

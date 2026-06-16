@@ -135,11 +135,36 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 - **Pure bash, no jq**: bash 3.2+ (stock macOS works); JSON is parsed with bash regex, so there's nothing to compile or install on Windows.
 - **Never blocks**: update checks, the usage fallback, and transcript parsing all run in background subshells; the bar renders from caches.
 
-## The two-line layout
+## Layouts (1–3 lines)
 
-**Line 1** is the metrics bar: directory, branch, model, context, usage limits, git state, duration, cost.
+By default the bar is two lines — **line 1** the metrics bar (directory, branch, model, context, usage limits, git state, duration, cost) and **line 2** the live activity line. Since v2.19.0 you can rearrange that across **up to three lines**, putting any segment on any line, in any order.
 
-**Line 2** is the live activity line. Active work pops in theme colours while history recedes into dim text:
+Pick a preset with `layout=`:
+
+| Preset | Line 1 | Line 2 | Line 3 |
+|--------|--------|--------|--------|
+| `classic` *(default)* | all metrics | live activity | — |
+| `three-line` | model · context · usage · duration · cost | dir · branch · git state | live activity |
+| `stacked` | dir · branch · model · context · usage · cost | git state · duration | live activity |
+
+Or hand-build each line with a space-separated list of segment **tokens** (these override the preset, per line). **Quote any value with spaces** — `statusline.conf` is sourced as shell:
+
+```bash
+# ~/.claude/statusline.conf
+line1="model context usage_5h usage_7d duration cost"
+line2="dir branch lines_changed ahead_behind dirty stash pr"
+line3="activity"
+```
+
+Reorder freely (e.g. activity on top), and set a line to `""` to hide that row. Tokens: `dir` `branch` `model` `context` `usage_5h` `usage_7d` `lines_changed` `dirty` `ahead_behind` `stash` `pr` `duration` `worktree` `cost` `cost_rate` `vim` `agent` `effort` `fast_mode` `tokens` `update` `activity`. A token still obeys its `show_*` toggle, unknown tokens are ignored, a segment lives on the first line that lists it, and segments you don't list anywhere won't show. The default (no `layout`/`line*` set) is byte-identical to previous versions.
+
+### Icons
+
+`icon_set=classic` (the default) keeps the original glyphs; `icon_set=modern` switches to a more coherent set — directory ↱, branch ⑂, lines-changed ⇄, and a duration ⏱ that fills a previously-empty slot (model ◆ is unchanged). `use_icons=false` removes all icons regardless of the set.
+
+### The live activity line
+
+Active work pops in theme colours while history recedes into dim text:
 
 ```
 ⠙ Bash npm test 1m24s  │  → Edit SignupForm.tsx  [Edit 5 · Read 4 · Bash 2]  │  ⚒ research 12s  │  ██░░░ 2/5 Add tests
@@ -381,7 +406,9 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
 | Cost rate | `$2.10/hr` | `show_cost_rate` *(off)* | Burn rate; appears once the session is over a minute old |
 | Update notice | `↑ 2.18.1` | *(automatic)* | Background version check against GitHub every 6 hours; shows the new version, links to its release notes, and `--update` installs it |
-| Live activity | *(line 2, see above)* | `show_activity` | Running tools, tool counts, subagents, todo progress; `activity_colour=false` for the classic all-dim look |
+| Live activity | *(its own line by default; place anywhere via `layout`)* | `show_activity` | Running tools, tool counts, subagents, todo progress; `activity_colour=false` for the classic all-dim look |
+
+Every segment above is also a layout **token** you can assign to a specific line. Most token names match the toggle's `show_*` suffix (e.g. `usage_5h`, `lines_changed`), but a few are shorter — `vim` (`show_vim_mode`), `context` (`show_context_bar`), `dirty` (`show_dirty_count`). The token list under [Layouts](#layouts-13-lines) is the source of truth.
 
 </details>
 
@@ -472,13 +499,12 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 <br>
 
-Claude Code pipes a JSON payload to the script on every refresh. The script parses it with bash regex (no jq), builds the segments, and prints one or two lines. Everything slow happens in background subshells that write caches; the bar only ever reads caches, so it never waits on the network or on transcript parsing.
+Claude Code pipes a JSON payload to the script on every refresh. The script parses it with bash regex (no jq), builds the segments, and prints one to three lines per your [layout](#layouts-13-lines). Everything slow happens in background subshells that write caches; the bar only ever reads caches, so it never waits on the network or on transcript parsing.
 
 ```mermaid
 flowchart LR
     CC["Claude Code"] -->|"JSON on stdin"| S["statusline-command.sh"]
-    S --> L1["Line 1: metrics"]
-    S --> L2["Line 2: live activity"]
+    S --> L["Lines 1–3 (per layout)"]
     S -.->|"background, every 6h"| U["Version check (GitHub)"]
     S -.->|"background, only without stdin limits"| O["OAuth usage API"]
     S -.->|"background, every refresh"| H["statusline-helper.js parses the transcript"]

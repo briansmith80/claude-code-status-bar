@@ -365,6 +365,10 @@ usage_cache_seconds=600
 auto_update=false
 auto_hide=true
 use_icons=true
+# Icon set: 'classic' (default — today's glyphs) or 'modern' (refreshed:
+# directory ↱, branch ⑂, lines-changed ⇄, duration ⏱; model ◆ unchanged).
+# use_icons=false drops all icons regardless of icon_set.
+icon_set="classic"
 context_warn_threshold=auto
 # On by default: when the bar is wider than the terminal, drop low-priority
 # segments (lowest first) until it fits, instead of wrapping. Pairs with
@@ -392,6 +396,13 @@ branch_max_length=""
 # path), or 'basename' (always just the last folder). 'auto' needs a known
 # width (COLUMNS, which Claude Code sets; or max_width/tput).
 dir_style="auto"
+# Multi-line layout. 'layout' selects a preset; line1/line2/line3 (left UNSET
+# by default — do not declare them here) override it per line with a
+# space-separated list of segment-name tokens. Presets: classic (default —
+# all metrics on line 1, the live activity on line 2), three-line, stacked.
+# An explicitly set line (even line2="") wins over the preset for that line.
+# See statusline.conf.example for the full token vocabulary.
+layout="classic"
 show_activity=true
 activity_ttl_seconds=120
 activity_colour=true
@@ -455,6 +466,11 @@ case "${1:-}" in
       printf 'enable_truncation=%s\n'      "${enable_truncation}"
       printf 'group_close=%s\n'            "${group_close}"
       printf 'group_open=%s\n'             "${group_open}"
+      printf 'icon_set=%s\n'               "${icon_set}"
+      printf 'layout=%s\n'                 "${layout}"
+      printf 'line1=%s\n'                  "${line1:-}"
+      printf 'line2=%s\n'                  "${line2:-}"
+      printf 'line3=%s\n'                  "${line3:-}"
       printf 'max_width=%s\n'              "${max_width}"
       printf 'activity_colour=%s\n'        "${activity_colour}"
       printf 'activity_fresh_seconds=%s\n' "${activity_fresh_seconds}"
@@ -755,6 +771,23 @@ apply_theme() {
 }
 
 apply_theme
+
+# Icon glyphs that DIFFER between the 'classic' (default) and 'modern' sets are
+# exposed as ICON_* variables and consumed at their build sites. All other
+# glyphs (model ◆, agent ▸, fast ⚡, dirty ●, stash ≡, worktree ⊞, ahead/behind
+# ↑↓, update ↑, cost $, context-warn ▲) are identical in both sets and stay
+# inline. use_icons=false zeroes every ICON_* (fork-free, pure assignment).
+apply_icon_set() {
+  ICON_DIR="" ICON_BRANCH="" ICON_LINES="" ICON_DURATION=""
+  [ "$use_icons" = "true" ] || return 0
+  case "${icon_set:-classic}" in
+    modern)
+      ICON_DIR="↱ " ICON_BRANCH="⑂ " ICON_LINES="⇄ " ICON_DURATION="⏱ " ;;
+    *) # classic — byte-identical to the pre-2.19 icons
+      ICON_BRANCH="↱ " ;;   # dir / lines / duration have no icon in classic
+  esac
+}
+apply_icon_set
 
 # ── End Configuration ─────────────────────────────────────────
 
@@ -1496,13 +1529,28 @@ build_progress_bar() {
 
 seg_idx=0
 
-# Helper: add a segment with priority and optional group
-# Usage: add_seg "content" priority ["group_name"]
+# Helper: add a segment with priority, optional group, and optional layout name
+# Usage: add_seg "content" priority ["group_name"] ["seg_name"]
+# seg_name is the stable token the layout config addresses the segment by.
 add_seg() {
   seg_vals[$seg_idx]="$1"
   seg_pris[$seg_idx]="$2"
   seg_groups[$seg_idx]="${3:-}"
+  seg_names[$seg_idx]="${4:-}"
   seg_idx=$((seg_idx + 1))
+}
+
+# REPLY = index of the added segment named $1, or -1 if absent (i.e. its
+# show_* flag is false, so it was never added). Fork-free linear scan over the
+# ~20 segments. This is how a layout token resolves to a built segment, and it
+# makes "render iff enabled AND placed" fall out for free.
+seg_index_by_name() {
+  local n="$1" i=0
+  while [ "$i" -lt "$seg_idx" ]; do
+    [ "${seg_names[$i]}" = "$n" ] && { REPLY=$i; return 0; }
+    i=$((i + 1))
+  done
+  REPLY=-1
 }
 
 # Session start placeholder — before first API response, fields are null/empty.
@@ -1513,32 +1561,40 @@ if [ -z "$model" ] && [ -z "$used" ]; then
   exit 0
 fi
 
-# Directory + Branch (combined, priority 1)
-# dir_branch is the full form; dir_branch_base is the compact form (basename
-# only) used by dir_style=basename and by dir_style=auto when the line is too
-# wide. Both carry the same branch suffix.
-dir_branch="" dir_branch_base=""
+# Directory and Branch — two separately-addressable segments (both priority 1).
+# When the layout places them adjacent (the default), the assembler joins them
+# with the " on " connector and NO separator, reproducing the pre-2.19 combined
+# "path on <icon>branch" exactly. dir has a full + basename form (the latter
+# used by dir_style=basename, and by dir_style=auto when the line overflows).
+# branch has an attached form (" on <icon>branch", emitted right after dir) and
+# a standalone form (emitted when branch is placed alone or away from dir).
+dir_seg_full="" dir_seg_base=""
 if [ "$show_directory" = "true" ]; then
-  dir_branch+="${CLR_DIR}${short_cwd}${CLR_RESET}"
+  dir_seg_full="${CLR_DIR}${ICON_DIR}${short_cwd}${CLR_RESET}"
   # Last path component, handling both / and \ separators (Windows cwd).
   dir_base="${short_cwd##*/}"; dir_base="${dir_base##*\\}"
   [ -z "$dir_base" ] && dir_base="$short_cwd"
-  dir_branch_base+="${CLR_DIR}${dir_base}${CLR_RESET}"
+  dir_seg_base="${CLR_DIR}${ICON_DIR}${dir_base}${CLR_RESET}"
 fi
+branch_seg_alone="" branch_seg_attached="" branch_attached_w=0
 if [ "$show_branch" = "true" ] && [ -n "$branch" ]; then
-  branch_icon=""
-  [ "$use_icons" = "true" ] && branch_icon="↱ "
-  dir_branch+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
-  dir_branch_base+="${CLR_BRANCH} on ${branch_icon}${branch}${CLR_RESET}"
+  branch_seg_attached="${CLR_BRANCH} on ${ICON_BRANCH}${branch}${CLR_RESET}"
+  branch_seg_alone="${CLR_BRANCH}${ICON_BRANCH}${branch}${CLR_RESET}"
+  visible_width "$branch_seg_attached"; branch_attached_w=$REPLY
 fi
-if [ -n "$dir_branch" ]; then add_seg "$dir_branch" 1; dir_seg_idx=$(( seg_idx - 1 )); fi
+if [ -n "$dir_seg_full" ]; then
+  add_seg "$dir_seg_full" 1 "" "dir"; dir_seg_idx=$(( seg_idx - 1 ))
+fi
+if [ -n "$branch_seg_alone" ]; then
+  add_seg "$branch_seg_alone" 1 "" "branch"; branch_seg_idx=$(( seg_idx - 1 ))
+fi
 
 # Vim mode indicator (priority 3)
 if [ "$show_vim_mode" = "true" ]; then
   extract_block "$input" "vim"; vim_block=$REPLY
   if [ -n "$vim_block" ]; then
     extract_from "$vim_block" "mode"; vim_mode=$REPLY
-    [ -n "$vim_mode" ] && add_seg "${CLR_INFO}${vim_mode}${CLR_RESET}" 3
+    [ -n "$vim_mode" ] && add_seg "${CLR_INFO}${vim_mode}${CLR_RESET}" 3 "" "vim"
   fi
 fi
 
@@ -1555,7 +1611,7 @@ if [ "$show_model" = "true" ]; then
   esac
   # Respect NO_COLOR / mono theme
   [ -z "$CLR_RESET" ] && model_clr=""
-  add_seg "${model_clr}${model_icon}${model:-?}${CLR_RESET}" 3 "ctx"
+  add_seg "${model_clr}${model_icon}${model:-?}${CLR_RESET}" 3 "ctx" "model"
 fi
 
 # Agent name (priority 3)
@@ -1567,7 +1623,7 @@ if [ "$show_agent" = "true" ]; then
       sanitize "$agent_name"; agent_name=$REPLY
       agent_icon=""
       [ "$use_icons" = "true" ] && agent_icon="▸ "
-      add_seg "${CLR_MODEL}${agent_icon}${agent_name}${CLR_RESET}" 3
+      add_seg "${CLR_MODEL}${agent_icon}${agent_name}${CLR_RESET}" 3 "" "agent"
     fi
   fi
 fi
@@ -1580,7 +1636,7 @@ if [ "$show_effort" = "true" ]; then
     extract_from "$effort_block" "level"; effort_level=$REPLY
     if [ -n "$effort_level" ]; then
       sanitize "$effort_level"; effort_level=$REPLY
-      add_seg "${CLR_INFO}eff:${effort_level}${CLR_RESET}" 5
+      add_seg "${CLR_INFO}eff:${effort_level}${CLR_RESET}" 5 "" "effort"
     fi
   fi
 fi
@@ -1592,7 +1648,7 @@ if [ "$show_fast_mode" = "true" ]; then
   if [[ $input =~ $fm_guard ]]; then
     fast_icon=""
     [ "$use_icons" = "true" ] && fast_icon="⚡ "
-    add_seg "${CLR_WARN}${fast_icon}fast${CLR_RESET}" 4
+    add_seg "${CLR_WARN}${fast_icon}fast${CLR_RESET}" 4 "" "fast_mode"
   fi
 fi
 
@@ -1685,7 +1741,7 @@ if [ "$show_context_bar" = "true" ]; then
       ctx_suffix=" of $(( ctx_int / 1000 ))k"
     fi
   fi
-  add_seg "${warn_prefix}${progress_bar} ${bar_clr}${pct_int}%${ctx_suffix}${CLR_RESET}" 2 "ctx"
+  add_seg "${warn_prefix}${progress_bar} ${bar_clr}${pct_int}%${ctx_suffix}${CLR_RESET}" 2 "ctx" "context"
 fi
 
 # Token counts (priority 5) — reuses $cw_block from context window extraction above
@@ -1696,7 +1752,7 @@ if [ "$show_tokens" = "true" ]; then
     tok_in_k=$(( ${tok_in:-0} / 1000 ))
     tok_out_k=$(( ${tok_out:-0} / 1000 ))
     if [ "$auto_hide" != "true" ] || [ "$tok_in_k" -gt 0 ] || [ "$tok_out_k" -gt 0 ]; then
-      add_seg "${CLR_INFO}${tok_in_k}k in ${tok_out_k}k out${CLR_RESET}" 5
+      add_seg "${CLR_INFO}${tok_in_k}k in ${tok_out_k}k out${CLR_RESET}" 5 "" "tokens"
     fi
   fi
 fi
@@ -1721,7 +1777,7 @@ if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
   build_progress_bar "$u5_int" "$u5_target"; u5_bar_output="$REPLY_COLOUR"$'\n'"$REPLY"
   u5_bar_clr="${u5_bar_output%%$'\n'*}"
   u5_bar="${u5_bar_output#*$'\n'}"
-  add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_bar_clr}${u5_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage"
+  add_seg "5hr${u5_label:+ ${u5_label}} ${u5_bar} ${u5_bar_clr}${u5_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage" "usage_5h"
 fi
 
 # Weekly usage limit (priority 3)
@@ -1739,7 +1795,7 @@ if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
   build_progress_bar "$u7_int" "$u7_target"; u7_bar_output="$REPLY_COLOUR"$'\n'"$REPLY"
   u7_bar_clr="${u7_bar_output%%$'\n'*}"
   u7_bar="${u7_bar_output#*$'\n'}"
-  add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_bar_clr}${u7_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage"
+  add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_bar_clr}${u7_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage" "usage_7d"
 fi
 
 # Lines changed (priority 5)
@@ -1749,7 +1805,7 @@ if [ "$show_lines_changed" = "true" ]; then
   added_int="${added%%.*}"
   removed_int="${removed%%.*}"
   if [ "$auto_hide" != "true" ] || [ "$added_int" -gt 0 ] || [ "$removed_int" -gt 0 ]; then
-    add_seg "${CLR_ADD}+${added_int}${CLR_RESET} ${CLR_DEL}-${removed_int}${CLR_RESET}" 5 "git"
+    add_seg "${ICON_LINES}${CLR_ADD}+${added_int}${CLR_RESET} ${CLR_DEL}-${removed_int}${CLR_RESET}" 5 "git" "lines_changed"
   fi
 fi
 
@@ -1758,7 +1814,7 @@ if [ "$show_dirty_count" = "true" ] && [ -n "$dirty_count" ]; then
   if [ "$auto_hide" != "true" ] || [ "$dirty_count" -gt 0 ] 2>/dev/null; then
     dirty_icon=""
     [ "$use_icons" = "true" ] && dirty_icon="● "
-    add_seg "${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}" 5 "git"
+    add_seg "${CLR_WARN}${dirty_icon}${dirty_count} dirty${CLR_RESET}" 5 "git" "dirty"
   fi
 fi
 
@@ -1770,7 +1826,7 @@ if [ "$show_ahead_behind" = "true" ]; then
     ab_text=""
     [ "$ab_behind" -gt 0 ] 2>/dev/null && ab_text+="↓${ab_behind}"
     [ "$ab_ahead" -gt 0 ] 2>/dev/null && { [ -n "$ab_text" ] && ab_text+=" "; ab_text+="↑${ab_ahead}"; }
-    [ -n "$ab_text" ] && add_seg "${CLR_INFO}${ab_text}${CLR_RESET}" 6 "git"
+    [ -n "$ab_text" ] && add_seg "${CLR_INFO}${ab_text}${CLR_RESET}" 6 "git" "ahead_behind"
   fi
 fi
 
@@ -1780,7 +1836,7 @@ if [ "$show_stash" = "true" ]; then
   if [ "$auto_hide" != "true" ] || [ "$sc" -gt 0 ] 2>/dev/null; then
     stash_icon=""
     [ "$use_icons" = "true" ] && stash_icon="≡ "
-    add_seg "${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}" 6 "git"
+    add_seg "${CLR_WARN}${stash_icon}stash:${sc}${CLR_RESET}" 6 "git" "stash"
   fi
 fi
 
@@ -1818,7 +1874,7 @@ if [ "$show_pr" = "true" ]; then
           pr_text="\033]8;;${pr_url}\033\\\\${pr_text}\033]8;;\033\\\\"
         fi
       fi
-      add_seg "${pr_clr}${pr_text}${CLR_RESET}" 6 "git"
+      add_seg "${pr_clr}${pr_text}${CLR_RESET}" 6 "git" "pr"
     fi
   fi
 fi
@@ -1828,8 +1884,7 @@ if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" !=
   total_secs=$(( ${duration_ms%%.*} / 1000 ))
   hours=$(( total_secs / 3600 ))
   mins=$(( (total_secs % 3600) / 60 ))
-  dur_icon=""
-  [ "$use_icons" = "true" ] && dur_icon=""
+  dur_icon="$ICON_DURATION"
 
   dur_text=""
   if [ "$hours" -gt 0 ]; then
@@ -1839,14 +1894,14 @@ if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" !=
   elif [ "$auto_hide" != "true" ]; then
     dur_text="${CLR_INFO}${dur_icon}0m${CLR_RESET}"
   fi
-  [ -n "$dur_text" ] && add_seg "$dur_text" 7 "session"
+  [ -n "$dur_text" ] && add_seg "$dur_text" 7 "session" "duration"
 fi
 
 # Worktree indicator (priority 8)
 if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
   wt_icon=""
   [ "$use_icons" = "true" ] && wt_icon="⊞ "
-  add_seg "${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}" 8
+  add_seg "${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}" 8 "" "worktree"
 fi
 
 # Session cost (priority 4)
@@ -1864,7 +1919,7 @@ if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
     else
       cost_clr="$CLR_ADD"
     fi
-    add_seg "${cost_clr}\$${cost_fmt}${CLR_RESET}" 4 "session"
+    add_seg "${cost_clr}\$${cost_fmt}${CLR_RESET}" 4 "session" "cost"
   fi
 fi
 
@@ -1885,7 +1940,7 @@ if [ "$show_cost_rate" = "true" ] && [ -n "$total_cost" ] && [ -n "$duration_ms"
         else
           rate_clr="$CLR_ADD"
         fi
-        add_seg "${rate_clr}\$${cost_rate}/hr${CLR_RESET}" 4 "session"
+        add_seg "${rate_clr}\$${cost_rate}/hr${CLR_RESET}" 4 "session" "cost_rate"
       fi
     fi
   fi
@@ -1910,7 +1965,7 @@ if [ -n "$update_available" ]; then
   else
     update_text="update available"
   fi
-  add_seg "${CLR_ADD}${update_text}${CLR_RESET}" 9
+  add_seg "${CLR_ADD}${update_text}${CLR_RESET}" 9 "" "update"
 fi
 
 # ── Terminal width + responsive directory ────────────────────
@@ -1929,137 +1984,194 @@ if [ "$dir_style" = "auto" ] || [ "$enable_truncation" = "true" ]; then
     [ -z "$term_width" ] && term_width=120
   fi
 fi
-if [ -n "${dir_seg_idx:-}" ]; then
-  case "$dir_style" in
-    basename) seg_vals[$dir_seg_idx]="$dir_branch_base" ;;
-    auto)
-      # Total visible width of all segments (with the full path) + separators.
-      dir_total=0
-      for (( i=0; i<seg_idx; i++ )); do
-        [ "$i" -gt 0 ] && dir_total=$(( dir_total + 2 ))
-        visible_width "${seg_vals[$i]}"; dir_total=$(( dir_total + REPLY ))
-      done
-      if [ -n "$term_width" ] && [ "$dir_total" -gt "$term_width" ] 2>/dev/null; then
-        seg_vals[$dir_seg_idx]="$dir_branch_base"
-      fi
-      ;;
-  esac
+if [ -n "${dir_seg_idx:-}" ] && [ "$dir_style" = "basename" ]; then
+  seg_vals[$dir_seg_idx]="$dir_seg_base"
 fi
 
-# ── Truncation ───────────────────────────────────────────────
-# When enabled, drop lowest-priority segments until output fits.
-if [ "$enable_truncation" = "true" ] && [ "$seg_idx" -gt 0 ]; then
-
-  # Mark segments as active (1) or dropped (0)
-  for (( i=0; i<seg_idx; i++ )); do seg_active[$i]=1; done
-
-  # Pre-compute visible widths (avoids repeated subshell forks in the loop)
+# Pre-compute every segment's visible width once (reused by the per-line
+# auto-collapse and truncation below). Only needed in a width-aware mode.
+if [ "$dir_style" = "auto" ] || [ "$enable_truncation" = "true" ]; then
   for (( i=0; i<seg_idx; i++ )); do
     visible_width "${seg_vals[$i]}"; seg_widths[$i]=$REPLY
   done
+fi
 
-  # Calculate total visible width (segments + separators)
-  calc_total_width() {
-    local total=0 first=1
-    for (( i=0; i<seg_idx; i++ )); do
-      [ "${seg_active[$i]}" = "0" ] && continue
-      if [ "$first" = "1" ]; then
-        first=0
+# ── Per-line assembly ────────────────────────────────────────
+# Assemble one line from a plan (space-separated segment indices) into REPLY.
+# Scoped to THIS line, it applies: the dir auto-collapse (to basename on
+# overflow), priority truncation (drop the highest priority-NUMBER segment
+# until it fits term_width), use_groups bracketing (closed at end-of-line), the
+# "  " separator, and the dir->branch connector — branch right after dir uses
+# the attached " on <icon>branch" form with no separator, reproducing the
+# pre-2.19 combined segment exactly. The connector's extra width is accounted
+# for in both width passes via branch_attached_w (replaces the old forking
+# calc_total_width — totals are summed inline, REPLY-convention friendly).
+assemble_line() {
+  local plan="$1"
+  set -- $plan
+  local cnt=$# idxs ix k prev_idx total f
+  [ "$cnt" -eq 0 ] && { REPLY=""; return 0; }
+  idxs=( "$@" )
+
+  # (1) dir auto-collapse, decided against THIS line's width.
+  if [ "$dir_style" = "auto" ] && [ -n "${dir_seg_idx:-}" ]; then
+    local has_dir=0
+    total=0; f=1; prev_idx=-1
+    for ix in "${idxs[@]}"; do
+      [ "$ix" = "$dir_seg_idx" ] && has_dir=1
+      if [ "$ix" = "${branch_seg_idx:-_}" ] && [ "$prev_idx" = "$dir_seg_idx" ]; then
+        total=$(( total + branch_attached_w ))
       else
-        total=$((total + 2))  # "  " separator
+        [ "$f" = "1" ] && f=0 || total=$(( total + 2 ))
+        total=$(( total + ${seg_widths[$ix]:-0} ))
       fi
-      total=$((total + ${seg_widths[$i]}))
+      prev_idx="$ix"
     done
-    echo "$total"
-  }
+    if [ "$has_dir" = "1" ] && [ -n "$term_width" ] && [ "$total" -gt "$term_width" ] 2>/dev/null; then
+      seg_vals[$dir_seg_idx]="$dir_seg_base"
+      visible_width "$dir_seg_base"; seg_widths[$dir_seg_idx]=$REPLY
+    fi
+  fi
 
-  # Drop lowest-priority segments until we fit
-  while true; do
-    total_w=$(calc_total_width)
-    [ "$total_w" -le "$term_width" ] 2>/dev/null && break
+  # (2) priority truncation, scoped to THIS line.
+  local af=()
+  for (( k=0; k<cnt; k++ )); do af[$k]=1; done
+  if [ "$enable_truncation" = "true" ]; then
+    while :; do
+      total=0; f=1; prev_idx=-1
+      for (( k=0; k<cnt; k++ )); do
+        [ "${af[$k]}" = "0" ] && continue
+        ix="${idxs[$k]}"
+        if [ "$ix" = "${branch_seg_idx:-_}" ] && [ "$prev_idx" = "$dir_seg_idx" ]; then
+          total=$(( total + branch_attached_w ))
+        else
+          [ "$f" = "1" ] && f=0 || total=$(( total + 2 ))
+          total=$(( total + ${seg_widths[$ix]:-0} ))
+        fi
+        prev_idx="$ix"
+      done
+      [ "$total" -le "$term_width" ] 2>/dev/null && break
+      local worst=-1 worstp=0
+      for (( k=0; k<cnt; k++ )); do
+        [ "${af[$k]}" = "0" ] && continue
+        if [ "${seg_pris[${idxs[$k]}]}" -gt "$worstp" ] 2>/dev/null; then
+          worstp="${seg_pris[${idxs[$k]}]}"; worst=$k
+        fi
+      done
+      [ "$worst" = "-1" ] && break
+      af[$worst]=0
+    done
+  fi
 
-    # Find the active segment with the highest priority number (lowest priority)
-    worst_idx=-1
-    worst_pri=0
-    for (( i=0; i<seg_idx; i++ )); do
-      [ "${seg_active[$i]}" = "0" ] && continue
-      if [ "${seg_pris[$i]}" -gt "$worst_pri" ] 2>/dev/null; then
-        worst_pri="${seg_pris[$i]}"
-        worst_idx=$i
+  # (3) assemble: separators, optional group brackets, dir->branch connector.
+  local out="" first_seg=1 current_group="" group_has_content=false prev_name=""
+  local seg_sep="  " nm val this_group
+  for (( k=0; k<cnt; k++ )); do
+    [ "$enable_truncation" = "true" ] && [ "${af[$k]}" = "0" ] && { prev_name=""; continue; }
+    ix="${idxs[$k]}"
+    nm="${seg_names[$ix]}"
+    val="${seg_vals[$ix]}"
+    if [ "$nm" = "branch" ] && [ "$prev_name" = "dir" ]; then
+      out="${out}${branch_seg_attached}"; prev_name="branch"; continue
+    fi
+    this_group="${seg_groups[$ix]:-}"
+    if [ "$use_groups" = "true" ] && [ -n "$this_group" ]; then
+      if [ "$this_group" != "$current_group" ]; then
+        [ -n "$current_group" ] && [ "$group_has_content" = "true" ] && out="${out}${group_close}"
+        [ "$first_seg" != "1" ] && out="${out}${seg_sep}"
+        first_seg=0
+        out="${out}${group_open}"
+        current_group="$this_group"; group_has_content=true
+      else
+        out="${out} "
       fi
-    done
-
-    # Nothing left to drop
-    [ "$worst_idx" = "-1" ] && break
-    seg_active[$worst_idx]=0
+    else
+      if [ "$use_groups" = "true" ] && [ -n "$current_group" ] && [ "$group_has_content" = "true" ]; then
+        out="${out}${group_close}"; current_group=""; group_has_content=false
+      fi
+      if [ "$first_seg" = "1" ]; then first_seg=0; else out="${out}${seg_sep}"; fi
+    fi
+    out="${out}${val}"; prev_name="$nm"
   done
-fi
+  [ "$use_groups" = "true" ] && [ -n "$current_group" ] && [ "$group_has_content" = "true" ] && out="${out}${group_close}"
+  REPLY="$out"
+}
 
-# ── Assemble & Print ─────────────────────────────────────────
-# When use_groups=true, segments with the same group are wrapped in brackets
-# and separated by single space. Groups are separated by double space.
-output=""
-first_seg=1
-current_group=""
-group_has_content=false
+# ── Layout resolution ────────────────────────────────────────
+# A preset expands to default per-line token strings; an explicitly set
+# line1/line2/line3 (even empty) overrides the preset for that line. Tokens are
+# individual segment names; 'activity' is the live line. classic line 1 is the
+# sentinel __ALL__ (every segment in add order) so it tracks new segments and
+# stays byte-identical to the pre-2.19 single bar.
+resolve_layout_preset() {
+  case "${1:-classic}" in
+    three-line)
+      lp1="vim model agent effort fast_mode context usage_5h usage_7d tokens duration cost cost_rate update"
+      lp2="dir branch lines_changed dirty ahead_behind stash pr worktree"
+      lp3="activity" ;;
+    stacked)
+      lp1="dir branch model context usage_5h usage_7d cost"
+      lp2="lines_changed dirty ahead_behind stash pr duration worktree update"
+      lp3="activity" ;;
+    classic|*)
+      lp1="__ALL__"; lp2="activity"; lp3="" ;;
+  esac
+}
+resolve_layout_preset "${layout:-classic}"
+# ${lineN+s}: distinguishes a user-set (even empty) line from an unset one.
+if [ -n "${line1+s}" ]; then L1="$line1"; else L1="$lp1"; fi
+if [ -n "${line2+s}" ]; then L2="$line2"; else L2="$lp2"; fi
+if [ -n "${line3+s}" ]; then L3="$line3"; else L3="$lp3"; fi
 
-# Inter-segment/inter-group separator (double space).
-seg_sep="  "
-
-for (( i=0; i<seg_idx; i++ )); do
-  if [ "$enable_truncation" = "true" ] && [ "${seg_active[$i]:-1}" = "0" ]; then
-    continue
-  fi
-
-  this_group="${seg_groups[$i]:-}"
-
-  if [ "$use_groups" = "true" ] && [ -n "$this_group" ]; then
-    if [ "$this_group" != "$current_group" ]; then
-      # Close previous group if open
-      if [ -n "$current_group" ] && [ "$group_has_content" = "true" ]; then
-        output+="${group_close}"
+# Parse one line's token string into REPLY (space-separated segment indices)
+# and REPLY_ACT (1 if the activity token is present). De-dups across all lines
+# via seg_placed[] / activity_placed (first occurrence wins). __ALL__ expands
+# to every added segment in add order. Unknown/disabled tokens are skipped, so
+# a typo is ignored and a show_*=false segment never appears.
+parse_line() {
+  local spec="$1" tok idx plan=""
+  REPLY_ACT=0
+  if [ "$spec" = "__ALL__" ]; then
+    idx=0
+    while [ "$idx" -lt "$seg_idx" ]; do
+      if [ -z "${seg_placed[$idx]:-}" ]; then
+        seg_placed[$idx]=1; plan="${plan}${plan:+ }${idx}"
       fi
-      # Separator between segments/groups
-      [ "$first_seg" != "1" ] && output+="$seg_sep"
-      first_seg=0
-      # Open new group
-      output+="${group_open}"
-      current_group="$this_group"
-      group_has_content=true
-    else
-      # Same group — single space separator within group
-      output+=" "
-    fi
-  else
-    # Close previous group if open
-    if [ "$use_groups" = "true" ] && [ -n "$current_group" ] && [ "$group_has_content" = "true" ]; then
-      output+="${group_close}"
-      current_group=""
-      group_has_content=false
-    fi
-    # Separator between segments
-    if [ "$first_seg" = "1" ]; then
-      first_seg=0
-    else
-      output+="$seg_sep"
-    fi
+      idx=$((idx + 1))
+    done
+    REPLY="$plan"; return 0
   fi
+  for tok in $spec; do
+    if [ "$tok" = "activity" ]; then
+      [ "${activity_placed:-0}" = "1" ] && continue
+      activity_placed=1; REPLY_ACT=1; continue
+    fi
+    seg_index_by_name "$tok"; idx=$REPLY
+    [ "$idx" = "-1" ] && continue
+    [ -n "${seg_placed[$idx]:-}" ] && continue
+    seg_placed[$idx]=1; plan="${plan}${plan:+ }${idx}"
+  done
+  REPLY="$plan"
+}
+activity_placed=0
+parse_line "$L1"; line1_plan="$REPLY"; line1_act="$REPLY_ACT"
+parse_line "$L2"; line2_plan="$REPLY"; line2_act="$REPLY_ACT"
+parse_line "$L3"; line3_plan="$REPLY"; line3_act="$REPLY_ACT"
 
-  output+="${seg_vals[$i]}"
-done
-
-# Close final group if still open
-if [ "$use_groups" = "true" ] && [ -n "$current_group" ] && [ "$group_has_content" = "true" ]; then
-  output+="${group_close}"
+# Never silently lose the update notice: if an update is available but the
+# 'update' token wasn't placed, append it to the last line with metric content.
+if [ -n "$update_available" ]; then
+  seg_index_by_name "update"; upd_idx=$REPLY
+  if [ "$upd_idx" != "-1" ] && [ -z "${seg_placed[$upd_idx]:-}" ]; then
+    if   [ -n "$line3_plan" ]; then line3_plan="${line3_plan} ${upd_idx}"
+    elif [ -n "$line2_plan" ]; then line2_plan="${line2_plan} ${upd_idx}"
+    else line1_plan="${line1_plan}${line1_plan:+ }${upd_idx}"; fi
+    seg_placed[$upd_idx]=1
+  fi
 fi
 
-sl_profile "segments+render"
-# ── Line 1: Status bar ───────────────────────────────────────
-printf "%b" "$output"
-
-# ── Line 2: Live activity (optional) ────────────────────────
-
-# Visible width of the activity line (in REPLY): colour tokens were
+# ── Activity-line trimming ───────────────────────────────────
+# Visible width of an activity string (in REPLY): colour tokens were
 # substituted with raw SGR escape bytes, so strip that pattern before
 # counting. Pure bash, fork-free, bash 3.2 safe.
 activity_visible_width() {
@@ -2068,53 +2180,87 @@ activity_visible_width() {
   REPLY=${#s}
 }
 
-if [ -n "$activity_line" ]; then
-  # Trim to the terminal width (Claude Code >= 2.1.153 sets COLUMNS) so a
-  # long activity line never wraps and pushes line 1 out of view
-  case "${COLUMNS:-}" in
-    ''|*[!0-9]*) : ;;
-    *)
-      if [ "$COLUMNS" -gt 1 ]; then
-        if [ "$activity_has_colour" = "true" ]; then
-          # Colour-aware trim: drop whole '  │  ' parts from the end until
-          # the line fits — never cuts inside an escape sequence. Once a
-          # part has been dropped the budget shrinks by 2 so the ' …'
-          # suffix appended below still fits inside COLUMNS.
-          act_dropped=false
-          act_limit="$COLUMNS"
-          while :; do
-            activity_visible_width "$activity_line"
-            [ "$REPLY" -gt "$act_limit" ] || break
-            case "$activity_line" in
-              *"  │  "*)
-                activity_line="${activity_line%"  │  "*}"
-                act_dropped=true
-                act_limit=$((COLUMNS - 2))
-                ;;
-              *) break ;;
-            esac
-          done
-          if [ "$act_dropped" = "true" ]; then
-            activity_line="${activity_line}${CLR_DIM//\\033/$ESC_CH} …"
-          fi
-          activity_visible_width "$activity_line"
-          if [ "$REPLY" -gt "$COLUMNS" ]; then
-            # Still too wide (a single overlong part): plain hard cut
-            act_pat="${ESC_CH}\[[0-9;]*m"
-            while [[ $activity_line =~ $act_pat ]]; do
-              activity_line="${activity_line//"${BASH_REMATCH[0]}"/}"
-            done
-            activity_line="${activity_line:0:$((COLUMNS - 1))}…"
-          fi
-        elif [ "${#activity_line}" -gt "$COLUMNS" ]; then
-          activity_line="${activity_line:0:$((COLUMNS - 1))}…"
-        fi
-      fi
-      ;;
+# Trim $activity_line to a column budget ($1), returning the trimmed copy in
+# REPLY (the original is left intact). Colour-aware: drop whole '  │  ' parts
+# from the end until it fits — never cutting inside an escape sequence — then,
+# once a part has been dropped, leave room for a dim ' …' marker; finally hard-
+# cut if a single part is still too wide. A non-numeric or <=1 budget returns
+# the line unchanged. With budget=COLUMNS this is byte-identical to the
+# pre-2.19 line-2 trim.
+trim_activity() {
+  local limit="$1" line="${activity_line:-}"
+  case "$limit" in
+    ''|*[!0-9]*) REPLY="$line"; return 0 ;;
   esac
-  printf '\n'
-  # %s for the activity content: it may carry raw colour bytes from token
-  # substitution but must never be %b-decoded (transcript-derived text).
-  # The dim wrapper and reset are trusted theme constants, %b is fine there.
-  printf "%b%s%b" "${CLR_DIM}" "${activity_line}" "${CLR_RESET}"
-fi
+  if [ "$limit" -gt 1 ]; then
+    if [ "${activity_has_colour:-false}" = "true" ]; then
+      local act_dropped=false act_limit="$limit"
+      while :; do
+        activity_visible_width "$line"
+        [ "$REPLY" -gt "$act_limit" ] || break
+        case "$line" in
+          *"  │  "*)
+            line="${line%"  │  "*}"
+            act_dropped=true
+            act_limit=$(( limit - 2 ))
+            ;;
+          *) break ;;
+        esac
+      done
+      [ "$act_dropped" = "true" ] && line="${line}${CLR_DIM//\\033/$ESC_CH} …"
+      activity_visible_width "$line"
+      if [ "$REPLY" -gt "$limit" ]; then
+        local act_pat="${ESC_CH}\[[0-9;]*m"
+        while [[ $line =~ $act_pat ]]; do line="${line//"${BASH_REMATCH[0]}"/}"; done
+        line="${line:0:$(( limit - 1 ))}…"
+      fi
+    elif [ "${#line}" -gt "$limit" ]; then
+      line="${line:0:$(( limit - 1 ))}…"
+    fi
+  fi
+  REPLY="$line"
+}
+
+sl_profile "segments+render"
+
+# ── Render ───────────────────────────────────────────────────
+# Print each non-empty line; a newline separates printed lines (never trailing,
+# never a blank row for an empty line — preserving the pre-2.19 "line 2 only
+# when there's data" behaviour). Metric content prints with %b; the activity
+# tail is untrusted transcript text and always prints with %s.
+emitted=0
+for ln in 1 2 3; do
+  case "$ln" in
+    1) line_plan="$line1_plan"; line_act="$line1_act" ;;
+    2) line_plan="$line2_plan"; line_act="$line2_act" ;;
+    3) line_plan="$line3_plan"; line_act="$line3_act" ;;
+  esac
+
+  metric=""
+  [ -n "$line_plan" ] && { assemble_line "$line_plan"; metric="$REPLY"; }
+
+  act_str=""
+  if [ "$line_act" = "1" ] && [ -n "${activity_line:-}" ]; then
+    if [ -z "$metric" ]; then
+      # Activity alone on this line: trim to the full terminal width.
+      trim_activity "${COLUMNS:-}"; act_str="$REPLY"
+    else
+      # Activity sharing a line with metrics: trim to the leftover budget.
+      case "${COLUMNS:-}" in
+        ''|*[!0-9]*) act_str="$activity_line" ;;
+        *) visible_width "$metric"; budget=$(( COLUMNS - REPLY - 2 ))
+           [ "$budget" -lt 1 ] && budget=1
+           trim_activity "$budget"; act_str="$REPLY" ;;
+      esac
+    fi
+  fi
+
+  [ -z "$metric" ] && [ -z "$act_str" ] && continue
+  [ "$emitted" -gt 0 ] && printf '\n'
+  emitted=$(( emitted + 1 ))
+  [ -n "$metric" ] && printf "%b" "$metric"
+  if [ -n "$act_str" ]; then
+    [ -n "$metric" ] && printf "%b" "  "
+    printf "%b%s%b" "${CLR_DIM}" "${act_str}" "${CLR_RESET}"
+  fi
+done

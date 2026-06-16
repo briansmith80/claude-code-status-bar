@@ -26,6 +26,10 @@ Ask the user what they'd like to customize. Present these categories:
 ### Themes
 - `colour_theme` — Pick one of: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `matrix`, `mono` (default: default). Tip: preview every theme (with its gradient bars) in the terminal first by running `bash ~/.claude/statusline-command.sh --demo`.
 
+### Layout (1–3 lines)
+- `layout` — Choose a preset: `classic` (all metrics on line 1, the live activity on line 2 — the default), `three-line` (model/usage/cost on line 1, dir + git state on line 2, activity on line 3), or `stacked`.
+- `line1` / `line2` / `line3` — Override any line with a space-separated list of segment tokens (these win over the preset, per line). **Quote any value with spaces**, e.g. `line2="dir branch lines_changed ahead_behind"`. Set a line to `""` to hide that row. Tokens: `dir`, `branch`, `model`, `context`, `usage_5h`, `usage_7d`, `lines_changed`, `dirty`, `ahead_behind`, `stash`, `pr`, `duration`, `worktree`, `cost`, `cost_rate`, `vim`, `agent`, `effort`, `fast_mode`, `tokens`, `update`, `activity`. Notes: `activity` is the live line (needs Node.js); unknown tokens are ignored; a token still obeys its `show_*` toggle; a segment lives on the first line that lists it; segments you don't list anywhere won't show. **Tip:** on a 3-line layout with colours, if you see occasional garbled redraws, that's Claude Code's known multi-line + ANSI behaviour — preview with the Step 4 test command.
+
 ### Segments (toggle on/off)
 - `show_directory` — Working directory
 - `show_branch` — Git branch
@@ -51,6 +55,7 @@ Ask the user what they'd like to customize. Present these categories:
 
 ### Display Options
 - `use_icons` — Unicode icons before segments (default: true)
+- `icon_set` — `classic` (today's icons — the default) or `modern` (a refreshed set: directory ↱, branch ⑂, lines-changed ⇄, duration ⏱; model ◆ unchanged). `use_icons=false` removes all icons regardless of this setting.
 - `bar_gradient` — Progress-bar gradient (default: true). `true` = the theme's own gradient ramp; `false` = flat single-colour bars; `heat` = a fixed green→yellow→orange→red ramp regardless of theme
 - `auto_hide` — Hide zero/empty values (default: true)
 - `usage_label` — Usage bar reset label: countdown, e.g. 2h20m (default), or clock, e.g. 2pm

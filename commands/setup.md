@@ -75,10 +75,13 @@ The statusLine config should be:
 {
   "statusLine": {
     "type": "command",
-    "command": "bash ~/.claude/statusline-command.sh"
+    "command": "bash ~/.claude/statusline-command.sh",
+    "refreshInterval": 60
   }
 }
 ```
+
+`refreshInterval` (seconds) controls how often Claude Code re-runs the bar while idle — without it, the countdown labels and live-activity line only update on a new message. Recommended: `2`+ on Windows, `1` on macOS/Linux (a value below the script's runtime blanks the bar). Set a low odd value like `3` if the user enables `activity_pulse`/`activity_scanner` (see Step 5).
 
 When Node.js is available, also merge a subagentStatusLine entry (skip if one already exists, asking the user before replacing). This styles the agent panel rows shown while Task-tool subagents run (Claude Code draws workflow and background-task rows itself):
 ```json
@@ -107,6 +110,7 @@ If the output shows a formatted status line with colors, the installation is suc
 Ask the user if they want to customize their status bar. Available options:
 
 - **Theme**: default, nord, dracula, solarized, tokyo-night, catppuccin, matrix, mono (preview them all first with `bash ~/.claude/statusline-command.sh --demo`)
+- **Layout**: `layout=three-line` or `stacked` spreads the bar across up to three lines (default `classic` is the single metrics line + activity line); or hand-build `line1`/`line2`/`line3` from segment tokens (quote values with spaces). `icon_set=modern` switches to the refreshed icon set.
 - **Live activity line**: Shows running tools, agents, and todo progress (enabled by default, requires Node.js)
 - **Usage pacing markers**: Shows where usage should be for even consumption (enabled by default)
 - **Toggle segments**: Each segment can be turned on/off

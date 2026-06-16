@@ -168,6 +168,40 @@ else
   echo "    \"statusLine\": { \"type\": \"command\", \"command\": \"${command_value_json}\", \"refreshInterval\": 60 }"
 fi
 
+# ── Migrate: ensure the statusLine block carries a refreshInterval ──
+# Installs predating v2.10.1 created a statusLine block with no refreshInterval,
+# so the bar only updated on a new message — countdown labels and the live
+# activity line went stale while idle, and statusline.conf edits didn't show
+# until the next message. Add the default to an existing block that lacks one;
+# a refreshInterval the user already set is never touched. Idempotent.
+if [ -f "$settings_file" ] && grep -q '"statusLine"' "$settings_file"; then
+  if command -v node > /dev/null 2>&1; then
+    node -e "
+      const fs = require('fs');
+      const f = process.argv[1];
+      const data = JSON.parse(fs.readFileSync(f, 'utf8'));
+      const sl = data.statusLine;
+      if (sl && typeof sl === 'object' && sl.refreshInterval === undefined) {
+        sl.refreshInterval = 60;
+        fs.writeFileSync(f, JSON.stringify(data, null, 2) + '\n');
+        console.log('  Added statusLine.refreshInterval (60): ' + f);
+      }
+    " "$settings_file" 2>/dev/null || true
+  elif command -v python3 > /dev/null 2>&1 || command -v python > /dev/null 2>&1; then
+    py=python3; command -v python3 > /dev/null 2>&1 || py=python
+    "$py" -c "
+import json, sys
+path = sys.argv[1]
+with open(path) as f: data = json.load(f)
+sl = data.get('statusLine')
+if isinstance(sl, dict) and 'refreshInterval' not in sl:
+    sl['refreshInterval'] = 60
+    with open(path, 'w') as f: json.dump(data, f, indent=2); f.write('\n')
+    print('  Added statusLine.refreshInterval (60): ' + path)
+" "$settings_file" 2>/dev/null || true
+  fi
+fi
+
 # ── Migrate commands written by older installs (Windows) ─────
 # Pre-2.6.1 installs wrote MSYS-style paths (e.g. "node /c/Users/..."), which
 # fail when Claude Code spawns the command via PowerShell or cmd instead of

@@ -32,6 +32,10 @@ act_stdin() {
   echo "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"transcript_path\":\"${TEST_HOME}/t.jsonl\"}"
 }
 
+# These tests run under the default `classic` layout, where the activity line
+# is always row 2 — so `sed -n '2p'` and the `wc -l == 2` checks below are
+# valid. Custom layouts (v2.19.0+) can move activity to another row; a test
+# that does so must select the row it placed activity on, not hard-code row 2.
 line2() { printf '%s' "$output" | sed -n '2p'; }
 
 # Spinner frames the bash side can pick from the clock

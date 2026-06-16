@@ -11,6 +11,18 @@
 #   bash ~/.claude/statusline-command.sh --demo
 # Full docs: https://github.com/briansmith80/claude-code-status-bar#configuration
 
+# ── Refresh rate (set in settings.json, NOT here) ───────────
+# How OFTEN Claude Code re-runs the bar is "refreshInterval", set inside the
+# "statusLine" block of ~/.claude/settings.json — it is NOT an option in this
+# file. Without it the bar only updates on a new message; with it the countdown
+# labels and live-activity line also stay fresh while you're idle, and edits to
+# this file show up within that many seconds. Recommended: 2+ on Windows, 1 on
+# macOS/Linux (a value below the script's runtime blanks the bar).
+#   "statusLine": {
+#     "command": "bash \"~/.claude/statusline-command.sh\"",
+#     "refreshInterval": 2
+#   }
+
 # ── Colour theme ────────────────────────────────────────────
 # default | nord | dracula | solarized | tokyo-night | catppuccin | matrix | mono
 # colour_theme=default
@@ -24,6 +36,37 @@
 # auto = full path when it fits, basename when the line is too narrow (default)
 # full = always the whole path · basename = always just the last folder
 # dir_style=auto
+
+# ── Layout (1–3 lines) ──────────────────────────────────────
+# Pick a preset, or hand-build each line. Presets:
+#   classic    = all metrics on line 1, live activity on line 2 (the default)
+#   three-line = model/usage/cost · dir/branch/git state · activity
+#   stacked    = dir/model/usage · git state/duration · activity
+# layout=classic
+#
+# Override any line with a space-separated list of segment TOKENS (these win
+# over the preset, per line). IMPORTANT: quote any value with spaces, and an
+# empty line hides that row:
+#   line1="model context usage_5h usage_7d duration cost"
+#   line2="dir branch lines_changed ahead_behind dirty stash pr"
+#   line3="activity"
+# Reorder freely, e.g. put the activity line on top:
+#   line1="activity"
+#   line2="dir branch"
+#   line3="model context cost"
+# Tokens (one segment each; list in the order you want them):
+#   dir branch model context usage_5h usage_7d lines_changed dirty
+#   ahead_behind stash pr duration worktree cost cost_rate vim agent
+#   effort fast_mode tokens update activity
+# Notes: 'activity' is the live line (needs Node.js). Unknown tokens are
+# ignored. A token still obeys its show_* toggle — a disabled segment never
+# appears even if listed. Segments you don't list anywhere won't show.
+
+# ── Icons ───────────────────────────────────────────────────
+# classic = today's icon set (default) · modern = a refreshed set
+#   (directory ↱, branch ⑂, lines-changed ⇄, duration ⏱; model ◆ unchanged)
+# icon_set=classic
+# use_icons=true          # set false to drop all icons regardless of icon_set
 
 # ── Usage-limit labels ──────────────────────────────────────
 # countdown = time remaining like 2h20m (default) · clock = reset time like 2pm

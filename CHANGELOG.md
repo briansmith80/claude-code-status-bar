@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.19.0] - 2026-06-16
+
+Put any segment on any of up to three lines, and refresh the icon set — both opt-in, with a byte-identical default.
+
+### Added
+
+- **Customizable multi-line layout** (`layout`, `line1`/`line2`/`line3`). Pick a preset — `classic` (the unchanged default), `three-line`, or `stacked` — or hand-assign individual segment tokens to each of up to three lines, in any order. The live activity line is now a placeable `activity` token, so it can sit on any line (or none). Full token vocabulary in `statusline.conf.example`. A token still obeys its `show_*` toggle; unknown tokens are ignored; a segment lives on the first line that lists it; an empty line is hidden (no blank row). **Quote any `lineN` value with spaces** (the conf is sourced as shell), e.g. `line2="dir branch lines_changed"`.
+- **Refreshed icon set** (`icon_set=modern`). A more coherent set: directory ↱, branch ⑂, lines-changed ⇄, and a duration ⏱ that fills the previously-empty slot; model ◆ unchanged. `icon_set=classic` (the default) keeps today's exact icons, and `use_icons=false` still disables all icons.
+
+### Changed
+
+- The directory and branch segments are now separately addressable (`dir`, `branch`) but still render as the combined "path on <branch>" when adjacent (the default), so the out-of-the-box bar is byte-identical to v2.18.1.
+- **Both installers now back-fill `statusLine.refreshInterval` on an existing block that lacks one** (default `60`; a value you already set is never touched). Previously the default was written only when the block was first created, so anyone who installed before v2.10.1 had no refresh timer — their countdown labels and live-activity line only updated on a new message. The config template (`statusline.conf.example`) also gained a "Refresh rate" note explaining that `refreshInterval` lives in `settings.json`, not the conf, since that's the file users open to configure the bar.
+
+### Internal
+
+- The single-line assembler became a per-line engine: dir auto-collapse, priority truncation, and group bracketing now run scoped to each line. The forking `calc_total_width` was replaced with inline, REPLY-convention width sums (a small fork reduction). 20 new BATS tests (`tests/layout.bats`, `tests/icons.bats`); suite 144.
+
 ## [2.18.1] - 2026-06-14
 
 ### Changed
