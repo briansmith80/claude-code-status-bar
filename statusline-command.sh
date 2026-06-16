@@ -297,6 +297,25 @@ esac
 # Runs in the background so it never slows down the statusline.
 update_available=""
 
+# version_gt A B -> exit 0 if dotted-numeric version A is strictly greater than
+# B (missing / non-numeric fields count as 0). The update notice fires only for
+# a genuinely NEWER remote version, never a stale or older cached one — e.g.
+# raw.githubusercontent.com still serving the previous VERSION for minutes after
+# a release, or a cache left over from a local update would otherwise show a
+# phantom "↑ <older>" notice while you are already on the newer version.
+version_gt() {
+  local a="$1" b="$2" ai bi
+  while [ -n "$a" ] || [ -n "$b" ]; do
+    ai="${a%%.*}"; [ "$ai" = "$a" ] && a="" || a="${a#*.}"
+    bi="${b%%.*}"; [ "$bi" = "$b" ] && b="" || b="${b#*.}"
+    case "$ai" in ''|*[!0-9]*) ai=0 ;; esac
+    case "$bi" in ''|*[!0-9]*) bi=0 ;; esac
+    if [ "$ai" -gt "$bi" ]; then return 0; fi
+    if [ "$ai" -lt "$bi" ]; then return 1; fi
+  done
+  return 1
+}
+
 check_for_update() {
   # Read cache: "timestamp remote_version"
   if [ -f "$UPDATE_CACHE_FILE" ]; then
@@ -305,8 +324,9 @@ check_for_update() {
     # Guard: cached_time must be numeric (corrupted cache files may contain other data)
     case "$cached_time" in *[!0-9]*) cached_time="" ;; esac
     if [ -n "$cached_time" ] && [ $(( NOW_EPOCH - cached_time )) -lt $UPDATE_CHECK_INTERVAL ]; then
-      # Cache is fresh — use cached result
-      if [ -n "$cached_version" ] && [ "$cached_version" != "$VERSION" ]; then
+      # Cache is fresh — surface the notice only if the cached remote version
+      # is strictly newer than what we're running (not merely different).
+      if [ -n "$cached_version" ] && version_gt "$cached_version" "$VERSION"; then
         update_available="$cached_version"
       fi
       return

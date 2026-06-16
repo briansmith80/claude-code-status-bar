@@ -36,6 +36,26 @@ skip_if_windows() {
   assert_plain_contains "9.9.9"
 }
 
+@test "update notice is hidden when the cached version is OLDER than current" {
+  # Regression (v2.19.1): raw.githubusercontent.com can serve the previous
+  # VERSION for minutes after a release, caching an OLDER version. The notice
+  # must fire only for a strictly-newer version, never a phantom downgrade.
+  printf '%s %s\n' "$(date +%s)" "0.0.1" \
+    > "${TEST_HOME}/.claude/.statusline-update-cache"
+  run_statusline "$NOTICE_JSON"
+  assert_plain_not_contains "0.0.1"
+  assert_plain_not_contains "↑"
+}
+
+@test "update notice is hidden when the cached version equals current" {
+  local ver
+  ver="$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")"
+  printf '%s %s\n' "$(date +%s)" "$ver" \
+    > "${TEST_HOME}/.claude/.statusline-update-cache"
+  run_statusline "$NOTICE_JSON"
+  assert_plain_not_contains "↑"
+}
+
 @test "update notice links to the release notes by default" {
   force_update_notice
   run_statusline "$NOTICE_JSON"

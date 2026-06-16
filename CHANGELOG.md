@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.19.1] - 2026-06-16
+
+### Fixed
+
+- **Phantom "update available" notice showing an OLDER version.** The update-cache check fired whenever the cached remote version *differed* from the running version, not only when it was *newer*. So right after a release — while `raw.githubusercontent.com` still served the previous `VERSION` for a few minutes — a user already on the new version could see a stale `↑ <older>` downgrade notice until the next background check. The notice now uses a strict dotted-numeric `version_gt` comparison and fires only for a genuinely newer version (the `auto_update` trigger inherits the same guard, so it can never try to "update" to an older cached version). 2 new regression tests; suite 146.
+
 ## [2.19.0] - 2026-06-16
 
 Put any segment on any of up to three lines, and refresh the icon set — both opt-in, with a byte-identical default.
