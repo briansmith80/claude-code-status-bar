@@ -45,8 +45,7 @@ docs/assets/generate-banner.js -linguist-vendored -export-ignore
 
 # ── Internal docs: keep in tree, out of stats/diffs/archives ──
 CLAUDE.md  linguist-documentation export-ignore
-ROADMAP.md linguist-documentation export-ignore
-SPRINTS.md linguist-documentation export-ignore
+docs/enhancement-backlog.md linguist-documentation export-ignore
 
 # ── CHANGELOG is user/release-facing (release.yml parses it): docs only ──
 CHANGELOG.md linguist-documentation

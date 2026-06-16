@@ -548,7 +548,8 @@ claude-code-status-bar/
 ├── statusline-helper.js          # optional Node.js transcript parser (live activity line)
 ├── statusline-subagent.js        # optional Node.js renderer for the subagent panel rows
 ├── docs/
-│   └── assets/                   # README images + generators (hero, animated demo, per-theme previews under themes/)
+│   ├── assets/                   # README images + generators (hero, animated demo, per-theme previews under themes/)
+│   └── enhancement-backlog.md    # backlog, parked ideas, competitive landscape, principles
 ├── commands/
 │   ├── setup.md                  # /claude-code-status-bar:setup
 │   └── configure.md              # /claude-code-status-bar:configure
@@ -558,9 +559,7 @@ claude-code-status-bar/
 ├── .github/workflows/
 │   ├── shellcheck.yml            # lint (pushes to main, PRs)
 │   └── tests.yml                 # BATS suite on Linux, macOS, Windows (MSYS2)
-├── tests/                        # 124 BATS tests across 13 files
-├── ROADMAP.md                    # feature roadmap & competitive landscape
-├── SPRINTS.md                    # sprint plan
+├── tests/                        # 146 BATS tests across 15 files
 └── CLAUDE.md                     # project guide for working on this repo with Claude Code
 ```
 
