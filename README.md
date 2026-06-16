@@ -11,6 +11,8 @@
 
 *Your quota burn, context fill, git state, and live activity, visible under every response.*
 
+[![Live interactive demo](https://img.shields.io/badge/%F0%9F%8C%90%20Live%20interactive%20demo-d97757?style=for-the-badge)](https://briansmith80.github.io/claude-code-status-bar/)
+
 </div>
 
 ---
