@@ -250,9 +250,12 @@ write_remote_sha256sums() {
 0000000000000000000000000000000000000000000000000000000000000000  statusline-subagent.js
 EOF
 
+  # --update MUST exit non-zero on a checksum mismatch; capture the code without
+  # tripping bats' errexit so we can assert on it.
   output="$(HOME="${TEST_HOME}" STATUSLINE_REPO_RAW="file://${remote_dir}" \
-    bash "${STATUSLINE_SCRIPT}" --update 2>&1)"
+    bash "${STATUSLINE_SCRIPT}" --update 2>&1)" && rc=0 || rc=$?
 
+  [ "$rc" -ne 0 ]
   [[ "$output" == *"checksum verification failed"* ]]
   # Nothing swapped in: version unchanged and the tampered payload not installed.
   [ "$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")" = "$before" ]
