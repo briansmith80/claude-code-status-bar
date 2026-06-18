@@ -28,6 +28,11 @@ jobs:
           [ "$tag" = "$plugin_version" ] || { echo "::error::plugin.json version ($plugin_version) does not match tag ($tag)"; exit 1; }
           grep -Fq "## [$tag]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$tag] section"; exit 1; }
 
+      - name: Verify SHA256SUMS matches the released files
+        # The self-updater pulls these files + SHA256SUMS from the repo and
+        # verifies before installing (G1); a tag must never ship a stale manifest.
+        run: sha256sum -c SHA256SUMS
+
       - name: Extract changelog section
         run: |
           tag="${GITHUB_REF_NAME#v}"

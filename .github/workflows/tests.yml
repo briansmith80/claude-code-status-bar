@@ -12,6 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify SHA256SUMS is in sync
+        # The self-updater verifies staged files against SHA256SUMS before
+        # installing (security finding G1). Fail if the committed manifest has
+        # drifted from the runtime files — run scripts/update-sha256sums.sh.
+        run: sha256sum -c SHA256SUMS
       - name: Install BATS
         run: |
           sudo apt-get update -y

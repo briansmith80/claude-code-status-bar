@@ -200,6 +200,109 @@ skip_if_windows() {
   rm -rf "${remote_dir}"
 }
 
+# ── Integrity-verified self-update (G1) ──────────────────────
+# Write a SHA256SUMS manifest into a remote dir for the three updater files.
+# Skips the calling test if no sha256 tool is available.
+write_remote_sha256sums() {
+  local dir="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    ( cd "$dir" && sha256sum statusline-command.sh statusline-helper.js statusline-subagent.js > SHA256SUMS )
+  elif command -v shasum >/dev/null 2>&1; then
+    ( cd "$dir" && shasum -a 256 statusline-command.sh statusline-helper.js statusline-subagent.js > SHA256SUMS )
+  else
+    skip "no sha256 tool available"
+  fi
+}
+
+@test "--update verifies a matching SHA256SUMS and installs" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  remote_dir="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-remote-XXXXXX")"
+  printf '9.9.9\n'            > "${remote_dir}/VERSION"
+  printf 'echo verified\n'   > "${remote_dir}/statusline-command.sh"
+  printf '// h\n'            > "${remote_dir}/statusline-helper.js"
+  printf '// s\n'            > "${remote_dir}/statusline-subagent.js"
+  write_remote_sha256sums "$remote_dir"
+
+  output="$(HOME="${TEST_HOME}" STATUSLINE_REPO_RAW="file://${remote_dir}" \
+    bash "${STATUSLINE_SCRIPT}" --update 2>&1)"
+
+  [[ "$output" == *"Done"* ]]
+  [ "$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")" = "9.9.9" ]
+  grep -q "verified" "${TEST_HOME}/.claude/statusline-command.sh"
+  rm -rf "${remote_dir}"
+}
+
+@test "--update aborts and changes nothing when SHA256SUMS does not match" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || skip "no sha256 tool"
+  before="$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")"
+  remote_dir="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-remote-XXXXXX")"
+  printf '9.9.9\n'           > "${remote_dir}/VERSION"
+  printf 'echo tampered\n'   > "${remote_dir}/statusline-command.sh"
+  printf '// h\n'           > "${remote_dir}/statusline-helper.js"
+  printf '// s\n'           > "${remote_dir}/statusline-subagent.js"
+  # A manifest whose hashes do NOT match the served files (tamper simulation).
+  cat > "${remote_dir}/SHA256SUMS" <<'EOF'
+0000000000000000000000000000000000000000000000000000000000000000  statusline-command.sh
+0000000000000000000000000000000000000000000000000000000000000000  statusline-helper.js
+0000000000000000000000000000000000000000000000000000000000000000  statusline-subagent.js
+EOF
+
+  output="$(HOME="${TEST_HOME}" STATUSLINE_REPO_RAW="file://${remote_dir}" \
+    bash "${STATUSLINE_SCRIPT}" --update 2>&1)"
+
+  [[ "$output" == *"checksum verification failed"* ]]
+  # Nothing swapped in: version unchanged and the tampered payload not installed.
+  [ "$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")" = "$before" ]
+  ! grep -q "tampered" "${TEST_HOME}/.claude/statusline-command.sh"
+  # No staging files left behind.
+  [ -z "$(find "${TEST_HOME}/.claude" -maxdepth 1 -name '*.update.*' 2>/dev/null)" ]
+  rm -rf "${remote_dir}"
+}
+
+@test "--update still works when the remote has no SHA256SUMS (graceful skip)" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  remote_dir="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-remote-XXXXXX")"
+  printf '9.9.9\n'          > "${remote_dir}/VERSION"
+  printf 'echo nosums\n'    > "${remote_dir}/statusline-command.sh"
+  printf '// h\n'          > "${remote_dir}/statusline-helper.js"
+  printf '// s\n'          > "${remote_dir}/statusline-subagent.js"
+  # No SHA256SUMS in the remote — older forks must still be able to update.
+
+  HOME="${TEST_HOME}" STATUSLINE_REPO_RAW="file://${remote_dir}" \
+    bash "${STATUSLINE_SCRIPT}" --update >/dev/null 2>&1
+
+  [ "$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")" = "9.9.9" ]
+  grep -q "nosums" "${TEST_HOME}/.claude/statusline-command.sh"
+  rm -rf "${remote_dir}"
+}
+
+# ── Update source can't be repointed by statusline.conf (S2) ──
+@test "statusline.conf cannot repoint the auto-update source" {
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  # conf tries to redirect the updater at a bogus (nonexistent) source AND turns
+  # on auto_update; the real source comes from the environment. The conf value
+  # must be ignored — the update installs from the env source, not the conf one.
+  write_conf "auto_update=true" "REPO_RAW=file:///nonexistent-evil-source"
+  printf '%s %s\n' "$(date +%s)" "9.9.9" > "${TEST_HOME}/.claude/.statusline-update-cache"
+  remote_dir="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-remote-XXXXXX")"
+  printf '9.9.9\n'           > "${remote_dir}/VERSION"
+  printf 'echo from-env\n'   > "${remote_dir}/statusline-command.sh"
+  printf '// h\n'           > "${remote_dir}/statusline-helper.js"
+  printf '// s\n'           > "${remote_dir}/statusline-subagent.js"
+
+  run_statusline_env "$NOTICE_JSON" \
+    "STATUSLINE_REPO_RAW=file://${remote_dir}" "STATUSLINE_AUTOUPDATE_SYNC=1"
+
+  [ "$(tr -d '[:space:]' < "${TEST_HOME}/.claude/.statusline-version")" = "9.9.9" ]
+  grep -q "from-env" "${TEST_HOME}/.claude/statusline-command.sh"
+  rm -rf "${remote_dir}"
+}
+
 @test "auto_update=true does nothing when already current" {
   command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
   skip_if_windows

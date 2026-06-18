@@ -429,6 +429,7 @@ The script normally runs with no arguments, fed JSON on stdin by Claude Code. Th
 | `--version`, `-v` | Print the installed version and exit. |
 | `--check-update` | Clear the update cache and synchronously check GitHub for a newer version. Prints current and latest, plus the `--update` command if an update exists. |
 | `--update` | Download and install the latest version in place: overwrites `statusline-command.sh` and the two Node helpers, bumps `.statusline-version`, and clears the update cache. Each file is staged and only swapped in once every download succeeds, so a failed fetch changes nothing. Never touches `statusline.conf` or `settings.json`. |
+| `--open-config` | Open `~/.claude/statusline.conf` in your editor, creating it from the commented example template first if it doesn't exist yet. Editor preference: `$STATUSLINE_EDITOR`, then VS Code (`code`), then `$VISUAL`/`$EDITOR`, then the platform's default opener (`open`/`xdg-open`/`cygstart`/`start`). |
 | `--dump-config` | Print the resolved configuration (defaults merged with your `statusline.conf`) as sorted `key=value` lines. The fastest answer to "why isn't my override taking effect?" |
 | `--dump-stdin` | Echo the JSON Claude Code sends (pretty-printed when a working python3 is on PATH) plus a YES/NO report of detected fields: `rate_limits`, `transcript_path`, nested `model`, nested `context_window`. Pipe JSON in: `echo '<json>' \| bash ~/.claude/statusline-command.sh --dump-stdin` |
 | `--benchmark [N]` | Time N end-to-end runs (default 5) against a realistic canned payload and report min/avg/max, for picking a safe `refreshInterval`. Needs GNU date `%N` (Linux/MSYS2). Add `STATUSLINE_PROFILE=1` to any run for a per-phase breakdown on stderr. |
@@ -488,7 +489,8 @@ The installer wires this into `settings.json` when Node.js is present, leaving a
 Points that matter for a tool that runs on every response and can read your OAuth token:
 
 - All cache and temp files are created with `umask 077` (owner-readable only).
-- The OAuth token is passed to curl via `--config -` on stdin, so it never appears in the process list. The wget fallback can't do this (curl is strongly preferred) and runs with `--max-redirect=0` to prevent token leakage on redirects.
+- The OAuth token is passed to curl via `--config -` on stdin, so it never appears in the process list. The wget fallback writes the bearer header to a `0600` temp file passed via `--config` (never on argv, where `ps aux` could read it) and runs with `--max-redirect=0` to prevent token leakage on redirects; curl is still strongly preferred.
+- The self-updater (`--update` and the opt-in `auto_update`) verifies every downloaded file against a per-release `SHA256SUMS` before installing it, and aborts on any mismatch. The update source can only be set by a real environment variable, never by `statusline.conf`.
 - Branch names, paths, worktree names, and all transcript-derived text are stripped of ANSI escapes and control characters before being printed.
 - `~/.claude/statusline.conf` is sourced as bash; it has the same trust level as your `.bashrc`. The helper stores activity summaries, not transcript content (tool names, file basenames, and short snippets, 30-50 chars at most).
 

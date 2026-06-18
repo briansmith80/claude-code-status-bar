@@ -66,7 +66,15 @@ UPDATE_CHECK_INTERVAL=21600  # seconds between update checks (6 hours)
 UPDATE_CACHE_FILE="${SCRIPT_DIR}/.statusline-update-cache"
 # Base raw URL for VERSION and the self-update download. Overridable via
 # STATUSLINE_REPO_RAW (point at a fork, or a file:// path for testing).
-REPO_RAW="${STATUSLINE_REPO_RAW:-https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main}"
+# SECURITY (S2): capture the override from the *real* environment here, before
+# statusline.conf is sourced. statusline.conf is sourced as bash, so a malicious
+# line could otherwise repoint the (potentially unattended, auto_update) updater
+# at an attacker's host — turning a one-time file write into ongoing RCE. REPO_RAW
+# is re-pinned from this captured value AFTER the conf load, so the conf can never
+# change the update source; only a genuine env var (fork/CI/file:// for tests) can.
+_ENV_REPO_RAW="${STATUSLINE_REPO_RAW:-}"
+REPO_RAW_DEFAULT="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
+REPO_RAW="${_ENV_REPO_RAW:-$REPO_RAW_DEFAULT}"
 
 # ── Shared Helpers ──────────────────────────────────────────
 # HTTP GET helper — returns body on stdout. Usage: http_get URL [TIMEOUT]
@@ -88,17 +96,51 @@ EOF
     fi
   elif command -v wget > /dev/null 2>&1; then
     if [ -n "${HTTP_AUTH_HEADER:-}" ]; then
+      # SECURITY (S1): the OAuth bearer token must NOT go on argv — wget args are
+      # visible in `ps aux` to any local user. Write the secret Authorization
+      # header to a 0600 temp wgetrc and pass it via --config; the non-secret
+      # headers can stay on the command line. If we can't create the temp file,
+      # skip the authenticated fetch rather than leak the token (curl is the
+      # strongly-preferred path; this is a last-resort fallback anyway).
+      local wgetrc rc
+      wgetrc="$(mktemp 2>/dev/null)" || return 1
+      chmod 600 "$wgetrc" 2>/dev/null || true
+      printf 'header = %s\n' "$HTTP_AUTH_HEADER" > "$wgetrc"
       wget -qO- --timeout="$timeout" --max-redirect=0 \
-        --header="${HTTP_AUTH_HEADER}" \
+        --config="$wgetrc" \
         --header="anthropic-beta: oauth-2025-04-20" \
         --header="Content-Type: application/json" \
         "$url" 2>/dev/null
+      rc=$?
+      rm -f "$wgetrc"
+      return "$rc"
     else
       wget -qO- --timeout="$timeout" "$url" 2>/dev/null
     fi
   else
     return 1
   fi
+}
+
+# Compute the SHA-256 of a file into REPLY (hash only, no filename). Tries
+# sha256sum (Linux/MSYS2) then `shasum -a 256` (macOS). Returns non-zero if no
+# tool is available or the file can't be read.
+sha256_of() {
+  REPLY=""
+  if command -v sha256sum > /dev/null 2>&1; then
+    REPLY="$(sha256sum "$1" 2>/dev/null)" || return 1
+  elif command -v shasum > /dev/null 2>&1; then
+    REPLY="$(shasum -a 256 "$1" 2>/dev/null)" || return 1
+  else
+    return 1
+  fi
+  REPLY="${REPLY%% *}"   # keep only the leading hash field
+  [ -n "$REPLY" ]
+}
+
+# True when a SHA-256 tool is available for the integrity check.
+have_sha256() {
+  command -v sha256sum > /dev/null 2>&1 || command -v shasum > /dev/null 2>&1
 }
 
 # Self-update core (shared by --update and the opt-in auto-update). Downloads
@@ -112,7 +154,7 @@ EOF
 # touches statusline.conf or settings.json.
 # Usage: perform_self_update REMOTE_VERSION   ->  0 ok / 1 failed
 perform_self_update() {
-  local new_ver="$1" f g failed=""
+  local new_ver="$1" f g failed="" sums_tmp actual expected h n
   local files="statusline-command.sh statusline-helper.js statusline-subagent.js"
   # Self-heal staging files left behind by a previously killed attempt.
   find "$SCRIPT_DIR" -maxdepth 1 -name '*.update.*' -mmin +60 -delete 2>/dev/null || true
@@ -124,6 +166,34 @@ perform_self_update() {
       return 1
     fi
   done
+  # ── Integrity verification (G1) ──────────────────────────────
+  # The self-updater downloads and then runs bash; auto_update does so
+  # unattended. Before swapping anything in, verify every staged file against the
+  # release's SHA256SUMS manifest. A mismatch — or a truncated / tampered /
+  # man-in-the-middled download — aborts the update with nothing changed. When
+  # the manifest can't be fetched (older fork) OR no sha256 tool exists, skip the
+  # check gracefully so those installs can still update: checksums harden the
+  # canonical path, they don't gate every environment.
+  sums_tmp="${SCRIPT_DIR}/.SHA256SUMS.update.$$"
+  if have_sha256 && http_get "${REPO_RAW}/SHA256SUMS" 20 > "$sums_tmp" 2>/dev/null && [ -s "$sums_tmp" ]; then
+    for f in $files; do
+      actual=""
+      if sha256_of "${SCRIPT_DIR}/.${f}.update.$$"; then actual="$REPLY"; fi
+      expected=""
+      while read -r h n _; do
+        n="${n#\*}"      # drop the binary-mode marker some tools emit
+        n="${n##*/}"     # compare basenames
+        if [ "$n" = "$f" ]; then expected="$h"; break; fi
+      done < "$sums_tmp"
+      if [ -z "$actual" ] || [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+        echo "  ✗ checksum verification failed for ${f} — aborting update"
+        for g in $files; do rm -f "${SCRIPT_DIR}/.${g}.update.$$"; done
+        rm -f "$sums_tmp"
+        return 1
+      fi
+    done
+  fi
+  rm -f "$sums_tmp"
   for f in $files; do
     if mv "${SCRIPT_DIR}/.${f}.update.$$" "${SCRIPT_DIR}/${f}" 2>/dev/null; then
       echo "  ✓ ${f}"
@@ -217,6 +287,9 @@ case "${1:-}" in
     echo "                     (keeps statusline.conf and settings.json)"
     echo "  --dump-stdin     Pretty-print the raw JSON Claude Code sends (diagnostic)"
     echo "                     echo '<json>' | bash statusline-command.sh --dump-stdin"
+    echo "  --open-config    Open statusline.conf in your editor (creates it if absent)"
+    echo "                     bash statusline-command.sh --open-config"
+    echo "                     (prefers VS Code; override with \$STATUSLINE_EDITOR)"
     echo "  --dump-config    Print resolved config (defaults + statusline.conf)"
     echo "                     bash statusline-command.sh --dump-config"
     echo "  --uninstall      Interactively remove installed files (prompts before deleting)"
@@ -277,6 +350,51 @@ case "${1:-}" in
     echo "  Update aborted; nothing was changed. Update manually:"
     echo "    curl -fsSL ${REPO_RAW}/install.sh | bash"
     exit 1
+    ;;
+  --open-config)
+    # Open statusline.conf in an editor. Seeds it from the commented example
+    # template first if it doesn't exist yet, so there's always something to
+    # edit. Editor preference: $STATUSLINE_EDITOR override, then VS Code
+    # (`code`), then $VISUAL/$EDITOR, then the platform's default opener.
+    conf="${SCRIPT_DIR}/statusline.conf"
+    example="${SCRIPT_DIR}/statusline.conf.example"
+    if [ ! -f "$conf" ]; then
+      if [ -f "$example" ] && cp "$example" "$conf" 2>/dev/null; then
+        echo "Created ${conf} from the example template."
+      elif : > "$conf" 2>/dev/null; then
+        echo "Created empty ${conf} (no example template found)."
+      fi
+    fi
+    if [ ! -f "$conf" ]; then
+      echo "Could not create or find ${conf}." >&2
+      exit 1
+    fi
+    echo "Opening ${conf}"
+    if [ -n "${STATUSLINE_EDITOR:-}" ]; then
+      $STATUSLINE_EDITOR "$conf"
+    elif command -v code >/dev/null 2>&1; then
+      code "$conf"
+    elif [ -n "${VISUAL:-}" ]; then
+      $VISUAL "$conf"
+    elif [ -n "${EDITOR:-}" ]; then
+      $EDITOR "$conf"
+    elif command -v open >/dev/null 2>&1; then
+      open "$conf"        # macOS
+    elif command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$conf"    # Linux
+    elif command -v cygstart >/dev/null 2>&1; then
+      cygstart "$conf"    # MSYS2 / Cygwin
+    elif command -v cmd >/dev/null 2>&1; then
+      # Windows (Git Bash): cmd's `start` needs a native path, not MSYS /c/...
+      win_conf="$conf"
+      command -v cygpath >/dev/null 2>&1 && win_conf="$(cygpath -w "$conf")"
+      cmd //c start "" "$win_conf"
+    else
+      echo "No editor found. Set \$EDITOR or open it manually:" >&2
+      echo "  ${conf}" >&2
+      exit 1
+    fi
+    exit 0
     ;;
   --dump-stdin)
     # Diagnostic: show the raw JSON that Claude Code sends on stdin
@@ -448,6 +566,12 @@ STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 # line in the conf is therefore a harmless no-op (it's an environment-only knob,
 # not a config key — use colour_theme to set the theme in the conf).
 [ -n "$_env_theme" ] && colour_theme="$_env_theme"
+
+# SECURITY (S2): re-pin the update source from the value captured BEFORE the conf
+# load. This neutralises a conf line that tries to set REPO_RAW (or export
+# STATUSLINE_REPO_RAW) to repoint the self-updater — the update source can only
+# come from a real environment variable, never from the sourced config file.
+REPO_RAW="${_ENV_REPO_RAW:-$REPO_RAW_DEFAULT}"
 
 # Backwards compatibility: accept old name
 [ "${show_usage_weekly:-}" = "true" ] && show_usage_7d=true

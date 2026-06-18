@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.20.0] - 2026-06-18
+
+A security-hardening release for the self-updater — the path that downloads and runs bash, unattended when `auto_update=true` — plus a convenience flag for editing your config.
+
+### Added
+
+- **`--open-config` flag.** Opens `~/.claude/statusline.conf` in your editor, seeding it from the commented example template first if it doesn't exist yet, so there's always something to edit. Editor preference: `$STATUSLINE_EDITOR`, then VS Code (`code`), then `$VISUAL`/`$EDITOR`, then the platform's default opener (`open`/`xdg-open`/`cygstart`/`start`, with the Windows path translated for `cmd start`).
+
+### Security
+
+- **Self-update now verifies a `SHA256SUMS` manifest before installing (G1).** `perform_self_update` (shared by `--update` and the background `auto_update`) downloads the script + both helpers to staging files, then verifies each against a per-release `SHA256SUMS` fetched from the same source. A mismatch — or a truncated / tampered / man-in-the-middled download — aborts the update with nothing swapped in. Previously the only gate was "the download is non-empty," so unattended `auto_update` would execute whatever it received. If the manifest can't be fetched (an older fork) or no `sha256sum`/`shasum` tool is available, the check is skipped gracefully so those installs can still update — checksums harden the canonical path, they don't gate every environment. CI (`tests.yml` and `release.yml`) runs `sha256sum -c SHA256SUMS` so the committed manifest can never drift from the runtime files; regenerate it with `scripts/update-sha256sums.sh`.
+- **`statusline.conf` can no longer repoint the update source (S2).** The conf is sourced as bash, so a malicious line could set `REPO_RAW`/`STATUSLINE_REPO_RAW` to an attacker's host *and* flip `auto_update=true`, turning a one-time file write into ongoing remote code execution on every render. The update source is now captured from the real environment **before** the conf loads and re-pinned **after** it, so only a genuine environment variable (a fork, CI, or `file://` for tests) can change it — never the config file.
+- **The wget OAuth fallback no longer leaks the bearer token via `ps` (S1).** `http_get`'s wget path passed `--header="Authorization: Bearer …"` on argv, visible in `ps aux` to any local user. The secret header now goes through a `0600` temp wgetrc passed via `--config`; if that file can't be created, the authenticated fetch is skipped rather than leaking the token. (curl, the preferred path, already used `--config -`.)
+
+### Internal
+
+- New `sha256_of` / `have_sha256` helpers; a committed `SHA256SUMS` manifest with the `scripts/update-sha256sums.sh` generator; CI drift guards in `tests.yml` and `release.yml`. 4 new self-update BATS tests (matching-manifest install, tamper abort, no-manifest graceful skip, conf-cannot-repoint-the-updater) and 5 new `--open-config` tests; suite 155.
+
 ## [2.19.1] - 2026-06-16
 
 ### Fixed
