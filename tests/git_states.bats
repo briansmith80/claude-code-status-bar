@@ -80,6 +80,27 @@ repo_json() {
   assert_plain_not_contains "↓"
 }
 
+@test "git_untracked=false excludes untracked files from the dirty count" {
+  require_git
+  make_diverged_repo   # work tree is clean except one untracked file (d1.txt)
+  run_statusline "$(repo_json)"
+  assert_plain_contains "1 dirty"     # default: the untracked file counts
+  write_conf "git_untracked=false"
+  run_statusline "$(repo_json)"
+  assert_plain_not_contains "dirty"   # -uno: untracked no longer counted -> clean
+  assert_plain_contains "main"        # branch + ahead/behind still render
+}
+
+@test "git_timeout renders normally when a timeout command is available" {
+  require_git
+  command -v timeout > /dev/null 2>&1 || command -v gtimeout > /dev/null 2>&1 || skip "no timeout command"
+  make_diverged_repo
+  write_conf "git_timeout=5"
+  run_statusline "$(repo_json)"
+  assert_plain_contains "main"
+  assert_plain_contains "1 dirty"
+}
+
 @test "--help documents --benchmark" {
   run env HOME="${TEST_HOME}" bash "${STATUSLINE_SCRIPT}" --help
   [ "$status" -eq 0 ]

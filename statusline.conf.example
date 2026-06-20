@@ -93,6 +93,14 @@
 # branch_max_length=     # truncate long branch names with … (empty = no limit)
 # use_groups=false       # bracket related segments: [model+context] [usage] [git] …
 
+# ── Git performance (large / network-mounted repos) ─────────
+# git_untracked=true     # false adds --untracked-files=no: skips the untracked
+#                        # scan (the part of `git status` that scales with repo
+#                        # size). Faster on huge/monorepo/network checkouts; the
+#                        # trade-off is untracked files no longer count as dirty.
+# git_timeout=0          # >0 wraps the git calls in `timeout N` (or gtimeout) so
+#                        # a hung NFS/SMB mount can't stall the render. 0 = off.
+
 # ── Context warning ─────────────────────────────────────────
 # auto = warn within 20k tokens of auto-compact (default) · or a raw % like 80
 # context_warn_threshold=auto

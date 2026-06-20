@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.20.2] - 2026-06-20
+
+Opt-in git-segment controls for large / slow / network-mounted repositories. Both default to the current behaviour, so a normal render is unchanged.
+
+### Performance
+
+- **`git_untracked` (default `true`).** Setting it to `false` adds `--untracked-files=no` to the `git status` call, skipping the untracked-file scan, which is the only part of `git status` that scales with working-tree size. This noticeably speeds up the git segment on huge / monorepo / network-mounted checkouts. Trade-off: untracked files no longer count toward the dirty total (tracked modifications and staged changes still do).
+- **`git_timeout` (default `0` = off).** Setting it to a positive number wraps the two git calls in a best-effort `timeout N` (or macOS `gtimeout`) so a hung NFS/SMB mount or a slow filesystem hook can't stall the render. Where no timeout command exists (e.g. stock macOS without coreutils) the raw call is used regardless.
+
+A general git result cache was evaluated and **deliberately not added**: an unstaged working-tree edit does not change `.git/index`'s mtime (verified), so any cheap mtime/HEAD-based cache key would show a stale dirty count until the next `git add`. Correct invalidation would cost as much as just running `git status`, so the render stays authoritative by default.
+
+### Internal
+
+- 2 new BATS tests in `tests/git_states.bats` (untracked exclusion, timeout render). Suite 162.
+
 ## [2.20.1] - 2026-06-20
 
 A follow-up security and correctness release. It closes a terminal control-sequence injection on the main status line, extends the v2.20.0 checksum verification to the installers (the documented update path), and removes the last "never block the render" violations. Found by a security + performance gap audit of v2.20.0.

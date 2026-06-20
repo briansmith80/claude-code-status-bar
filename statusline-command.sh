@@ -488,6 +488,17 @@ show_lines_changed=true
 show_dirty_count=true
 show_ahead_behind=true
 show_stash=true
+# git_untracked=false adds `--untracked-files=no` to the status call, skipping
+# the working-tree scan for untracked files — the only part of `git status` that
+# scales with repo size. Speeds up large / network-mounted repos; the trade-off
+# is that untracked files no longer count toward the dirty total. Default true
+# keeps the current behaviour (untracked counted).
+git_untracked=true
+# git_timeout=N wraps the two git calls in a best-effort `timeout N` (or macOS
+# `gtimeout`) so a hung NFS/SMB mount can't stall the render. 0 disables it
+# (default; no behaviour change). Where no timeout command exists (e.g. stock
+# macOS without coreutils) the raw call is used regardless.
+git_timeout=0
 show_duration=true
 show_worktree=true
 show_cost=true
@@ -1130,9 +1141,18 @@ stash_count=""
 # Repo gate doubles as git-dir discovery: --git-dir for the gate itself,
 # --git-common-dir for the stash log (linked worktrees share the stash in
 # the common dir). One fork for both.
+# Optional best-effort timeout prefix (git_timeout>0) so a hung network mount
+# can't stall the render; resolved once, empty when disabled or no timeout cmd.
+git_tmo=""
+case "${git_timeout:-0}" in
+  ''|*[!0-9]*|0) ;;
+  *) if command -v timeout > /dev/null 2>&1; then git_tmo="timeout ${git_timeout}"
+     elif command -v gtimeout > /dev/null 2>&1; then git_tmo="gtimeout ${git_timeout}"; fi ;;
+esac
 git_dirs=""
 if [ -n "$cwd" ] && [ -d "$cwd" ]; then
-  git_dirs=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-parse --git-dir --git-common-dir 2>/dev/null) || git_dirs=""
+  # shellcheck disable=SC2086  # $git_tmo is an intentional optional command prefix
+  git_dirs=$($git_tmo git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-parse --git-dir --git-common-dir 2>/dev/null) || git_dirs=""
 fi
 if [ -n "$git_dirs" ]; then
   git_common="${git_dirs##*$'\n'}"
@@ -1142,7 +1162,11 @@ if [ -n "$git_dirs" ]; then
   # their wc/tr/cut pipelines. Header lines are parsed in pure bash; the
   # entry count comes from line arithmetic so huge dirty trees stay cheap.
   if [ "$show_branch" = "true" ] || [ "$show_dirty_count" = "true" ] || [ "$show_ahead_behind" = "true" ]; then
-    git_status=$(git -C "$cwd" --no-optional-locks -c core.fsmonitor=false status --porcelain=v2 --branch 2>/dev/null) || git_status=""
+    # git_untracked=false skips the untracked-file scan (the only part of
+    # `git status` that scales with working-tree size).
+    git_uflag=""; [ "$git_untracked" = "false" ] && git_uflag="--untracked-files=no"
+    # shellcheck disable=SC2086  # $git_tmo / $git_uflag are intentional optional args
+    git_status=$($git_tmo git -C "$cwd" --no-optional-locks -c core.fsmonitor=false status --porcelain=v2 --branch $git_uflag 2>/dev/null) || git_status=""
     git_oid="" git_head="" git_headers=0 git_rest="$git_status"
     while [ -n "$git_rest" ]; do
       git_line="${git_rest%%$'\n'*}"
