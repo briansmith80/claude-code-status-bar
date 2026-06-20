@@ -7,7 +7,10 @@
 
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
+# Overridable so forks / CI / offline installs can point at another source
+# (e.g. a local file:// or http:// mirror). The integrity check below still
+# verifies every download against that source's SHA256SUMS.
+REPO_RAW="${STATUSLINE_REPO_RAW:-https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main}"
 SCRIPT_NAME="statusline-command.sh"
 
 target_dir="$HOME/.claude"
@@ -19,39 +22,84 @@ version_file="${target_dir}/.statusline-version"
 
 mkdir -p "$target_dir"
 
-# Download VERSION first so we can display it
-if command -v curl > /dev/null 2>&1; then
-  curl -fsSL "${REPO_RAW}/VERSION" -o "$version_file"
-  VERSION=$(tr -d '[:space:]' < "$version_file")
-
-  if [ -f "$target_file" ]; then
-    echo "Updating claude-code-status-bar to v${VERSION}..."
-  else
-    echo "Installing claude-code-status-bar v${VERSION}..."
-  fi
-
-  curl -fsSL "${REPO_RAW}/${SCRIPT_NAME}" -o "$target_file"
-  # Download Node.js helpers: live activity line + subagent panel rows (optional)
-  curl -fsSL "${REPO_RAW}/statusline-helper.js" -o "${target_dir}/statusline-helper.js" 2>/dev/null || true
-  curl -fsSL "${REPO_RAW}/statusline-subagent.js" -o "${target_dir}/statusline-subagent.js" 2>/dev/null || true
-elif command -v wget > /dev/null 2>&1; then
-  wget -qO "$version_file" "${REPO_RAW}/VERSION"
-  VERSION=$(tr -d '[:space:]' < "$version_file")
-
-  if [ -f "$target_file" ]; then
-    echo "Updating claude-code-status-bar to v${VERSION}..."
-  else
-    echo "Installing claude-code-status-bar v${VERSION}..."
-  fi
-
-  wget -qO "$target_file" "${REPO_RAW}/${SCRIPT_NAME}"
-  # Download Node.js helpers: live activity line + subagent panel rows (optional)
-  wget -qO "${target_dir}/statusline-helper.js" "${REPO_RAW}/statusline-helper.js" 2>/dev/null || true
-  wget -qO "${target_dir}/statusline-subagent.js" "${REPO_RAW}/statusline-subagent.js" 2>/dev/null || true
-else
+if ! command -v curl > /dev/null 2>&1 && ! command -v wget > /dev/null 2>&1; then
   echo "Error: curl or wget is required."
   exit 1
 fi
+
+# Download $1 -> $2 using curl (preferred) or wget. Returns non-zero on failure.
+fetch() {
+  if command -v curl > /dev/null 2>&1; then
+    curl -fsSL "$1" -o "$2"
+  else
+    wget -qO "$2" "$1"
+  fi
+}
+
+# SHA-256 of $1 into REPLY (hash field only). sha256sum (Linux/MSYS2) then
+# `shasum -a 256` (macOS); non-zero if no tool / unreadable file.
+have_sha256() { command -v sha256sum > /dev/null 2>&1 || command -v shasum > /dev/null 2>&1; }
+sha256_of() {
+  REPLY=""
+  if command -v sha256sum > /dev/null 2>&1; then REPLY="$(sha256sum "$1" 2>/dev/null)" || return 1
+  elif command -v shasum > /dev/null 2>&1; then REPLY="$(shasum -a 256 "$1" 2>/dev/null)" || return 1
+  else return 1; fi
+  REPLY="${REPLY%% *}"; [ -n "$REPLY" ]
+}
+
+# Download VERSION first so we can display it.
+fetch "${REPO_RAW}/VERSION" "$version_file"
+VERSION=$(tr -d '[:space:]' < "$version_file")
+if [ -f "$target_file" ]; then
+  echo "Updating claude-code-status-bar to v${VERSION}..."
+else
+  echo "Installing claude-code-status-bar v${VERSION}..."
+fi
+
+# Stage the runtime files to a temp dir, verify each against the release's
+# SHA256SUMS, and only THEN move them into ~/.claude — mirroring the runtime
+# self-updater (security finding G1). This installer doubles as the documented
+# update path, so it must not write or chmod+x a tampered / truncated / MITM'd
+# download. On a checksum mismatch we abort leaving ~/.claude untouched; when no
+# sha256 tool exists or the manifest can't be fetched (older fork) the check is
+# skipped gracefully so those installs still work, exactly like --update.
+runtime_files="${SCRIPT_NAME} statusline-helper.js statusline-subagent.js"
+stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/ccsb-install-XXXXXX")"
+cleanup_stage() { [ -n "${stage_dir:-}" ] && rm -rf "$stage_dir"; }
+trap cleanup_stage EXIT
+
+for f in $runtime_files; do
+  if ! fetch "${REPO_RAW}/${f}" "${stage_dir}/${f}" 2>/dev/null; then
+    if [ "$f" = "$SCRIPT_NAME" ]; then
+      echo "Error: failed to download ${f} — aborting (nothing installed)." >&2
+      exit 1
+    fi
+    rm -f "${stage_dir}/${f}"   # the two .js helpers are optional
+  fi
+done
+
+if have_sha256 && fetch "${REPO_RAW}/SHA256SUMS" "${stage_dir}/SHA256SUMS" 2>/dev/null \
+   && [ -s "${stage_dir}/SHA256SUMS" ]; then
+  for f in $runtime_files; do
+    [ -f "${stage_dir}/${f}" ] || continue   # optional helper not downloaded
+    actual=""; sha256_of "${stage_dir}/${f}" && actual="$REPLY"
+    expected=""
+    while read -r h n _; do
+      n="${n#\*}"; n="${n##*/}"   # drop binary marker; compare basenames
+      if [ "$n" = "$f" ]; then expected="$h"; break; fi
+    done < "${stage_dir}/SHA256SUMS"
+    if [ -z "$actual" ] || [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+      echo "Error: checksum verification failed for ${f} — aborting (nothing installed)." >&2
+      exit 1
+    fi
+  done
+  echo "  Integrity verified against SHA256SUMS."
+fi
+
+# Verified (or skipped gracefully) — move staged files into place.
+mv -f "${stage_dir}/${SCRIPT_NAME}" "$target_file"
+[ -f "${stage_dir}/statusline-helper.js" ]   && mv -f "${stage_dir}/statusline-helper.js"   "${target_dir}/statusline-helper.js"
+[ -f "${stage_dir}/statusline-subagent.js" ] && mv -f "${stage_dir}/statusline-subagent.js" "${target_dir}/statusline-subagent.js"
 
 chmod +x "$target_file"
 echo "  Script installed to: ${target_file}"

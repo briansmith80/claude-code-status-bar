@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.20.1] - 2026-06-20
+
+A follow-up security and correctness release. It closes a terminal control-sequence injection on the main status line, extends the v2.20.0 checksum verification to the installers (the documented update path), and removes the last "never block the render" violations. Found by a security + performance gap audit of v2.20.0.
+
+### Security
+
+- **Line 1 no longer decodes escape text from untrusted fields (high).** The main status line was printed with `printf "%b"`, which decodes backslash escapes (`\033`, `\e`, `\x1b`, ...) anywhere in the string, including in untrusted fields. So a directory or git-branch name carrying the printable text `\033]0;...\007` could inject a real OSC/ANSI control sequence (a window-title spoof, an arbitrary colour) on every render, slipping past `sanitize()` (which strips control *bytes*, not the 4-character text `\033`) and the OSC 8 allowlist. The script's own colours and hyperlinks now carry real ESC bytes set at their source, and line 1 is printed with `%s`, so untrusted escape *text* can never decode into a control sequence. Stdout is byte-identical for all legitimate input (line 2 already used this approach).
+- **`model` and `vim.mode` are now sanitized (medium).** Every other displayed field passed through `sanitize()` to strip raw ANSI/control bytes; these two did not. They now do, closing the matching raw-ESC-byte vector and making line-1 field handling uniform.
+- **The installers now verify `SHA256SUMS` before installing (high).** `install.sh` and `install.ps1` double as the documented update path, yet they downloaded the script + helpers and marked them executable with no integrity check, bypassing the v2.20.0 self-update verification (G1) through the front door. Both now stage downloads to a temp location, verify each against the release's `SHA256SUMS`, and only then move them into `~/.claude`. A mismatch aborts leaving the install untouched; a missing manifest or sha256 tool skips the check gracefully, exactly like `--update`.
+
+### Performance
+
+- **Background jobs no longer hold the render's stdout pipe open (P1).** The update check, the OAuth usage fetch, and the Node activity helper were spawned without detaching stdout, so Claude Code (which reads the status line until EOF) waited for their network/parse work to finish before drawing the bar, even though the visible text had already flushed. All three are now fully detached (`>/dev/null 2>&1 </dev/null &`), matching the auto-update spawn, which restores the never-block-the-render guarantee.
+- **The default cost segment is now fork-free.** It used a `printf` subshell plus a nested `awk` subshell (3 forks per render) to format the cost and derive integer cents for the colour threshold. It now uses `printf -v` (a builtin) and pure-bash integer arithmetic via a shared `to_cents` helper, dropping to zero forks on the default render path. Formatting is byte-identical (the same applies to the opt-in `cost_rate` segment).
+
+### Added
+
+- `STATUSLINE_REPO_RAW` now also overrides the download source for `install.sh` (forks, CI, offline mirrors); the integrity check still verifies every download against that source's `SHA256SUMS`.
+
+### Internal
+
+- New `tests/security.bats` (control-sequence-injection regressions for line 1 plus the `model`/`vim.mode` sanitize holes) and a `to_cents` pure-bash helper shared by the cost and cost-rate segments. Suite 160.
+
 ## [2.20.0] - 2026-06-18
 
 A security-hardening release for the self-updater — the path that downloads and runs bash, unattended when `auto_update=true` — plus a convenience flag for editing your config.

@@ -37,7 +37,7 @@ Claude Code warns you about your rate limit and your full context window only on
 - **Live activity**: a second line of running tools, subagents, and todo progress.
 - **Cost**: session cost and burn rate, colour-coded.
 
-Pure bash, no jq, no compiled binaries, one-line install, eight colour themes. Works on macOS, Linux, and Windows (Git Bash); every network call runs in the background, so the bar itself never blocks. Backed by 124 automated tests on all three platforms (plus ShellCheck) in CI.
+Pure bash, no jq, no compiled binaries, one-line install, eight colour themes. Works on macOS, Linux, and Windows (Git Bash); every network call runs in the background, so the bar itself never blocks. Backed by 160 automated tests on all three platforms (plus ShellCheck) in CI.
 
 ## Install
 
@@ -490,8 +490,8 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 - All cache and temp files are created with `umask 077` (owner-readable only).
 - The OAuth token is passed to curl via `--config -` on stdin, so it never appears in the process list. The wget fallback writes the bearer header to a `0600` temp file passed via `--config` (never on argv, where `ps aux` could read it) and runs with `--max-redirect=0` to prevent token leakage on redirects; curl is still strongly preferred.
-- The self-updater (`--update` and the opt-in `auto_update`) verifies every downloaded file against a per-release `SHA256SUMS` before installing it, and aborts on any mismatch. The update source can only be set by a real environment variable, never by `statusline.conf`.
-- Branch names, paths, worktree names, and all transcript-derived text are stripped of ANSI escapes and control characters before being printed.
+- The self-updater (`--update` and the opt-in `auto_update`) **and the installers** (`install.sh` / `install.ps1`, which double as the update path) verify every downloaded file against a per-release `SHA256SUMS` before installing it, and abort on any mismatch leaving the install untouched. The update source can only be set by a real environment variable, never by `statusline.conf`.
+- Branch names, paths, worktree names, the model and vim-mode labels, and all transcript-derived text are stripped of ANSI escapes and control characters before being printed. Both status-bar lines are printed with `printf '%s'` (never `%b`), so escape *text* embedded in an untrusted field (for example a maliciously named directory) is shown literally and can never decode into a live terminal control sequence.
 - `~/.claude/statusline.conf` is sourced as bash; it has the same trust level as your `.bashrc`. The helper stores activity summaries, not transcript content (tool names, file basenames, and short snippets, 30-50 chars at most).
 
 ## More

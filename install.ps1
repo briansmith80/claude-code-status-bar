@@ -53,10 +53,62 @@ if (Test-Path $scriptPath) {
   Write-Host "Installing claude-code-status-bar v$version..."
 }
 
-Get-RepoFile -Name 'statusline-command.sh' -Dest $scriptPath
-# Node.js helpers (optional): live activity line + subagent panel rows
-foreach ($helper in @('statusline-helper.js', 'statusline-subagent.js')) {
-  try { Get-RepoFile -Name $helper -Dest (Join-Path $TargetDir $helper) } catch { }
+# Stage the runtime files, verify each against the release's SHA256SUMS, then
+# move them into place - mirroring the runtime self-updater (security finding
+# G1). This installer doubles as the documented update path, so it must not
+# write a tampered / truncated download. On a checksum mismatch we abort leaving
+# the install untouched; when the manifest is unavailable (older fork) the check
+# is skipped gracefully. statusline-command.sh is required; the .js helpers are
+# optional.
+$runtimeFiles = @('statusline-command.sh', 'statusline-helper.js', 'statusline-subagent.js')
+$stageDir = New-Item -ItemType Directory -Force -Path `
+  (Join-Path ([System.IO.Path]::GetTempPath()) ("ccsb-install-" + [System.IO.Path]::GetRandomFileName()))
+try {
+  foreach ($f in $runtimeFiles) {
+    try {
+      Get-RepoFile -Name $f -Dest (Join-Path $stageDir $f)
+    } catch {
+      if ($f -eq 'statusline-command.sh') {
+        throw "Failed to download $f - aborting (nothing installed). $($_.Exception.Message)"
+      }
+    }
+  }
+
+  $sumsPath = Join-Path $stageDir 'SHA256SUMS'
+  $haveSums = $false
+  try {
+    Get-RepoFile -Name 'SHA256SUMS' -Dest $sumsPath
+    $haveSums = (Test-Path $sumsPath) -and ((Get-Item $sumsPath).Length -gt 0)
+  } catch { $haveSums = $false }
+
+  if ($haveSums) {
+    $expected = @{}
+    foreach ($line in Get-Content $sumsPath) {
+      $parts = $line.Trim() -split '\s+', 2
+      if ($parts.Count -eq 2) {
+        $name = Split-Path ($parts[1] -replace '^\*', '') -Leaf   # drop binary marker; basename
+        $expected[$name] = $parts[0].ToLower()
+      }
+    }
+    foreach ($f in $runtimeFiles) {
+      $staged = Join-Path $stageDir $f
+      if (-not (Test-Path $staged)) { continue }   # optional helper not downloaded
+      $actual = (Get-FileHash -Path $staged -Algorithm SHA256).Hash.ToLower()
+      if (-not $expected.ContainsKey($f) -or $expected[$f] -ne $actual) {
+        throw "Checksum verification failed for $f - aborting (nothing installed)."
+      }
+    }
+    Write-Host "  Integrity verified against SHA256SUMS."
+  }
+
+  # Verified (or skipped gracefully) - move staged files into place.
+  Move-Item -Path (Join-Path $stageDir 'statusline-command.sh') -Destination $scriptPath -Force
+  foreach ($helper in @('statusline-helper.js', 'statusline-subagent.js')) {
+    $staged = Join-Path $stageDir $helper
+    if (Test-Path $staged) { Move-Item -Path $staged -Destination (Join-Path $TargetDir $helper) -Force }
+  }
+} finally {
+  Remove-Item -Path $stageDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "  Files installed to: $TargetDir"

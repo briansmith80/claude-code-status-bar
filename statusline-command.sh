@@ -457,7 +457,7 @@ check_for_update() {
     if [ -n "$remote_version" ]; then
       echo "$(date +%s) $remote_version" > "$UPDATE_CACHE_FILE"
     fi
-  ) &
+  ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
 }
 
 # Skip the background update check for diagnostic / management flags
@@ -822,19 +822,28 @@ cube_index() {
   fi
 }
 
+# Real ESC/BEL bytes, defined early so the colour helpers and themes below can
+# emit GENUINE escape bytes (not the literal text "\033"). The line-1 metric is
+# printed with %s (never %b — see line-1 render), so the script's own colours
+# must already be real ESC, and an untrusted field carrying the printable text
+# "\033" can never be decoded into a live control sequence. BSD sed (stock
+# macOS) does not interpret \x1b, so the bytes are interpolated from bash.
+ESC_CH=$'\x1b'
+BEL_CH=$'\x07'
+
 # Convert a 6-hex colour to an SGR fg escape, truecolour or nearest-256.
-# Pure bash (no forks); returns the literal "\033[...m" text via REPLY.
+# Pure bash (no forks); returns real-ESC "<ESC>[...m" text via REPLY.
 tc_clr() {
   local h="$1" r g b ri gi bi
   r=$(( 16#${h:0:2} )); g=$(( 16#${h:2:2} )); b=$(( 16#${h:4:2} ))
   if [ "$TRUECOLOR" = "1" ]; then
-    REPLY="\033[38;2;${r};${g};${b}m"
+    REPLY="${ESC_CH}[38;2;${r};${g};${b}m"
     return
   fi
   cube_index "$r"; ri=$REPLY
   cube_index "$g"; gi=$REPLY
   cube_index "$b"; bi=$REPLY
-  REPLY="\033[38;5;$(( 16 + 36*ri + 6*gi + bi ))m"
+  REPLY="${ESC_CH}[38;5;$(( 16 + 36*ri + 6*gi + bi ))m"
 }
 
 # Assign every CLR_* role from a positional hex list (truecolour-aware).
@@ -861,7 +870,7 @@ apply_palette() {
   tc_clr "${18}"; CLR_RAMP3=$REPLY
   # Raw ramp hexes kept for the smooth per-cell gradient bar (bar_gradient).
   RAMP_HEX="${15} ${16} ${17} ${18}"
-  CLR_RESET="\033[0m"
+  CLR_RESET="${ESC_CH}[0m"
 }
 
 apply_theme() {
@@ -891,25 +900,25 @@ apply_theme() {
       CLR_RESET=""
       ;;
     *) # default — original colours
-      CLR_DIR="\033[0;36m"     # cyan
-      CLR_BRANCH="\033[0;35m"  # magenta
-      CLR_MODEL="\033[0;34m"   # blue
-      CLR_MODEL_OPUS="\033[38;5;208m" # orange (Opus tier)
-      CLR_MODEL_FABLE="\033[38;5;141m" # purple (Fable tier)
-      CLR_ADD="\033[0;32m"     # green
-      CLR_DEL="\033[0;31m"     # red
-      CLR_WARN="\033[0;33m"    # yellow
-      CLR_INFO="\033[0;36m"    # cyan
-      CLR_DIM="\033[0;90m"    # dark grey
-      CLR_BAR_OK="\033[0;32m"  # green
-      CLR_BAR_MED="\033[0;33m" # yellow
-      CLR_BAR_HIGH="\033[0;31m" # red
-      CLR_PACE="\033[38;5;199m"  # hot pink pacing marker
-      CLR_RAMP0="\033[38;5;40m"  CLR_RAMP1="\033[38;5;220m" # todo-bar gradient
-      CLR_RAMP2="\033[38;5;208m" CLR_RAMP3="\033[38;5;196m" # green->yellow->orange->red (heat)
+      CLR_DIR="${ESC_CH}[0;36m"     # cyan
+      CLR_BRANCH="${ESC_CH}[0;35m"  # magenta
+      CLR_MODEL="${ESC_CH}[0;34m"   # blue
+      CLR_MODEL_OPUS="${ESC_CH}[38;5;208m" # orange (Opus tier)
+      CLR_MODEL_FABLE="${ESC_CH}[38;5;141m" # purple (Fable tier)
+      CLR_ADD="${ESC_CH}[0;32m"     # green
+      CLR_DEL="${ESC_CH}[0;31m"     # red
+      CLR_WARN="${ESC_CH}[0;33m"    # yellow
+      CLR_INFO="${ESC_CH}[0;36m"    # cyan
+      CLR_DIM="${ESC_CH}[0;90m"    # dark grey
+      CLR_BAR_OK="${ESC_CH}[0;32m"  # green
+      CLR_BAR_MED="${ESC_CH}[0;33m" # yellow
+      CLR_BAR_HIGH="${ESC_CH}[0;31m" # red
+      CLR_PACE="${ESC_CH}[38;5;199m"  # hot pink pacing marker
+      CLR_RAMP0="${ESC_CH}[38;5;40m"  CLR_RAMP1="${ESC_CH}[38;5;220m" # todo-bar gradient
+      CLR_RAMP2="${ESC_CH}[38;5;208m" CLR_RAMP3="${ESC_CH}[38;5;196m" # green->yellow->orange->red (heat)
       # Hex stops for the smooth gradient bar — a green->red "heat" ramp.
       RAMP_HEX="2ecc40 ffdc00 ff851b ff4136"
-      CLR_RESET="\033[0m"
+      CLR_RESET="${ESC_CH}[0m"
       ;;
   esac
 }
@@ -984,10 +993,8 @@ extract_block() {
 extract()     { extract_from "$input" "$1"; }
 extract_num() { extract_num_from "$input" "$1"; }
 
-# Real ESC/BEL bytes for patterns: BSD sed (stock macOS) does not interpret
-# \x1b hex escapes, so the bytes are interpolated from bash instead.
-ESC_CH=$'\x1b'
-BEL_CH=$'\x07'
+# ESC_CH / BEL_CH are defined near tc_clr (above) so the theme constants can
+# carry real ESC bytes; they are reused here for sanitize/visible_width.
 
 # Strip ANSI escape sequences and control characters from untrusted strings.
 # Handles CSI (ESC[...), OSC terminated by BEL or ST (ESC\), and DCS/APC.
@@ -1018,11 +1025,17 @@ sanitize() {
 # ESC SGR, defensively) in pure bash. The old printf|sed pipeline cost 3
 # forks per segment.
 visible_width() {
-  local s="$1" pat='\\033\]8;[^\\]*\\033\\\\'
+  local s="$1" pat
+  # OSC 8 hyperlink wrappers — real ESC form (the colours/links now carry real
+  # ESC bytes), then the legacy literal "\033" form defensively.
+  pat="${ESC_CH}\]8;[^${ESC_CH}]*${ESC_CH}\\\\"
+  while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
+  pat='\\033\]8;[^\\]*\\033\\\\'
+  while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
+  # SGR sequences — real ESC, then legacy literal "\033".
+  pat="${ESC_CH}\[[0-9;]*[a-zA-Z]"
   while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
   pat='\\033\[[0-9;]*[a-zA-Z]'
-  while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
-  pat="${ESC_CH}\[[0-9;]*[a-zA-Z]"
   while [[ $s =~ $pat ]]; do s="${s//"${BASH_REMATCH[0]}"/}"; done
   REPLY=${#s}
 }
@@ -1051,6 +1064,9 @@ if [ -z "$model" ]; then extract "display_name"; model=$REPLY; fi
 # Drop the redundant " context" from window-size suffixes to save space:
 # "Opus 4.8 (1M context)" -> "Opus 4.8 (1M)". Only touches that exact pattern.
 model="${model/ context)/)}"
+# Strip ANSI/control bytes like every other displayed field (defence in depth;
+# the %s line-1 print already blocks decoded escape *text*, this blocks raw bytes).
+sanitize "$model"; model=$REPLY
 
 # Context window usage: prefer context_window.used_percentage (new schema), fall back.
 # The fallback only runs when rate_limits is absent (old flat schema) to avoid
@@ -1296,7 +1312,7 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
         node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null
       else
         node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null
-      fi ) &
+      fi ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
 
     # Read cached activity from previous run
     if [ -f "$ACTIVITY_CACHE_FILE" ]; then
@@ -1469,7 +1485,7 @@ if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
     fi
   fi
   if [ "$needs_fetch" = "true" ]; then
-    ( fetch_usage_data 2>/dev/null ) &
+    ( fetch_usage_data 2>/dev/null ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
   fi
 
   # Parse cached usage data (may be from previous run if fetch is in-flight)
@@ -1646,10 +1662,10 @@ build_progress_bar() {
           *) cr=$r3 cg=$g3 cb=$b3 ;;
         esac
         if [ "$TRUECOLOR" = "1" ]; then
-          cell="\033[38;2;${cr};${cg};${cb}m"
+          cell="${ESC_CH}[38;2;${cr};${cg};${cb}m"
         else
           cube_index "$cr"; ri=$REPLY; cube_index "$cg"; gi=$REPLY; cube_index "$cb"; bi=$REPLY
-          cell="\033[38;5;$(( 16 + 36*ri + 6*gi + bi ))m"
+          cell="${ESC_CH}[38;5;$(( 16 + 36*ri + 6*gi + bi ))m"
         fi
         bar+="${cell}█"
       else
@@ -1701,7 +1717,7 @@ seg_index_by_name() {
 # Plain ${CLR_DIM}: apply_theme always sets it, and the mono/NO_COLOR theme
 # sets it empty on purpose (a :-fallback here would leak \033[2m under NO_COLOR)
 if [ -z "$model" ] && [ -z "$used" ]; then
-  printf "%b" "${CLR_DIM}Starting...${CLR_RESET}"
+  printf '%s' "${CLR_DIM}Starting...${CLR_RESET}"
   exit 0
 fi
 
@@ -1738,6 +1754,7 @@ if [ "$show_vim_mode" = "true" ]; then
   extract_block "$input" "vim"; vim_block=$REPLY
   if [ -n "$vim_block" ]; then
     extract_from "$vim_block" "mode"; vim_mode=$REPLY
+    sanitize "$vim_mode"; vim_mode=$REPLY
     [ -n "$vim_mode" ] && add_seg "${CLR_INFO}${vim_mode}${CLR_RESET}" 3 "" "vim"
   fi
 fi
@@ -2015,7 +2032,7 @@ if [ "$show_pr" = "true" ]; then
           *) pr_url="" ;;
         esac
         if [ -n "$pr_url" ]; then
-          pr_text="\033]8;;${pr_url}\033\\\\${pr_text}\033]8;;\033\\\\"
+          pr_text="${ESC_CH}]8;;${pr_url}${ESC_CH}\\${pr_text}${ESC_CH}]8;;${ESC_CH}\\"
         fi
       fi
       add_seg "${pr_clr}${pr_text}${CLR_RESET}" 6 "git" "pr"
@@ -2048,14 +2065,26 @@ if [ "$show_worktree" = "true" ] && [ -n "$worktree" ]; then
   add_seg "${CLR_BRANCH}${wt_icon}${worktree}${CLR_RESET}" 8 "" "worktree"
 fi
 
+# Round a non-negative plain decimal to integer cents — pure bash, NO fork.
+# Uses `printf -v` (a bash builtin since 3.1, so it forks nothing) for the same
+# rounding the old `awk … c*100 | printf %.0f` did, then derives the integer
+# from the "D.DD" form by splitting on '.'. total_cost/cost_rate come from
+# extract_num and are valid decimals. Result in REPLY.
+to_cents() {
+  local v="$1" fmt
+  printf -v fmt '%.2f' "$v" 2>/dev/null || { REPLY=0; return; }
+  REPLY=$(( 10#${fmt%.*} * 100 + 10#${fmt#*.} ))
+}
+
 # Session cost (priority 4)
 if [ "$show_cost" = "true" ] && [ -n "$total_cost" ]; then
   cost_is_zero=false
   case "$total_cost" in 0|0.0|0.00|0.000) cost_is_zero=true ;; esac
   if [ "$auto_hide" != "true" ] || [ "$cost_is_zero" = "false" ]; then
-    cost_fmt=$(printf "%.2f" "$total_cost" 2>/dev/null) || cost_fmt="$total_cost"
-    # Colour by cost: green < $1, yellow $1-$5, red $5+
-    cost_cents=$(printf "%.0f" "$(awk -v c="$total_cost" 'BEGIN {print c * 100}' 2>/dev/null)" 2>/dev/null) || cost_cents=0
+    printf -v cost_fmt '%.2f' "$total_cost" 2>/dev/null || cost_fmt="$total_cost"
+    # Colour by cost: green < $1, yellow $1-$5, red $5+. Integer cents in pure
+    # bash (no awk/printf-subshell forks on the render hot path).
+    to_cents "$total_cost"; cost_cents=$REPLY
     if [ "${cost_cents:-0}" -ge 500 ] 2>/dev/null; then
       cost_clr="$CLR_BAR_HIGH"
     elif [ "${cost_cents:-0}" -ge 100 ] 2>/dev/null; then
@@ -2071,12 +2100,16 @@ fi
 if [ "$show_cost_rate" = "true" ] && [ -n "$total_cost" ] && [ -n "$duration_ms" ]; then
   dur_int="${duration_ms%%.*}"
   if [ "$dur_int" -ge 60000 ] 2>/dev/null; then
-    cost_rate=$(awk -v cost="$total_cost" -v dur="$dur_int" 'BEGIN {printf "%.2f", cost / (dur / 3600000)}' 2>/dev/null) || cost_rate=""
+    # $/hr = total_cost * 3600000 / dur_ms, computed in integer cents (no fork):
+    # rate_cents = round(cost_cents * 3600000 / dur_int); dur_int >= 60000 here.
+    to_cents "$total_cost"; tcents=$REPLY
+    rate_cents=$(( (tcents * 3600000 + dur_int / 2) / dur_int ))
+    rate_dollars=$(( rate_cents / 100 )); rate_part=$(( rate_cents % 100 ))
+    if [ "$rate_part" -lt 10 ]; then cost_rate="${rate_dollars}.0${rate_part}"; else cost_rate="${rate_dollars}.${rate_part}"; fi
     if [ -n "$cost_rate" ]; then
       rate_is_zero=false
       case "$cost_rate" in 0.00) rate_is_zero=true ;; esac
       if [ "$auto_hide" != "true" ] || [ "$rate_is_zero" = "false" ]; then
-        rate_cents=$(printf "%.0f" "$(awk -v c="$cost_rate" 'BEGIN {print c * 100}' 2>/dev/null)" 2>/dev/null) || rate_cents=0
         if [ "${rate_cents:-0}" -ge 500 ] 2>/dev/null; then
           rate_clr="$CLR_BAR_HIGH"
         elif [ "${rate_cents:-0}" -ge 100 ] 2>/dev/null; then
@@ -2102,7 +2135,7 @@ if [ -n "$update_available" ]; then
     if [ "$use_icons" = "true" ]; then update_text="↑ ${update_ver}"; else update_text="update ${update_ver}"; fi
     if [ "$pr_link" = "true" ]; then
       update_url="https://github.com/briansmith80/claude-code-status-bar/releases/tag/v${update_ver}"
-      update_text="\033]8;;${update_url}\033\\\\${update_text}\033]8;;\033\\\\"
+      update_text="${ESC_CH}]8;;${update_url}${ESC_CH}\\${update_text}${ESC_CH}]8;;${ESC_CH}\\"
     fi
   elif [ "$use_icons" = "true" ]; then
     update_text="↑ update available"
@@ -2402,9 +2435,13 @@ for ln in 1 2 3; do
   [ -z "$metric" ] && [ -z "$act_str" ] && continue
   [ "$emitted" -gt 0 ] && printf '\n'
   emitted=$(( emitted + 1 ))
-  [ -n "$metric" ] && printf "%b" "$metric"
+  # Print with %s, NEVER %b: the script's own colours / OSC 8 links already
+  # carry real ESC bytes (set at their source), so an untrusted field holding
+  # the printable text "\033" (or "\e", "\x1b", ...) can never be decoded into
+  # a live control sequence here. sanitize() strips any raw ESC bytes upstream.
+  [ -n "$metric" ] && printf '%s' "$metric"
   if [ -n "$act_str" ]; then
-    [ -n "$metric" ] && printf "%b" "  "
-    printf "%b%s%b" "${CLR_DIM}" "${act_str}" "${CLR_RESET}"
+    [ -n "$metric" ] && printf '%s' "  "
+    printf '%s%s%s' "${CLR_DIM}" "${act_str}" "${CLR_RESET}"
   fi
 done

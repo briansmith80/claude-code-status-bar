@@ -5,6 +5,17 @@
 > competitive gaps, and new ideas. Every claim below was verified against the
 > source on this date (see [Verification notes](#verification-notes)).
 
+> **Update (v2.20.1, 2026-06-20).** A second security + performance gap audit of
+> v2.20.0 shipped these *new* fixes (not in the table below): a line-1
+> control-sequence injection (line 1 printed with `%b` decoded untrusted
+> `\033…` escape text; now real ESC at source + `%s`), `sanitize()` added to the
+> uncovered `model`/`vim.mode` fields, **installer** `SHA256SUMS` verification
+> (the G1 check extended to `install.sh`/`install.ps1`, the documented update
+> path), three background spawns detached so they no longer hold the render's
+> stdout pipe open (never-block guarantee), and a fork-free default cost segment
+> (`printf -v` + pure-bash `to_cents`). G5 (tag-pinned updates + `--rollback`)
+> and the helper-side P1/P2 refactor remain open.
+
 ---
 
 ## Findings from this review
