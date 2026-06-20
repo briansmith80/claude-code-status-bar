@@ -1324,45 +1324,76 @@ apply_activity_tokens() {
 
 if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
   if command -v node > /dev/null 2>&1 && [ -f "$HELPER_SCRIPT" ]; then
-    # Spawn helper in background (non-blocking); the same subshell sweeps
-    # per-session caches older than a day so they never accumulate
-    # The stale-cache sweep runs on ~1 in 37 refreshes: it only needs to
-    # happen occasionally, and skipping the find fork the rest of the time
-    # keeps the helper subshell cheap
-    ( if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then
-        find "$SCRIPT_DIR" -maxdepth 1 -name '.statusline-activity-cache.*' -mmin +1440 -delete 2>/dev/null
-      fi
-      if [ "$activity_colour" = "true" ]; then
-        node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null
-      else
-        node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null
-      fi ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
+    # Marker touched only when we actually spawn the helper, so a fork-free
+    # `-nt` compare against the transcript detects new transcript content.
+    ACTIVITY_SEEN_FILE="${ACTIVITY_CACHE_FILE}.seen"
 
-    # Read cached activity from previous run
+    # Read the PREVIOUS run's cache first: its "next" hint decides whether the
+    # helper even needs to run this render (the spawn gate below).
+    cached_act_ts=0 cached_act_json="" cached_act_next=0
     if [ -f "$ACTIVITY_CACHE_FILE" ]; then
-      cached_act_ts="" cached_act_json=""
       { read -r cached_act_ts cached_act_json; } < "$ACTIVITY_CACHE_FILE" 2>/dev/null || true
       # Reject non-digits and leading zeroes (bash arithmetic reads 0089 as
       # a bad octal and prints an error during expansion)
       case "$cached_act_ts" in *[!0-9]*|0[0-9]*) cached_act_ts=0 ;; esac
-      # Expire after activity_ttl_seconds. The default (120) stays comfortably
-      # above typical refreshInterval values so line 2 survives idle timer
-      # refreshes while a long subagent or workflow is running.
-      case "$activity_ttl_seconds" in ''|*[!0-9]*) activity_ttl_seconds=120 ;; esac
-      if [ -n "$cached_act_ts" ] && [ $(( NOW_EPOCH - cached_act_ts )) -le "$activity_ttl_seconds" ] 2>/dev/null; then
-        # Extract "activity" value from simple JSON {"activity":"..."},
-        # tolerating JSON-escaped quotes and backslashes inside the value
-        act_pattern='"activity"[[:space:]]*:[[:space:]]*"(([^"\]|\\.)*)"'
-        if [[ ${cached_act_json:-} =~ $act_pattern ]]; then
-          activity_line="${BASH_REMATCH[1]}"
-          # Unescape the JSON encodings the helper can produce (\" and \\).
-          # Anything else (\n, \u, ...) stays literal text: line 2 is
-          # printed with %s, never %b, so it can't decode into controls
-          activity_line="${activity_line//\\\"/\"}"
-          activity_line="${activity_line//\\\\/\\}"
-          sanitize "$activity_line"; activity_line=$REPLY
-          apply_activity_tokens
+      if [[ ${cached_act_json:-} =~ \"next\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
+        cached_act_next="${BASH_REMATCH[1]}"
+      fi
+    fi
+
+    # ── Spawn gate (P-B) ──────────────────────────────────────
+    # Re-running the Node helper costs ~the same whether or not the transcript
+    # changed (process startup dominates), so only run it when the line could
+    # actually change: no cache yet, the transcript grew/changed since the last
+    # run (fork-free `-nt` vs the marker), or the helper's "next" hint says a
+    # time-based transition is due (elapsed tick, completion-flash expiry, recent
+    # age-out). Otherwise the cached line is still correct.
+    spawn_helper=false
+    [ ! -f "$ACTIVITY_CACHE_FILE" ] && spawn_helper=true
+    [ "$transcript_path" -nt "$ACTIVITY_SEEN_FILE" ] && spawn_helper=true
+    if [ "$cached_act_next" -gt 0 ] 2>/dev/null && [ "$NOW_EPOCH" -ge "$cached_act_next" ]; then spawn_helper=true; fi
+
+    if [ "$spawn_helper" = "true" ]; then
+      # Spawn helper in background (non-blocking); the same subshell sweeps
+      # per-session caches (and their .seen markers) older than a day so they
+      # never accumulate. The sweep runs on ~1 in 37 refreshes, so the find fork
+      # is rare and the helper subshell stays cheap.
+      ( if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then
+          find "$SCRIPT_DIR" -maxdepth 1 -name '.statusline-activity-cache.*' -mmin +1440 -delete 2>/dev/null
         fi
+        if [ "$activity_colour" = "true" ]; then
+          node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null
+        else
+          node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null
+        fi ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
+      : > "$ACTIVITY_SEEN_FILE" 2>/dev/null || true   # mark spawn time for the -nt gate
+    elif [ -n "$cached_act_json" ]; then
+      # Idle: nothing to recompute. Keep the cached line "fresh" by re-stamping
+      # its timestamp WITHOUT a Node spawn (fork-free redirect), so the existing
+      # staleness fade / TTL behave exactly as when the helper ran every render —
+      # the visible line is identical, minus the cost.
+      printf '%s %s\n' "$NOW_EPOCH" "$cached_act_json" > "$ACTIVITY_CACHE_FILE" 2>/dev/null || true
+      cached_act_ts="$NOW_EPOCH"
+    fi
+
+    # ── Display the cached line (behaviour unchanged) ─────────
+    # Expire after activity_ttl_seconds. The default (120) stays comfortably
+    # above typical refreshInterval values so line 2 survives idle timer
+    # refreshes while a long subagent or workflow is running.
+    case "$activity_ttl_seconds" in ''|*[!0-9]*) activity_ttl_seconds=120 ;; esac
+    if [ "$cached_act_ts" != 0 ] && [ $(( NOW_EPOCH - cached_act_ts )) -le "$activity_ttl_seconds" ] 2>/dev/null; then
+      # Extract "activity" value from simple JSON {"activity":"...","next":N},
+      # tolerating JSON-escaped quotes and backslashes inside the value
+      act_pattern='"activity"[[:space:]]*:[[:space:]]*"(([^"\]|\\.)*)"'
+      if [[ ${cached_act_json:-} =~ $act_pattern ]]; then
+        activity_line="${BASH_REMATCH[1]}"
+        # Unescape the JSON encodings the helper can produce (\" and \\).
+        # Anything else (\n, \u, ...) stays literal text: line 2 is
+        # printed with %s, never %b, so it can't decode into controls
+        activity_line="${activity_line//\\\"/\"}"
+        activity_line="${activity_line//\\\\/\\}"
+        sanitize "$activity_line"; activity_line=$REPLY
+        apply_activity_tokens
       fi
     fi
   fi

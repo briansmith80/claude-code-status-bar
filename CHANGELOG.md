@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.21.0] - 2026-06-20
+
+A performance release for the live-activity line. Every activity visual is unchanged: the spinner, the bold green completion flash, the elapsed-time heat colours, the brighten-then-settle, and the staleness fade all behave exactly as before.
+
+### Performance
+
+- **The Node activity helper now runs only when the activity line could actually change, instead of on every render.** Re-running the helper on an unchanged transcript cost about as much as a fresh parse (Node process startup dominates), so an idle session paid that cost on every refresh for nothing. The helper now publishes a "next change" hint, the earliest moment the line could change with no new transcript activity (a running tool's per-second elapsed tick, a completion-flash expiry, or an item ageing out of the recent window), and the bash side re-runs it only on a transcript change (detected fork-free with `-nt` against a marker touched only on spawn) or once that moment arrives. During active work it behaves exactly as before, so elapsed time and the flash still animate; the savings land in the idle stretches between turns. The displayed line is byte-identical, and an idle line stays lit exactly as before: its cache timestamp is refreshed with a fork-free write instead of a Node spawn, so the staleness fade and `activity_ttl_seconds` are unchanged. The spinner, `activity_pulse`, and `activity_scanner` were already animated bash-side and are unaffected.
+
+### Internal
+
+- The helper writes a `next` field into the activity-cache JSON (`{"activity":...,"next":<epoch>}`); a `.seen` marker beside the cache, touched only when the helper is spawned, drives the fork-free transcript-change check. Both are backward/forward compatible across a `--update` swap (a missing `next` simply falls back toward the previous spawn-every-render behaviour). 4 new BATS tests in `tests/activity.bats` (the `next` hint for time-sensitive vs idle state, the idle-skip, and the spawn-on-change). Suite 166.
+
 ## [2.20.2] - 2026-06-20
 
 Opt-in git-segment controls for large / slow / network-mounted repositories. Both default to the current behaviour, so a normal render is unchanged.

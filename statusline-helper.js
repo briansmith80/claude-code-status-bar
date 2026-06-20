@@ -493,6 +493,45 @@ function formatDuration(secs) {
   return `${secs}s`;
 }
 
+// Earliest future epoch (seconds) at which the rendered line could change with
+// NO further transcript activity: a running tool's per-second elapsed tick, a
+// running tool about to cross TOOL_ELAPSED_MIN_S (when "..." becomes elapsed), a
+// completion flash expiring, or a completed/error item ageing out of the recent
+// window. 0 means nothing is time-sensitive (the line is static until the
+// transcript changes). The bash side re-runs this helper only at that moment, so
+// an idle line costs zero Node spawns. Bias EARLIER when unsure: an early re-run
+// just reproduces the same line (cheap, harmless); a late one would show stale
+// text. Uses the same sliced `data` the formatter renders, so it never points at
+// something off-screen.
+function computeNext(data, nowMs) {
+  let next = Infinity;
+  const consider = (ms) => { if (ms > nowMs && ms < next) next = ms; };
+  let anyRunning = false;
+  for (const t of data.tools) {
+    if (t.status === 'running') {
+      anyRunning = true;
+      const s = t.startTime ? new Date(t.startTime).getTime() : NaN;
+      if (!isNaN(s)) consider(s + TOOL_ELAPSED_MIN_S * 1000); // "..." -> elapsed
+    } else if (t.endTime) {
+      const e = new Date(t.endTime).getTime();
+      if (!isNaN(e)) {
+        if (t.status === 'completed') consider(e + FLASH_MS); // flash expiry
+        consider(e + RECENT_MS);                              // recent age-out
+      }
+    }
+  }
+  for (const a of data.agents) {
+    if (a.status === 'running') {
+      anyRunning = true;
+    } else if (a.status === 'completed' && a.endTime) {
+      const e = new Date(a.endTime).getTime();
+      if (!isNaN(e)) consider(e + RECENT_MS);
+    }
+  }
+  if (anyRunning) consider(nowMs + 1000); // elapsed ticks every whole second
+  return next === Infinity ? 0 : Math.ceil(next / 1000);
+}
+
 // ── Main ────────────────────────────────────────────────────
 function main() {
   try {
@@ -526,14 +565,18 @@ function main() {
 
     // Zero-width colour tokens eat into the cap, so allow extra headroom in
     // colour mode; the bash side trims to the terminal width regardless.
+    const nowMs = Date.now();
     let activity = sanitize(formatActivity(data), colourMode ? 320 : 200);
     // The hard cap can land inside a colour token; drop a dangling fragment
     // like '{', '{w' or '{r2' so it never renders as literal text
     if (colourMode) activity = activity.replace(/\{[A-Za-z]?[0-9]?$/, '');
 
-    // Write cache: "epoch json"
-    const epoch = Math.floor(Date.now() / 1000);
-    const json = JSON.stringify({ activity });
+    // Write cache: "epoch json". `next` is the earliest epoch (seconds) the line
+    // could change with no further transcript activity; the bash side reads it to
+    // skip re-running this helper while nothing is changing (0 = nothing pending).
+    const epoch = Math.floor(nowMs / 1000);
+    const next = computeNext(data, nowMs);
+    const json = JSON.stringify({ activity, next });
     fs.writeFileSync(cachePath, `${epoch} ${json}\n`, { mode: 0o600 });
   } catch {
     // Non-fatal — status bar works without activity line

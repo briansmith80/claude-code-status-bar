@@ -120,3 +120,59 @@ run_helper() {
   [ -n "$line2" ]
   [ "${#line2}" -le 40 ]
 }
+
+# ── P-B: spawn gate (v2.21.0) ───────────────────────────────
+# The helper publishes a "next" hint (earliest epoch the line could change with
+# no transcript activity); bash re-runs the helper only on transcript change or
+# at that time. A ".seen" marker, touched only when we spawn, is the observable.
+
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
+
+@test "helper publishes a next-change hint in the cache" {
+  require_node
+  now_iso="$(iso_at "$(date +%s)")"
+  tr_file="${TEST_HOME}/t.jsonl"
+  # a running tool is time-sensitive (elapsed ticks) -> next is a real epoch
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"sleep"}}]}}\n' "$now_iso" > "$tr_file"
+  run_helper "$tr_file"
+  [[ "$activity" == *'"next":'* ]]
+  [[ "$activity" != *'"next":0'* ]]
+}
+
+@test "helper next-hint is 0 when nothing is time-sensitive" {
+  require_node
+  old_iso="$(iso_at "$(( $(date +%s) - 3600 ))")"   # completed an hour ago
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/a.ts"}}]}}\n{"timestamp":"%s","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}\n' "$old_iso" "$old_iso" > "$tr_file"
+  run_helper "$tr_file"
+  [[ "$activity" == *'"next":0'* ]]
+}
+
+@test "P-B: idle render reuses the cache without re-spawning the helper" {
+  require_node
+  cp "${REPO_ROOT}/statusline-helper.js" "${TEST_HOME}/.claude/statusline-helper.js"
+  tr_file="${TEST_HOME}/t.jsonl"; printf '{"x":1}\n' > "$tr_file"
+  sleep 1   # make the marker strictly newer than the transcript (-> -nt false)
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  printf '%s {"activity":"IDLE_REUSE","next":9999999999}\n' "$(date +%s)" > "$cache"
+  : > "${cache}.seen"
+  before="$(mtime "${cache}.seen")"
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"transcript_path\":\"${tr_file}\"}"
+  after="$(mtime "${cache}.seen")"
+  assert_plain_contains "IDLE_REUSE"   # cached line (and its effects) still shown
+  [ "$before" = "$after" ]             # marker untouched => helper NOT re-spawned
+}
+
+@test "P-B: a changed transcript re-spawns the helper" {
+  require_node
+  cp "${REPO_ROOT}/statusline-helper.js" "${TEST_HOME}/.claude/statusline-helper.js"
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  printf '%s {"activity":"OLD","next":9999999999}\n' "$(date +%s)" > "$cache"
+  : > "${cache}.seen"
+  before="$(mtime "${cache}.seen")"
+  sleep 1
+  tr_file="${TEST_HOME}/t.jsonl"; printf '{"x":1}\n' > "$tr_file"   # newer than marker
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"transcript_path\":\"${tr_file}\"}"
+  after="$(mtime "${cache}.seen")"
+  [ "$before" != "$after" ]            # marker touched => helper re-spawned on change
+}

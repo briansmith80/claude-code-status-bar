@@ -37,7 +37,7 @@ Claude Code warns you about your rate limit and your full context window only on
 - **Live activity**: a second line of running tools, subagents, and todo progress.
 - **Cost**: session cost and burn rate, colour-coded.
 
-Pure bash, no jq, no compiled binaries, one-line install, eight colour themes. Works on macOS, Linux, and Windows (Git Bash); every network call runs in the background, so the bar itself never blocks. Backed by 162 automated tests on all three platforms (plus ShellCheck) in CI.
+Pure bash, no jq, no compiled binaries, one-line install, eight colour themes. Works on macOS, Linux, and Windows (Git Bash); every network call runs in the background, so the bar itself never blocks. Backed by 166 automated tests on all three platforms (plus ShellCheck) in CI.
 
 ## Install
 
