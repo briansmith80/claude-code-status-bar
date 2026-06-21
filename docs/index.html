@@ -23,8 +23,8 @@
     --c-add:#3fb950; --c-del:#f85149; --c-marker:#ff00af; --c-empty:#6e7681; --c-info:#58a6ff;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: 66px; overflow-x: hidden; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  html { scroll-behavior: smooth; scroll-padding-top: 66px; overflow-x: hidden; overflow-x: clip; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; overflow-x: clip; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
   a { color: var(--link); text-decoration: none; }
   a:hover { text-decoration: underline; }
@@ -214,6 +214,69 @@
     .tabbar { gap: 6px; }
     .tabbar button { flex: 1 1 auto; }
   }
+
+  /* ── Interactive configurator ── */
+  .cfg { display: block; }
+  .cfg-term { background:#0a0d13; border:1px solid var(--border); border-radius:12px; overflow:hidden; box-shadow:0 16px 50px rgba(0,0,0,.45); position:sticky; top:66px; z-index:6; margin-bottom:20px; }
+  .cfg-term .term-body { padding:14px 16px; overflow-x:auto; }
+  .cfg-term .bar { font-size:11px; line-height:1.95; }
+  /* panel grid: spans applied at desktop width (see media query below) */
+  .cfg-state { display:grid; gap:11px; margin-top:16px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+  .cfg-state h4, .cfg-grp h4 { margin:0; font-size:12.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent2); font-weight:700; }
+  .cfg-row { display:flex; align-items:center; gap:12px; font-size:13.5px; }
+  .cfg-row > label { flex:0 0 130px; color:var(--text); }
+  .cfg-row input[type=range] { flex:1; accent-color:var(--accent); min-width:0; }
+  .cfg-row select { background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:6px 9px; font:inherit; font-size:13px; flex:1; min-width:0; }
+  .cfg-row .val { flex:0 0 48px; text-align:right; font-family:ui-monospace,monospace; color:var(--text); }
+  .cfg-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .cfg-btn { background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 13px; font:inherit; font-size:13px; cursor:pointer; }
+  .cfg-btn:hover { border-color:var(--muted); }
+  .cfg-btn.primary { background:var(--accent); border-color:var(--accent); color:#1b0f0a; font-weight:600; }
+  .cfg-btn.primary:hover { background:var(--accent2); }
+  .cfg-btn.ghost { color:var(--muted); }
+  .cfg-btn.done { color:var(--green); border-color:var(--green); }
+  .cfg-disc { margin-top:14px; }
+  .cfg-disc summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  .cfg-dump { background:#010409; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:10px 0 0; font-size:12px; line-height:1.55; color:#9da7b1; max-height:260px; overflow:auto; white-space:pre; }
+  .cfg-controls { display:grid; gap:16px; grid-template-columns:1fr; align-items:start; margin-top:16px; }
+  .cfg-grp { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px 17px; }
+  .cfg-grp > .cfg-row { margin-top:11px; }
+  .cfg-toggles { display:grid; gap:9px 16px; grid-template-columns:1fr 1fr; margin-top:12px; }
+  .cfg-tog { display:flex; align-items:center; gap:9px; font-size:13.5px; color:var(--text); cursor:pointer; }
+  .cfg-tog input { accent-color:var(--accent); width:15px; height:15px; flex:none; }
+  .cfg-hint { color:var(--muted); font-size:12.5px; margin:11px 0 0; line-height:1.55; }
+  .cfg-zones { display:grid; gap:9px; margin-top:12px; }
+  .cfg-zone { border:1px dashed var(--border); border-radius:9px; padding:9px 10px; min-height:46px; transition:border-color .12s, background .12s; }
+  .cfg-zone.drag { border-color:var(--accent); background:rgba(217,119,87,.10); }
+  .cfg-zone .zlab { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:7px; }
+  .cfg-zone.off { background:rgba(110,118,129,.06); }
+  .cfg-chips { display:flex; flex-wrap:wrap; gap:7px; min-height:22px; }
+  .chip-seg { display:inline-flex; align-items:center; gap:6px; font-family:ui-monospace,monospace; font-size:12px; color:var(--text); background:var(--surface2); border:1px solid var(--border); border-radius:7px; padding:3px 5px 3px 8px; cursor:grab; }
+  .chip-seg .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .chip-seg.dragging { opacity:.4; }
+  .chip-seg .mv { display:inline-flex; gap:2px; margin-left:3px; }
+  .chip-seg .mv button { background:transparent; border:1px solid var(--border); border-radius:4px; color:var(--muted); font:inherit; font-size:10px; line-height:1.2; padding:1px 4px; cursor:pointer; }
+  .chip-seg .mv button:hover { color:var(--text); border-color:var(--muted); }
+  .chip-seg .mv button[aria-pressed=true] { color:var(--accent2); border-color:var(--accent2); }
+  .cfg-conf-block { margin-top:24px; position:relative; }
+  .cfg-conf { max-height:320px; overflow:auto; }
+  .cfg-modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:120; padding:20px; }
+  .cfg-modal[hidden] { display:none; }
+  .cfg-modal-box { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; max-width:540px; width:100%; }
+  .cfg-modal-box h3 { margin:0 0 8px; font-size:16px; }
+  .cfg-modal-box textarea { width:100%; height:210px; background:#010409; color:#e6edf3; border:1px solid var(--border); border-radius:8px; padding:10px; font-family:ui-monospace,monospace; font-size:12.5px; resize:vertical; }
+  .cfg-modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+  @media (min-width: 940px) {
+    .cfg-controls { grid-template-columns: repeat(6, 1fr); }
+    .cfg-grp.s2 { grid-column: span 2; }
+    .cfg-grp.s3 { grid-column: span 3; }
+    .cfg-grp.s4 { grid-column: span 4; }
+  }
+  @media (max-width: 520px) {
+    .cfg-toggles { grid-template-columns:1fr; }
+    .cfg-row > label { flex-basis:108px; }
+    .cfg-term { position:static; }
+  }
 </style>
 </head>
 <body>
@@ -398,30 +461,45 @@
     </div>
   </section>
 
-  <!-- ── Configurability ── -->
+  <!-- ── Configurability (interactive configurator) ── -->
   <section id="configure" class="reveal">
     <div class="wrap">
       <h2>Build exactly the bar you want</h2>
-      <p class="sub">Around 21 line-1 segments, each individually toggleable, all from one commented file that survives updates.</p>
-      <div class="two">
-        <div>
-          <div class="codeblock">
-            <button type="button" class="copy" data-clip="colour_theme=tokyo-night&#10;bar_gradient=true        # true | flat | heat&#10;usage_label=countdown    # countdown | clock&#10;dir_style=auto           # auto | full | basename&#10;show_cost_rate=true&#10;auto_update=false">Copy</button>
-            <pre>colour_theme=tokyo-night
-bar_gradient=true        # true | flat | heat
-usage_label=countdown    # countdown | clock
-dir_style=auto           # auto | full | basename
-show_cost_rate=true
-auto_update=false</pre>
+      <p class="sub">Pick a theme, drag segments onto up to three lines, and watch a live, true-to-terminal preview. Then copy the config, copy a one-paste install command, or download your <code>statusline.conf</code>.</p>
+      <div id="cfg" class="cfg">
+        <div class="cfg-term" id="cfg-term">
+          <div class="term-bar">
+            <span class="dots"><i style="background:#ff5f56"></i><i style="background:#ffbd2e"></i><i style="background:#27c93f"></i></span>
+            <span class="title">claude-code-status-bar &#183; live preview</span>
           </div>
-          <p style="color:var(--muted);font-size:14px;margin:14px 0 0">Overrides live in a fully commented <code>statusline.conf</code>, created on first install and never overwritten by updates. <code>--dump-config</code> prints the resolved settings; the <code>/claude-code-status-bar:configure</code> slash command edits it all conversationally.</p>
+          <div class="term-body"><div id="cfg-bars" aria-hidden="true"></div></div>
         </div>
-        <div>
-          <p style="color:var(--muted);font-size:14px;margin:0 0 12px">Every segment, on or off:</p>
-          <div class="chips">
-            <span class="chip">Directory</span><span class="chip">Branch</span><span class="chip">Vim mode</span><span class="chip">Model</span><span class="chip">Agent</span><span class="chip">Effort</span><span class="chip">Fast mode</span><span class="chip">Context</span><span class="chip">Tokens</span><span class="chip">5-hour</span><span class="chip">Weekly</span><span class="chip">Lines</span><span class="chip">Dirty</span><span class="chip">Ahead/behind</span><span class="chip">Stash</span><span class="chip">PR</span><span class="chip">Duration</span><span class="chip">Worktree</span><span class="chip">Cost</span><span class="chip">Cost rate</span><span class="chip">Update notice</span>
-          </div>
-          <p style="color:var(--muted);font-size:13.5px;margin:16px 0 0">Responsive by default: on a narrow terminal the path collapses to its basename, then low-priority segments drop, before any metric is lost.</p>
+        <div class="cfg-actions">
+          <button type="button" class="cfg-btn primary" id="cfg-copy">Copy .conf</button>
+          <button type="button" class="cfg-btn" id="cfg-copycmd">Copy apply command</button>
+          <button type="button" class="cfg-btn" id="cfg-download">Download</button>
+          <button type="button" class="cfg-btn" id="cfg-share">Share link</button>
+          <button type="button" class="cfg-btn" id="cfg-import">Import&#8230;</button>
+          <button type="button" class="cfg-btn ghost" id="cfg-reset">Reset</button>
+        </div>
+        <p class="cfg-hint">The <em>apply command</em> writes <code>~/.claude/statusline.conf</code> in one paste. The preview fills every placed segment with sample data so you can see it; in a real session, empty segments (vim, agent, an absent PR) hide on their own, and line 2 (activity) is driven live by a Node helper.</p>
+        <div class="cfg-controls" id="cfg-controls"></div>
+        <details class="cfg-disc"><summary>Resolved settings</summary><pre id="cfg-dump" class="cfg-dump"></pre></details>
+      </div>
+      <div class="codeblock cfg-conf-block">
+        <button type="button" class="cfg-btn" id="cfg-copy2" style="position:absolute;top:8px;right:8px;z-index:1">Copy</button>
+        <pre id="cfg-conf" class="cfg-conf"></pre>
+      </div>
+      <noscript><p class="note">The interactive configurator needs JavaScript. Every option is also documented in <a href="https://github.com/briansmith80/claude-code-status-bar#configuration">the config reference</a> and editable via the <code>/claude-code-status-bar:configure</code> slash command.</p></noscript>
+    </div>
+    <div id="cfg-import-modal" class="cfg-modal" hidden>
+      <div class="cfg-modal-box">
+        <h3>Import an existing statusline.conf</h3>
+        <p class="cfg-hint" style="margin-top:0">Paste your current <code>~/.claude/statusline.conf</code> to load it into the configurator, edit, then re-export.</p>
+        <textarea id="cfg-import-text" placeholder="# paste your statusline.conf here"></textarea>
+        <div class="cfg-modal-actions">
+          <button type="button" class="cfg-btn ghost" id="cfg-import-cancel">Cancel</button>
+          <button type="button" class="cfg-btn primary" id="cfg-import-do">Import</button>
         </div>
       </div>
     </div>
@@ -741,6 +819,589 @@ auto_update=false</pre>
       i = (i + 1) % F.length;
       setTimeout(tick, hold);
     })();
+  })();
+
+  // ── Build-your-bar configurator (live preview + conf export) ──
+  (function () {
+    if (!document.getElementById('cfg')) return;
+
+    // Segment model — mirrors statusline-command.sh add-order, priorities, groups.
+    var ALL = ['dir','branch','vim','model','agent','effort','fast_mode','context','tokens',
+               'usage_5h','usage_7d','lines_changed','dirty','ahead_behind','stash','pr',
+               'duration','worktree','cost','cost_rate','update'];
+    var TOKENS = ALL.concat(['activity']);
+    var SEG = {
+      dir:          {pri:1, grp:'',        show:'show_directory',     label:'directory',    role:'dir'},
+      branch:       {pri:1, grp:'',        show:'show_branch',        label:'branch',       role:'branch'},
+      vim:          {pri:3, grp:'',        show:'show_vim_mode',      label:'vim mode',     role:'info'},
+      model:        {pri:3, grp:'ctx',     show:'show_model',         label:'model',        role:'model'},
+      agent:        {pri:3, grp:'',        show:'show_agent',         label:'agent',        role:'model'},
+      effort:       {pri:5, grp:'',        show:'show_effort',        label:'effort',       role:'info'},
+      fast_mode:    {pri:4, grp:'',        show:'show_fast_mode',     label:'fast mode',    role:'warn'},
+      context:      {pri:2, grp:'ctx',     show:'show_context_bar',   label:'context',      role:'bar_ok'},
+      tokens:       {pri:5, grp:'',        show:'show_tokens',        label:'tokens',       role:'info'},
+      usage_5h:     {pri:3, grp:'usage',   show:'show_usage_5h',      label:'5-hour',       role:'bar_ok'},
+      usage_7d:     {pri:3, grp:'usage',   show:'show_usage_7d',      label:'weekly',       role:'bar_ok'},
+      lines_changed:{pri:5, grp:'git',     show:'show_lines_changed', label:'lines',        role:'add'},
+      dirty:        {pri:5, grp:'git',     show:'show_dirty_count',   label:'dirty',        role:'warn'},
+      ahead_behind: {pri:6, grp:'git',     show:'show_ahead_behind',  label:'ahead/behind', role:'info'},
+      stash:        {pri:6, grp:'git',     show:'show_stash',         label:'stash',        role:'warn'},
+      pr:           {pri:6, grp:'git',     show:'show_pr',            label:'PR',           role:'add'},
+      duration:     {pri:7, grp:'session', show:'show_duration',      label:'duration',     role:'info'},
+      worktree:     {pri:8, grp:'',        show:'show_worktree',      label:'worktree',     role:'branch'},
+      cost:         {pri:4, grp:'session', show:'show_cost',          label:'cost',         role:'warn'},
+      cost_rate:    {pri:4, grp:'session', show:'show_cost_rate',     label:'cost rate',    role:'warn'},
+      update:       {pri:9, grp:'',        show:null,                 label:'update',       role:'add'},
+      activity:     {pri:0, grp:'',        show:'show_activity',      label:'activity',     role:'info'}
+    };
+
+    // Theme palettes — exact hex from apply_palette() in statusline-command.sh.
+    function P(d,b,m,o,f,a,de,w,i,di,bok,bm,bh,pc,r0,r1,r2,r3){
+      return {dir:d,branch:b,model:m,opus:o,fable:f,add:a,del:de,warn:w,info:i,dim:di,
+              bar_ok:bok,bar_med:bm,bar_high:bh,pace:pc,ramp:[r0,r1,r2,r3]};
+    }
+    var THEME = {
+      'default':    P('39c5cf','d2a8ff','58a6ff','ff8700','af87ff','3fb950','f85149','d29922','39c5cf','6e7681','3fb950','d29922','f85149','ff2d9b','2ecc40','ffdc00','ff851b','ff4136'),
+      'nord':       P('81a1c1','b48ead','88c0d0','d08770','b48ead','a3be8c','bf616a','ebcb8b','8fbcbb','4c566a','a3be8c','ebcb8b','bf616a','5e81ac','a3be8c','ebcb8b','d08770','bf616a'),
+      'dracula':    P('bd93f9','ff79c6','8be9fd','ffb86c','bd93f9','50fa7b','ff5555','f1fa8c','8be9fd','6272a4','50fa7b','f1fa8c','ff5555','ff79c6','50fa7b','f1fa8c','ffb86c','ff5555'),
+      'solarized':  P('2aa198','6c71c4','268bd2','cb4b16','6c71c4','859900','dc322f','b58900','2aa198','586e75','859900','b58900','dc322f','d33682','859900','b58900','cb4b16','dc322f'),
+      'tokyo-night':P('5a7bf0','9d7cd8','7dcfff','ff9e64','9d7cd8','9ece6a','f7768e','e0af68','7dcfff','565f89','9ece6a','e0af68','f7768e','ff007c','9ece6a','e0af68','ff9e64','f7768e'),
+      'catppuccin': P('b4befe','cba6f7','89dceb','fab387','cba6f7','a6e3a1','f38ba8','f9e2af','89dceb','6c7086','a6e3a1','f9e2af','f38ba8','f5c2e7','a6e3a1','94e2d5','f9e2af','fab387'),
+      'matrix':     P('00ff41','22ff88','00cc33','aaffaa','22ff88','00ff00','008f11','9eff5e','22ff88','005f00','008f11','00ff00','9eff5e','d6ffd6','005f00','008f11','00cc33','00ff00'),
+      'mono':       null
+    };
+    var THEME_NAMES = ['default','nord','dracula','solarized','tokyo-night','catppuccin','matrix','mono'];
+    var MONO_TEXT = '#c9d1d9', MONO_DIM = '#6e7681';
+
+    var DEFAULTS = {
+      colour_theme:'default', bar_gradient:'true', icon_set:'classic', use_icons:'true',
+      layout:'classic', dir_style:'auto', bar_width:'10', enable_truncation:'true', use_groups:'false',
+      usage_label:'countdown', usage_forecast:'true',
+      show_directory:'true', show_branch:'true', show_model:'true', show_context_bar:'true',
+      show_usage_5h:'true', show_usage_7d:'true', show_cost:'true', show_cost_rate:'false',
+      show_lines_changed:'true', show_dirty_count:'true', show_ahead_behind:'true', show_stash:'true',
+      show_pr:'true', show_duration:'true', show_worktree:'true', show_vim_mode:'true',
+      show_agent:'true', show_effort:'true', show_fast_mode:'true', show_tokens:'false',
+      show_activity:'true', activity_colour:'true', activity_pulse:'false', activity_scanner:'false',
+      context_warn_threshold:'auto', git_untracked:'true', auto_update:'false'
+    };
+
+    var SAMPLE = {
+      dirFull:'~/work/acme-api', dirBase:'acme-api', branch:'main', vim:'NORMAL',
+      agent:'code-reviewer', effort:'high', tokensIn:'84k', tokensOut:'12k',
+      linesAdd:'128', linesDel:'34', dirty:'3', behind:'1', ahead:'2', stash:'2',
+      pr:'42', prState:'approved', dur:'1h12m', worktree:'review', cost:'2.50',
+      rate:'1.80', update:'2.23.0'
+    };
+    // Sample usage windows (so the burn-rate forecast + pacing marker behave like the real maths).
+    var BARMETA = { '5h':{ttr:7200,elapsed:10800,window:18000,count:'2h0m',clock:'3pm'},
+                    'wk':{ttr:172800,elapsed:432000,window:604800,count:'2d0h',clock:'thu,3pm'} };
+
+    var state, dragTok = null;
+
+    function clone(o){ var n={}; for(var k in o) n[k]=o[k]; return n; }
+    function el(tag, cls, txt){ var e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
+    function rep(ch,n){ var s=''; for(var i=0;i<n;i++) s+=ch; return s; }
+    function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function arrEq(a,b){ if(a.length!==b.length) return false; for(var i=0;i<a.length;i++) if(a[i]!==b[i]) return false; return true; }
+
+    // ----- colour helpers -----
+    function pal(){ return state.colour_theme==='mono' ? null : (THEME[state.colour_theme]||THEME['default']); }
+    function col(role){ if(role==null) return null; var p=pal(); if(!p) return null; return p[role]?('#'+p[role]):null; }
+    function span(text, role){ var c=col(role), t=esc(text); return c?('<span style="color:'+c+'">'+t+'</span>'):t; }
+    function dimCol(){ return state.colour_theme==='mono'?MONO_DIM:('#'+(THEME[state.colour_theme]||THEME['default']).dim); }
+    function dspan(t){ return '<span style="color:'+dimCol()+'">'+esc(t)+'</span>'; }
+    function hx(h){ return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+    function lerp(a,b,f){ return Math.round(a+(b-a)*f/1000); }
+    function cellColor(i,width,ramp){
+      var pos = width<=1?0:Math.floor(i*3000/(width-1));
+      var seg = Math.floor(pos/1000), frac = pos%1000, a, b;
+      if(seg===0){a=ramp[0];b=ramp[1];} else if(seg===1){a=ramp[1];b=ramp[2];}
+      else if(seg===2){a=ramp[2];b=ramp[3];} else return hx(ramp[3]);
+      var ra=hx(a), rb=hx(b);
+      return [lerp(ra[0],rb[0],frac), lerp(ra[1],rb[1],frac), lerp(ra[2],rb[2],frac)];
+    }
+
+    // Progress bar — fill = floor(pct*w/100); marker replaces a cell; gradient/threshold/dim per source.
+    function bar(pct, markerPct){
+      var width=+state.bar_width; if(!(width>=1)) width=1;
+      var filled=Math.floor(pct*width/100); if(filled>width) filled=width;
+      var markerPos=-1;
+      if(markerPct!=null && markerPct>=0 && markerPct<=100){ markerPos=Math.floor(markerPct*width/100); if(markerPos>=width) markerPos=width-1; }
+      var mono=state.colour_theme==='mono', p=mono?null:(THEME[state.colour_theme]||THEME['default']);
+      var thRole=pct>=80?'bar_high':(pct>=50?'bar_med':'bar_ok');
+      var thColor=mono?null:('#'+p[thRole]);
+      var dimColor=mono?MONO_DIM:('#'+p.dim);
+      var paceColor=mono?MONO_TEXT:('#'+p.pace);
+      var ramp=null;
+      if(!mono){ if(state.bar_gradient==='heat') ramp=['2ecc40','ffdc00','ff851b','ff4136']; else if(state.bar_gradient==='true') ramp=p.ramp; }
+      var html='';
+      for(var i=0;i<width;i++){
+        if(i===markerPos){ html+='<span style="color:'+paceColor+'">│</span>'; continue; }
+        if(i<filled){
+          if(ramp){ var c=cellColor(i,width,ramp); html+='<span style="color:rgb('+c[0]+','+c[1]+','+c[2]+')">█</span>'; }
+          else html+= thColor?('<span style="color:'+thColor+'">█</span>'):'█';
+        } else html+='<span style="color:'+dimColor+'">░</span>';
+      }
+      return {html:html, w:width};
+    }
+
+    // ----- icons (gated by use_icons; differ between classic/modern) -----
+    function ico(tok){
+      if(state.use_icons!=='true') return '';
+      var m=state.icon_set==='modern';
+      switch(tok){
+        case 'dir': return m?'↱ ':'';
+        case 'branch': return m?'⑂ ':'↱ ';
+        case 'lines_changed': return m?'⇄ ':'';
+        case 'duration': return m?'⏱ ':'';
+        case 'model': return '◆ ';
+        case 'agent': return '▸ ';
+        case 'fast_mode': return '⚡ ';
+        case 'dirty': return '● ';
+        case 'stash': return '≡ ';
+        case 'worktree': return '⊞ ';
+        case 'update': return '↑ ';
+      }
+      return '';
+    }
+    function modelRole(n){ if(/Haiku/i.test(n)) return 'add'; if(/Sonnet/i.test(n)) return 'warn'; if(/Opus/i.test(n)) return 'opus'; if(/Fable|Mythos/i.test(n)) return 'fable'; return 'model'; }
+    function costRole(v){ var c=Math.round(parseFloat(v)*100); return c>=500?'bar_high':(c>=100?'warn':'add'); }
+    function prRole(s){ return s==='approved'?'add':(s==='changes_requested'?'del':(s==='draft'?'dim':(s==='pending'?'warn':'info'))); }
+    function fmtDur(s){ var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),mm=Math.floor((s%3600)/60); if(d>0) return d+'d'+h+'h'; if(h>0) return h+'h'+mm+'m'; if(mm>0) return mm+'m'; return '<1m'; }
+    function usagePace(which){ var m=BARMETA[which]; return Math.floor(m.elapsed/m.window*100); }
+    function usageLabel(which,p){
+      var m=BARMETA[which];
+      if(state.usage_forecast==='true' && p>0){
+        if(p>=100) return '(▲now)';
+        var secs=Math.floor((100-p)*m.elapsed/p);
+        if(secs<m.ttr) return '(▲'+fmtDur(secs)+')';
+      }
+      return state.usage_label==='countdown' ? '('+m.count+')' : '('+m.clock+')';
+    }
+
+    // ----- per-segment build: {tok,name,html,w} (w = visible char width) -----
+    function ctxSeg(){
+      var p=+state.ctx, marker=83;
+      var warnOn = state.context_warn_threshold==='auto' ? (p>=74) : (p>=(parseInt(state.context_warn_threshold,10)||80));
+      var bb=bar(p,marker);
+      var thRole=p>=80?'bar_high':(p>=50?'bar_med':'bar_ok');
+      var pre='', preT='';
+      if(warnOn && state.use_icons==='true'){ pre=span('▲','warn')+' '; preT='▲ '; }
+      var pct=p+'% of 200k';
+      return {tok:'context', name:'context', html:pre+bb.html+' '+span(pct,thRole), w:(preT+rep('#',bb.w)+' '+pct).length};
+    }
+    function usageSeg(which){
+      var key=which==='5h'?'ctxH5':'ctxWk', p=+state[which==='5h'?'h5':'wk'];
+      var label=usageLabel(which,p), bb=bar(p,usagePace(which));
+      var thRole=p>=80?'bar_high':(p>=50?'bar_med':'bar_ok');
+      var head=(which==='5h'?'5hr':'wk')+(label?' '+label:'');
+      var name=which==='5h'?'usage_5h':'usage_7d';
+      return {tok:name, name:name, html:esc(head)+' '+bb.html+' '+span(p+'%',thRole), w:(head+' '+rep('#',bb.w)+' '+p+'%').length};
+    }
+    function buildSeg(tok, useBase){
+      var html, text, role;
+      switch(tok){
+        case 'dir': text=ico('dir')+(useBase?SAMPLE.dirBase:SAMPLE.dirFull); html=span(text,'dir'); break;
+        case 'branch': text=ico('branch')+SAMPLE.branch; html=span(text,'branch'); break;
+        case 'vim': text=SAMPLE.vim; html=span(text,'info'); break;
+        case 'model': text=ico('model')+state.model; html=span(text,modelRole(state.model)); break;
+        case 'agent': text=ico('agent')+SAMPLE.agent; html=span(text,'model'); break;
+        case 'effort': text='eff:'+SAMPLE.effort; html=span(text,'info'); break;
+        case 'fast_mode': text=ico('fast_mode')+'fast'; html=span(text,'warn'); break;
+        case 'context': return ctxSeg();
+        case 'tokens': text=SAMPLE.tokensIn+' in '+SAMPLE.tokensOut+' out'; html=span(text,'info'); break;
+        case 'usage_5h': return usageSeg('5h');
+        case 'usage_7d': return usageSeg('wk');
+        case 'lines_changed':
+          var ic=ico('lines_changed'); text=ic+'+'+SAMPLE.linesAdd+' -'+SAMPLE.linesDel;
+          html=esc(ic)+span('+'+SAMPLE.linesAdd,'add')+' '+span('-'+SAMPLE.linesDel,'del'); break;
+        case 'dirty': text=ico('dirty')+SAMPLE.dirty+' dirty'; html=span(text,'warn'); break;
+        case 'ahead_behind': text='↓'+SAMPLE.behind+' ↑'+SAMPLE.ahead; html=span(text,'info'); break;
+        case 'stash': text=ico('stash')+'stash:'+SAMPLE.stash; html=span(text,'warn'); break;
+        case 'pr': text='PR #'+SAMPLE.pr; html=span(text,prRole(SAMPLE.prState)); break;
+        case 'duration': text=ico('duration')+SAMPLE.dur; html=span(text,'info'); break;
+        case 'worktree': text=ico('worktree')+SAMPLE.worktree; html=span(text,'branch'); break;
+        case 'cost': text='$'+SAMPLE.cost; html=span(text,costRole(SAMPLE.cost)); break;
+        case 'cost_rate': text='$'+SAMPLE.rate+'/hr'; html=span(text,costRole(SAMPLE.rate)); break;
+        case 'update': text=(state.use_icons==='true'?'↑ ':'update ')+SAMPLE.update; html=span(text,'add'); break;
+        default: text=''; html='';
+      }
+      return {tok:tok, name:tok, html:html, w:text.length};
+    }
+
+    // ----- assembly: dir auto-collapse, priority truncation, separators, dir->branch join, groups -----
+    function branchAttachedW(){ return (' on '+ico('branch')+SAMPLE.branch).length; }
+    function branchAttachedHtml(){ return span(' on '+ico('branch')+SAMPLE.branch,'branch'); }
+    function totalWidth(list){
+      var total=0, first=true, prev='';
+      for(var i=0;i<list.length;i++){
+        var s=list[i];
+        if(s.name==='branch' && prev==='dir'){ total+=branchAttachedW(); }
+        else { if(first) first=false; else total+=2; total+=s.w; }
+        prev=s.name;
+      }
+      return total;
+    }
+    function emit(segs){
+      var out='', first=true, curG='', gHas=false, prev='', groups=state.use_groups==='true';
+      for(var i=0;i<segs.length;i++){
+        var s=segs[i];
+        if(s.name==='branch' && prev==='dir'){ out+=branchAttachedHtml(); prev='branch'; continue; }
+        var g=SEG[s.tok].grp;
+        if(groups && g){
+          if(g!==curG){ if(curG && gHas) out+=']'; if(!first) out+='  '; first=false; out+='['; curG=g; gHas=true; }
+          else out+=' ';
+        } else {
+          if(groups && curG && gHas){ out+=']'; curG=''; gHas=false; }
+          if(first) first=false; else out+='  ';
+        }
+        out+=s.html; prev=s.name;
+      }
+      if(groups && curG && gHas) out+=']';
+      return out;
+    }
+    function assembleNormal(tokens){
+      var dirMode=state.dir_style, useBase=(dirMode==='basename'), width=+state.width;
+      function buildAll(ub){ var a=[]; for(var i=0;i<tokens.length;i++) a.push(buildSeg(tokens[i],ub)); return a; }
+      var segs=buildAll(useBase);
+      if(dirMode==='auto' && tokens.indexOf('dir')>=0 && totalWidth(segs)>width){ segs=buildAll(true); }
+      var active=[]; for(var i=0;i<segs.length;i++) active.push(true);
+      if(state.enable_truncation==='true'){
+        var guard=0;
+        while(guard++<300){
+          var cur=[]; for(var k=0;k<segs.length;k++) if(active[k]) cur.push(segs[k]);
+          if(totalWidth(cur)<=width) break;
+          var worst=-1, wp=0;
+          for(var k2=0;k2<segs.length;k2++){ if(!active[k2]) continue; var pr=SEG[segs[k2].tok].pri; if(pr>wp){ wp=pr; worst=k2; } }
+          if(worst<0) break; active[worst]=false;
+        }
+      }
+      var keep=[]; for(var k3=0;k3<segs.length;k3++) if(active[k3]) keep.push(segs[k3]);
+      return emit(keep);
+    }
+    function activitySample(){
+      var colour=state.activity_colour==='true' && state.colour_theme!=='mono';
+      function c(t,role){ return colour?span(t,role):dspan(t); }
+      var spin = colour ? '<span class="spin" style="color:'+(col('warn')||'inherit')+'">⠹</span>' : dspan('⠹');
+      var ramp = (colour && state.colour_theme!=='mono') ? (THEME[state.colour_theme]||THEME['default']).ramp : null;
+      var todo='';
+      for(var i=0;i<5;i++){ if(i<2){ if(ramp){ var cc=cellColor(i,5,ramp); todo+='<span style="color:rgb('+cc[0]+','+cc[1]+','+cc[2]+')">█</span>'; } else todo+=dspan('█'); } else todo+=dspan('░'); }
+      return spin+' '+c('Edit api.ts','info')+'  '+dspan('[Edit 5 · Read 4 · Bash 2]')+'  '+dspan('│')+'  '+c('⚒ review 12s','warn')+'  '+dspan('│')+'  '+todo+' '+dspan('2/5 write tests');
+    }
+    function renderOneLine(tokens){
+      var normal=[], hasAct=false;
+      for(var i=0;i<tokens.length;i++){
+        var t=tokens[i];
+        if(t==='activity'){ if(state.show_activity==='true') hasAct=true; continue; }
+        var sh=SEG[t].show; if(sh && state[sh]!=='true') continue;
+        normal.push(t);
+      }
+      if(!normal.length && !hasAct) return null;
+      var nh = normal.length ? assembleNormal(normal) : '';
+      if(hasAct){ var a=activitySample(); return normal.length ? nh+'  '+a : a; }
+      return nh;
+    }
+
+    // ----- layout presets + composer state -----
+    function expandPreset(name){
+      var p;
+      if(name==='three-line') p={l1:['vim','model','agent','effort','fast_mode','context','usage_5h','usage_7d','tokens','duration','cost','cost_rate','update'], l2:['dir','branch','lines_changed','dirty','ahead_behind','stash','pr','worktree'], l3:['activity']};
+      else if(name==='stacked') p={l1:['dir','branch','model','context','usage_5h','usage_7d','cost'], l2:['lines_changed','dirty','ahead_behind','stash','pr','duration','worktree','update'], l3:['activity']};
+      else p={l1:ALL.slice(), l2:['activity'], l3:[]};
+      var placed={}; [].concat(p.l1,p.l2,p.l3).forEach(function(t){ placed[t]=1; });
+      p.off=TOKENS.filter(function(t){ return !placed[t]; });
+      return p;
+    }
+    function composerOverrides(){ var p=expandPreset(state.layout); return !(arrEq(state.comp.l1,p.l1) && arrEq(state.comp.l2,p.l2) && arrEq(state.comp.l3,p.l3)); }
+
+    // ----- conf + summary generation -----
+    function gconf(){
+      var L=[];
+      function push(){ for(var i=0;i<arguments.length;i++) L.push(arguments[i]); }
+      function b(k){ return state[k]===DEFAULTS[k] ? ('# '+k+'='+DEFAULTS[k]) : (k+'='+state[k]); }
+      function bc(k,c){ return b(k)+'   # '+c; }
+      push(
+        '# ~/.claude/statusline.conf, generated by the web configurator at',
+        '#   https://briansmith80.github.io/claude-code-status-bar/#configure',
+        '# Commented lines show the default; uncommented lines are your overrides.',
+        '# This file is never overwritten by updates. Full docs:',
+        '#   https://github.com/briansmith80/claude-code-status-bar#configuration',
+        '',
+        '# ── Appearance ──',
+        bc('colour_theme','default | nord | dracula | solarized | tokyo-night | catppuccin | matrix | mono'),
+        bc('bar_gradient','true (theme ramp) | false (flat) | heat (green->red)'),
+        bc('icon_set','classic | modern'),
+        b('use_icons'),
+        '',
+        '# ── Layout ──',
+        bc('layout','classic | three-line | stacked'),
+        bc('dir_style','auto | full | basename'),
+        b('bar_width'),
+        b('enable_truncation'),
+        b('use_groups')
+      );
+      if(composerOverrides()){
+        push('# Custom per-line layout (these win over the preset above):',
+             'line1="'+state.comp.l1.join(' ')+'"',
+             'line2="'+state.comp.l2.join(' ')+'"',
+             'line3="'+state.comp.l3.join(' ')+'"');
+      } else {
+        push('# line1="..."   # optional: hand-build each line from segment tokens',
+             '# line2="..."',
+             '# line3="..."');
+      }
+      push(
+        '',
+        '# ── Usage limits ──',
+        bc('usage_label','countdown | clock'),
+        b('usage_forecast'),
+        '',
+        '# ── Segments (set =false to hide) ──',
+        b('show_directory'), b('show_branch'), b('show_model'), b('show_context_bar'),
+        b('show_usage_5h'), b('show_usage_7d'), b('show_cost'), b('show_cost_rate'),
+        b('show_lines_changed'), b('show_dirty_count'), b('show_ahead_behind'), b('show_stash'),
+        b('show_pr'), b('show_duration'), b('show_worktree'),
+        b('show_vim_mode'), b('show_agent'), b('show_effort'), b('show_fast_mode'), b('show_tokens'),
+        '',
+        '# ── Live activity line (line 2; needs Node.js) ──',
+        b('show_activity'), b('activity_colour'), b('activity_pulse'), b('activity_scanner'),
+        '',
+        '# ── Behaviour ──',
+        bc('context_warn_threshold','auto | a percentage like 80'),
+        b('git_untracked'),
+        b('auto_update')
+      );
+      return L.join('\n')+'\n';
+    }
+    function gsummary(){
+      var o=[]; for(var k in DEFAULTS) o.push(k+' = '+state[k]);
+      if(composerOverrides()){ o.push('line1 = '+state.comp.l1.join(' ')); o.push('line2 = '+state.comp.l2.join(' ')); o.push('line3 = '+state.comp.l3.join(' ')); }
+      return o.join('\n');
+    }
+    function applyCmd(){ return "mkdir -p ~/.claude && cat > ~/.claude/statusline.conf <<'EOF'\n"+gconf()+"EOF"; }
+
+    // ----- share link (URL hash) + import -----
+    function updateHash(){
+      var d={}, n=0; for(var k in DEFAULTS){ if(state[k]!==DEFAULTS[k]){ d[k]=state[k]; n++; } }
+      if(composerOverrides()){ d._l1=state.comp.l1; d._l2=state.comp.l2; d._l3=state.comp.l3; n++; }
+      try{
+        if(n) history.replaceState(null,'','#cfg='+encodeURIComponent(JSON.stringify(d)));
+        else if(location.hash.indexOf('cfg=')>=0) history.replaceState(null,'',location.pathname+location.search);
+      }catch(_){}
+    }
+    function applyDiff(d){
+      for(var k in d){ if(k in DEFAULTS) state[k]=d[k]; }
+      if(d._l1){
+        state.comp={l1:(d._l1||[]).slice(), l2:(d._l2||[]).slice(), l3:(d._l3||[]).slice(), off:[]};
+        var placed={}; ['l1','l2','l3'].forEach(function(z){ state.comp[z].forEach(function(t){ placed[t]=1; }); });
+        state.comp.off=TOKENS.filter(function(t){ return !placed[t]; });
+      } else if(d.layout){
+        // layout preset restored without explicit lines — re-seed the composer to match.
+        state.comp=expandPreset(state.layout);
+      }
+    }
+    function importConf(text){
+      var d={}, l1=null, l2=null, l3=null;
+      text.split(/\r?\n/).forEach(function(ln){
+        ln=ln.replace(/^\s+/,''); if(!ln || ln.charAt(0)==='#') return;
+        var eq=ln.indexOf('='); if(eq<0) return;
+        var k=ln.slice(0,eq).trim();
+        var v=ln.slice(eq+1).replace(/\s+#.*$/,'').trim().replace(/^["']|["']$/g,'');
+        if(k==='line1') l1=v; else if(k==='line2') l2=v; else if(k==='line3') l3=v; else if(k in DEFAULTS) d[k]=v;
+      });
+      // Clean round-trip: keys absent from the pasted file revert to default
+      // (a commented line in the conf means "default"). Sample-state is preserved.
+      for(var dk in DEFAULTS) state[dk]=DEFAULTS[dk];
+      state.comp=expandPreset('classic');
+      applyDiff(d);
+      if(l1!==null || l2!==null || l3!==null){
+        function toks(s){ return s ? s.split(/\s+/).filter(function(t){ return t && TOKENS.indexOf(t)>=0; }) : []; }
+        var c={l1:toks(l1||''), l2:toks(l2||''), l3:toks(l3||'')}, placed={};
+        ['l1','l2','l3'].forEach(function(z){ c[z]=c[z].filter(function(t){ if(placed[t]) return false; placed[t]=1; return true; }); });
+        c.off=TOKENS.filter(function(t){ return !placed[t]; });
+        state.comp=c;
+      }
+      buildControls(); buildStateControls(); render();
+    }
+
+    // ----- DOM: controls, sample state, composer -----
+    function selRow(label,key,opts,labels,cb){
+      var row=el('div','cfg-row'); row.appendChild(el('label',null,label));
+      var s=el('select');
+      opts.forEach(function(o){ var op=el('option',null,(labels&&labels[o])||o); op.value=o; if(state[key]===o) op.selected=true; s.appendChild(op); });
+      s.addEventListener('change',function(){ if(cb) cb(s.value); else state[key]=s.value; render(); });
+      row.appendChild(s); return row;
+    }
+    function togRow(label,key){
+      var row=el('label','cfg-tog'); var c=el('input'); c.type='checkbox'; c.checked=state[key]==='true';
+      c.addEventListener('change',function(){ state[key]=c.checked?'true':'false'; render(); });
+      row.appendChild(c); row.appendChild(el('span',null,label)); return row;
+    }
+    function rngRow(label,key,min,max){
+      var row=el('div','cfg-row'); row.appendChild(el('label',null,label));
+      var r=el('input'); r.type='range'; r.min=min; r.max=max; r.value=state[key];
+      var v=el('span','val',state[key]);
+      r.addEventListener('input',function(){ state[key]=r.value; v.textContent=r.value; render(); });
+      row.appendChild(r); row.appendChild(v); return row;
+    }
+    function segTog(tok){
+      var s=SEG[tok], row=el('label','cfg-tog'); var c=el('input'); c.type='checkbox'; c.checked=state[s.show]==='true';
+      c.addEventListener('change',function(){ state[s.show]=c.checked?'true':'false'; render(); });
+      row.appendChild(c); row.appendChild(el('span',null,s.label)); return row;
+    }
+    function grp(title,span){ var g=el('div','cfg-grp'+(span?(' '+span):'')); g.appendChild(el('h4',null,title)); return g; }
+
+    // Panel grid (6 cols at desktop):
+    //   row 1: Sample session (s3) | Appearance (s3)
+    //   row 2: Usage limits (s2) | Live activity (s2) | Behaviour (s2)
+    //   row 3: Segments (s2) | Layout (s4, holds the composer)
+    function buildControls(){
+      var host=document.getElementById('cfg-controls'); host.innerHTML='';
+
+      var g=grp('Sample session (preview only)','s3');
+      var sb=el('div'); sb.id='cfg-state'; g.appendChild(sb);
+      host.appendChild(g);
+
+      g=grp('Appearance','s3');
+      g.appendChild(selRow('Theme','colour_theme',THEME_NAMES));
+      g.appendChild(selRow('Progress bar','bar_gradient',['true','false','heat'],{'true':'gradient (theme)','false':'flat','heat':'heat'}));
+      g.appendChild(selRow('Icon set','icon_set',['classic','modern']));
+      g.appendChild(togRow('Show icons','use_icons'));
+      host.appendChild(g);
+
+      g=grp('Usage limits','s2');
+      g.appendChild(selRow('Label','usage_label',['countdown','clock']));
+      g.appendChild(togRow('Burn-rate forecast','usage_forecast'));
+      host.appendChild(g);
+
+      g=grp('Live activity line','s2');
+      g.appendChild(togRow('Show activity (line 2)','show_activity'));
+      g.appendChild(togRow('Colour the activity line','activity_colour'));
+      g.appendChild(togRow('Pulse the running label','activity_pulse'));
+      g.appendChild(togRow('Scanner on long tools','activity_scanner'));
+      host.appendChild(g);
+
+      g=grp('Behaviour','s2');
+      g.appendChild(selRow('Context warning','context_warn_threshold',['auto','75','80','85','90']));
+      g.appendChild(togRow('Count untracked files','git_untracked'));
+      g.appendChild(togRow('Auto-update in background','auto_update'));
+      host.appendChild(g);
+
+      g=grp('Segments','s2');
+      var tg=el('div','cfg-toggles');
+      ALL.filter(function(t){ return SEG[t].show; }).forEach(function(t){ tg.appendChild(segTog(t)); });
+      g.appendChild(tg);
+      host.appendChild(g);
+
+      g=grp('Layout','s4');
+      g.appendChild(selRow('Preset','layout',['classic','three-line','stacked'],null,function(v){ state.layout=v; state.comp=expandPreset(v); buildComposer(); }));
+      g.appendChild(selRow('Directory','dir_style',['auto','full','basename']));
+      g.appendChild(rngRow('Bar width','bar_width',4,20));
+      g.appendChild(togRow('Drop segments when narrow','enable_truncation'));
+      g.appendChild(togRow('Bracket groups [ ]','use_groups'));
+      var ch=el('div'); var lh=el('h4',null,'Segment layout'); lh.style.marginTop='15px'; ch.appendChild(lh);
+      ch.appendChild(el('p','cfg-hint','Drag a segment to a line, or use its 1 · 2 · 3 · ✕ buttons. Order within a line is the display order. Anything in OFF (or toggled off in Segments) does not appear.'));
+      g.appendChild(ch);
+      var zones=el('div','cfg-zones'); zones.id='cfg-zones'; g.appendChild(zones);
+      host.appendChild(g);
+
+      buildComposer();
+    }
+
+    function buildStateControls(){
+      var host=document.getElementById('cfg-state'); if(!host) return; host.innerHTML='';
+      host.appendChild(rngRow('Context %','ctx',0,100));
+      host.appendChild(rngRow('5-hour %','h5',0,100));
+      host.appendChild(rngRow('Weekly %','wk',0,100));
+      host.appendChild(selRow('Model','model',['Opus 4.8','Sonnet 4.6','Haiku 4.5','Fable 5']));
+      host.appendChild(rngRow('Width (cols)','width',40,180));
+    }
+
+    function chip(tok,zone){
+      var c=el('span','chip-seg'); c.setAttribute('draggable','true'); c.setAttribute('data-tok',tok);
+      var dc=col(SEG[tok].role); var dot=el('span','dot'); dot.style.background=dc||'var(--muted)'; c.appendChild(dot);
+      c.appendChild(el('span',null,SEG[tok].label));
+      var mv=el('span','mv');
+      [['l1','1'],['l2','2'],['l3','3'],['off','✕']].forEach(function(p){
+        var btn=el('button',null,p[1]); btn.type='button'; btn.title='Move to '+(p[0]==='off'?'Off':'Line '+p[1]);
+        if(zone===p[0]) btn.setAttribute('aria-pressed','true');
+        btn.addEventListener('click',function(e){ e.preventDefault(); moveToken(tok,p[0],null); });
+        mv.appendChild(btn);
+      });
+      c.appendChild(mv);
+      c.addEventListener('dragstart',function(e){ dragTok=tok; c.classList.add('dragging'); try{ e.dataTransfer.setData('text/plain',tok); }catch(_){} });
+      c.addEventListener('dragend',function(){ dragTok=null; c.classList.remove('dragging'); });
+      return c;
+    }
+    function dropIndex(chips,e){
+      var kids=chips.children, x=e.clientX, y=e.clientY;
+      for(var i=0;i<kids.length;i++){ var r=kids[i].getBoundingClientRect(); if(y<r.top+r.height/2 || (y<r.bottom && x<r.left+r.width/2)) return i; }
+      return null;
+    }
+    function moveToken(tok,zone,index){
+      ['l1','l2','l3','off'].forEach(function(z){ var a=state.comp[z], i=a.indexOf(tok); if(i>=0) a.splice(i,1); });
+      var arr=state.comp[zone];
+      if(index==null || index<0 || index>arr.length) arr.push(tok); else arr.splice(index,0,tok);
+      buildComposer(); render();
+    }
+    function buildComposer(){
+      var z=document.getElementById('cfg-zones'); if(!z) return; z.innerHTML='';
+      [['l1','Line 1'],['l2','Line 2'],['l3','Line 3'],['off','Off (hidden)']].forEach(function(pair){
+        var zone=el('div','cfg-zone'+(pair[0]==='off'?' off':'')); zone.setAttribute('data-zone',pair[0]);
+        zone.appendChild(el('div','zlab',pair[1]));
+        var chips=el('div','cfg-chips');
+        state.comp[pair[0]].forEach(function(tok){ chips.appendChild(chip(tok,pair[0])); });
+        zone.appendChild(chips);
+        zone.addEventListener('dragover',function(e){ e.preventDefault(); zone.classList.add('drag'); });
+        zone.addEventListener('dragleave',function(){ zone.classList.remove('drag'); });
+        zone.addEventListener('drop',function(e){ e.preventDefault(); zone.classList.remove('drag'); if(dragTok) moveToken(dragTok,pair[0],dropIndex(chips,e)); });
+        z.appendChild(zone);
+      });
+    }
+
+    function render(){
+      var bars=document.getElementById('cfg-bars'), html='';
+      [state.comp.l1,state.comp.l2,state.comp.l3].forEach(function(toks){ var h=renderOneLine(toks); if(h!==null) html+='<div class="bar">'+h+'</div>'; });
+      if(!html) html='<div class="bar"><span style="color:var(--muted)">(every segment is off)</span></div>';
+      bars.innerHTML=html;
+      document.getElementById('cfg-conf').textContent=gconf();
+      document.getElementById('cfg-dump').textContent=gsummary();
+      updateHash();
+    }
+
+    function download(){
+      try{
+        var blob=new Blob([gconf()],{type:'text/plain'}), url=URL.createObjectURL(blob), a=el('a');
+        a.href=url; a.download='statusline.conf'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); },1500); showToast('Downloaded statusline.conf');
+      }catch(_){ copyText(gconf()); }
+    }
+    function openImport(){ var m=document.getElementById('cfg-import-modal'); if(m) m.hidden=false; }
+    function closeImport(){ var m=document.getElementById('cfg-import-modal'); if(m) m.hidden=true; }
+    function reset(){ for(var k in DEFAULTS) state[k]=DEFAULTS[k]; state.comp=expandPreset('classic'); buildControls(); buildStateControls(); render(); }
+
+    function wire(){
+      var b;
+      b=document.getElementById('cfg-copy'); if(b) b.addEventListener('click',function(){ copyText(gconf(),b); });
+      b=document.getElementById('cfg-copy2'); if(b) b.addEventListener('click',function(){ copyText(gconf(),b); });
+      b=document.getElementById('cfg-copycmd'); if(b) b.addEventListener('click',function(){ copyText(applyCmd(),b); });
+      b=document.getElementById('cfg-download'); if(b) b.addEventListener('click',download);
+      b=document.getElementById('cfg-share'); if(b) b.addEventListener('click',function(){ updateHash(); copyText(location.href,b); });
+      b=document.getElementById('cfg-import'); if(b) b.addEventListener('click',openImport);
+      b=document.getElementById('cfg-reset'); if(b) b.addEventListener('click',reset);
+      b=document.getElementById('cfg-import-do'); if(b) b.addEventListener('click',function(){ var ta=document.getElementById('cfg-import-text'); importConf(ta?ta.value:''); closeImport(); });
+      b=document.getElementById('cfg-import-cancel'); if(b) b.addEventListener('click',closeImport);
+      var modal=document.getElementById('cfg-import-modal'); if(modal) modal.addEventListener('click',function(e){ if(e.target===modal) closeImport(); });
+    }
+
+    // ----- init -----
+    state=clone(DEFAULTS);
+    state.ctx='64'; state.h5='42'; state.wk='71'; state.model='Opus 4.8'; state.width='150';
+    state.comp=expandPreset('classic');
+    var hm=location.hash.match(/cfg=([^&]+)/);
+    if(hm){ try{ applyDiff(JSON.parse(decodeURIComponent(hm[1]))); }catch(_){} }
+    buildControls(); buildStateControls(); wire(); render();
   })();
 })();
 </script>
