@@ -176,3 +176,27 @@ mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
   after="$(mtime "${cache}.seen")"
   [ "$before" != "$after" ]            # marker touched => helper re-spawned on change
 }
+
+# ── Todo age-out (v2.22.1) ──────────────────────────────────
+# A stale/abandoned todo (e.g. a lone pending task that never completes) used to
+# linger forever as "░ 0/1". Todos now age out like tools/agents after 5 min.
+
+@test "stale todos age out of the activity line (no perpetual 0/1)" {
+  require_node
+  old_iso="$(iso_at "$(( $(date +%s) - 3600 ))")"   # todo written an hour ago
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"td","name":"TodoWrite","input":{"todos":[{"content":"old task","status":"pending"}]}}]}}\n{"timestamp":"%s","message":{"content":[{"type":"tool_result","tool_use_id":"td"}]}}\n' "$old_iso" "$old_iso" > "$tr_file"
+  run_helper "$tr_file"
+  [[ "$activity" != *"0/1"* ]]   # the stale single-todo bar no longer lingers
+  [[ "$activity" != *"░"* ]]     # ...and no empty todo bar either
+}
+
+@test "recent todo activity still surfaces in the line" {
+  require_node
+  now_iso="$(iso_at "$(date +%s)")"
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"td","name":"TodoWrite","input":{"todos":[{"content":"do thing","status":"in_progress"}]}}]}}\n{"timestamp":"%s","message":{"content":[{"type":"tool_result","tool_use_id":"td"}]}}\n' "$now_iso" "$now_iso" > "$tr_file"
+  run_helper "$tr_file"
+  [[ "$activity" == *"0/1"* ]]
+  [[ "$activity" == *"do thing"* ]]
+}

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.22.1] - 2026-06-21
+
+### Fixed
+
+- **Stale todos no longer linger forever on the activity line.** The todo segment (e.g. `░ 0/1`) had no age-out, so a single abandoned or never-completed todo — for example a `TaskCreate` task that never gets a matching completion — would show as a perpetual `░ 0/1`. Todos now age out after 5 minutes of no todo activity, exactly like the tool and agent segments: the helper stamps a "last todo activity" time (on `TodoWrite`/`TaskCreate`/`TaskUpdate`) and only renders the todo bar while that's recent. Counts and the bar reappear the moment real todo activity resumes. The change is backward-compatible (an old cache without the timestamp simply reads as "not recent" and the stale bar drops on the next render). 2 new tests in `tests/activity.bats`. Suite 171.
+
 ## [2.22.0] - 2026-06-21
 
 The first release informed by a competitive review of the statusline landscape: it ships the most-requested missing feature (a burn-rate forecast), turns `/configure` into a guided wizard, and sharpens how the README positions the project.

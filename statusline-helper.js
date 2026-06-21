@@ -101,6 +101,7 @@ function newState() {
     toolMap: new Map(),
     agentMap: new Map(),
     todos: [],
+    todosUpdatedAt: null,   // last TodoWrite/TaskCreate/TaskUpdate time (for age-out)
     taskIdToIndex: new Map(),
     sessionStart: null,
     sessionName: null
@@ -114,6 +115,7 @@ function serializeState(state) {
     tools: Array.from(state.toolMap.entries()),
     agents: Array.from(state.agentMap.entries()),
     todos: state.todos,
+    todosUpdatedAt: state.todosUpdatedAt,
     taskIdToIndex: Array.from(state.taskIdToIndex.entries()),
     sessionStart: state.sessionStart,
     sessionName: state.sessionName
@@ -126,6 +128,7 @@ function reviveState(s) {
     state.toolMap = new Map(s.tools || []);
     state.agentMap = new Map(s.agents || []);
     state.todos = Array.isArray(s.todos) ? s.todos : [];
+    state.todosUpdatedAt = s.todosUpdatedAt || null;
     state.taskIdToIndex = new Map(s.taskIdToIndex || []);
     state.sessionStart = s.sessionStart || null;
     state.sessionName = s.sessionName || null;
@@ -249,6 +252,7 @@ function parseChunk(state, rawText) {
             status: normalizeStatus(t.status)
           }));
           state.taskIdToIndex.clear();
+          state.todosUpdatedAt = timestamp;
         }
       } else if (block.type === 'tool_use' && block.name === 'TaskCreate') {
         const input = block.input || {};
@@ -256,12 +260,14 @@ function parseChunk(state, rawText) {
         const status = normalizeStatus(input.status) || 'pending';
         state.todos.push({ content, status });
         if (block.id) state.taskIdToIndex.set(block.id, state.todos.length - 1);
+        state.todosUpdatedAt = timestamp;
       } else if (block.type === 'tool_use' && block.name === 'TaskUpdate') {
         const input = block.input || {};
         const index = resolveTaskIndex(input.taskId, state.taskIdToIndex, state.todos);
         if (index !== null) {
           if (input.status) state.todos[index].status = normalizeStatus(input.status);
           if (input.content) state.todos[index].content = sanitize(String(input.content)).slice(0, 50);
+          state.todosUpdatedAt = timestamp;
         }
       }
     }
@@ -446,8 +452,10 @@ function formatActivity(data) {
     parts.push(`⚒ ${desc} ${tk('{o}')}✓${tk('{d}')}${count > 1 ? ` (${count})` : ''}`);
   }
 
-  // Todo progress
-  if (data.todos.length > 0) {
+  // Todo progress — age out like tools/agents: only show while there has been
+  // recent todo activity, so a stale/abandoned list (e.g. a lone pending task
+  // that never completes) doesn't linger as a perpetual "░ 0/1".
+  if (data.todos.length > 0 && isRecent(data.todosUpdatedAt, now)) {
     const done = data.todos.filter(t => t.status === 'completed').length;
     const total = data.todos.length;
     const inProgress = data.todos.find(t => t.status === 'in_progress');
@@ -529,6 +537,11 @@ function computeNext(data, nowMs) {
     }
   }
   if (anyRunning) consider(nowMs + 1000); // elapsed ticks every whole second
+  // The todo bar ages out RECENT_MS after the last todo activity — refresh then.
+  if (data.todos && data.todos.length && data.todosUpdatedAt) {
+    const u = new Date(data.todosUpdatedAt).getTime();
+    if (!isNaN(u)) consider(u + RECENT_MS);
+  }
   return next === Infinity ? 0 : Math.ceil(next / 1000);
 }
 
@@ -560,7 +573,8 @@ function main() {
     const data = {
       tools: Array.from(state.toolMap.values()).slice(-30),
       agents: Array.from(state.agentMap.values()).slice(-10),
-      todos: state.todos
+      todos: state.todos,
+      todosUpdatedAt: state.todosUpdatedAt
     };
 
     // Zero-width colour tokens eat into the cap, so allow extra headroom in
