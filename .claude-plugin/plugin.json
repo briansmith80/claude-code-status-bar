@@ -1,7 +1,7 @@
 {
   "name": "claude-code-status-bar",
   "version": "2.22.1",
-  "description": "Configurable status bar for Claude Code: usage limits, context window, git state, live activity, pacing markers, and 8 colour themes. Pure bash, zero dependencies.",
+  "description": "Warns you before a rate limit or auto-compact, not after. A pure-bash Claude Code status bar (no jq, Node optional) for macOS, Linux, and Windows: usage pacing + burn-rate forecast, context warnings, live activity, cost, git, and 8 themes.",
   "author": {
     "name": "briansmith80",
     "url": "https://github.com/briansmith80"

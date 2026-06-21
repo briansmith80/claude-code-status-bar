@@ -9,7 +9,7 @@
     {
       "name": "claude-code-status-bar",
       "source": ".",
-      "description": "Configurable status bar for Claude Code: usage limits, context window, git state, live activity, pacing markers, and 8 colour themes. Pure bash, zero dependencies.",
+      "description": "Warns you before a rate limit or auto-compact, not after. A pure-bash Claude Code status bar (no jq, Node optional) for macOS, Linux, and Windows: usage pacing + burn-rate forecast, context warnings, live activity, cost, git, and 8 themes.",
       "homepage": "https://github.com/briansmith80/claude-code-status-bar",
       "license": "MIT",
       "keywords": ["statusline", "status-bar", "claude-code", "usage", "rate-limit", "burn-rate", "forecast", "context-window", "auto-compact", "git", "cost", "subagent", "activity", "themes", "pacing", "windows", "bash"]
