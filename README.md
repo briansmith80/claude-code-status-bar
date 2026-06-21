@@ -8,6 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555)
 [![Made for Claude Code](https://img.shields.io/badge/made%20for-Claude%20Code-d97757)](https://code.claude.com)
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/briansmith80-claude-code-status-bar)](https://www.claudepluginhub.com/plugins/briansmith80-claude-code-status-bar?ref=badge)
 
 *Your quota burn, context fill, git state, and live activity, visible under every response.*
 
