@@ -614,10 +614,12 @@ See [`tests/README.md`](tests/README.md) for layout details.
 
 Full release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
-- **2.18.1**: `--update` and `auto_update` now also seed the commented `statusline.conf` (only when absent), so self-update-only users get the starter config too.
-- **2.18.0**: Better defaults out of the box: gradient bars on by default, a responsive `dir_style=auto` that collapses a long path before any segment is dropped, a commented `statusline.conf` the installers create, and a tidier `Opus 4.8 (1M)` model name.
+- **2.22.0 / 2.22.1**: Burn-rate forecast — a `▲time-to-limit` warning when you're on track to hit a limit before it resets — plus a guided `/configure` wizard, and a fix so stale todos no longer linger on the activity line.
+- **2.21.0**: Performance — the live-activity helper now runs only when the line can actually change instead of on every render, so idle sessions stop re-spawning Node; every visual effect (spinner, flash, heat, fade) is unchanged.
+- **2.20.0–2.20.2**: Security & performance hardening — checksum-verified (`SHA256SUMS`) self-update *and* installers, a line-1 control-sequence-injection fix, restored never-block guarantees, and opt-in `git_untracked` / `git_timeout` knobs for large or network-mounted repos.
+- **2.19.0**: Customizable multi-line layout — `layout` presets plus `line1`/`line2`/`line3` token overrides (up to three lines), and a refreshed `icon_set=modern`.
+- **2.18.0**: Better defaults out of the box: gradient bars on, a responsive `dir_style=auto` that collapses a long path before any segment is dropped, and a commented `statusline.conf` the installers create.
 - **2.14.0**: The named themes redesigned in 24-bit truecolour (with a 256-colour fallback) and spread across a saturation/temperature ladder so no two read alike.
-- **2.11.0 / 2.12.0**: One-command self-update (`--update`, atomic staged downloads) and opt-in `auto_update`, plus an update notice that links straight to the release notes.
 
 ## License
 
