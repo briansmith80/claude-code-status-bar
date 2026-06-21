@@ -84,10 +84,35 @@ load test_helper
 }
 
 @test "usage_label=countdown shows days and hours on the weekly bar" {
-  write_conf "usage_label=countdown"
+  # usage_forecast=false isolates the countdown FORMAT: 71% this far into the
+  # week is over an even pace, which would otherwise swap in the ▲ forecast.
+  write_conf "usage_label=countdown" "usage_forecast=false"
   now=$(date +%s)
   run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"rate_limits\":{\"seven_day\":{\"used_percentage\":71,\"resets_at\":$((now + 3*86400 + 4*3600 + 600))}}}"
   assert_plain_contains "wk (3d4h)"
+}
+
+@test "burn-rate forecast: over-pace usage shows a ▲ time-to-limit warning" {
+  now=$(date +%s)
+  # 60% used only ~1h into a 5h window (resets in 4h) -> on track to hit the
+  # limit well before reset, so the countdown becomes a ▲ forecast.
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":10},\"rate_limits\":{\"five_hour\":{\"used_percentage\":60,\"resets_at\":$((now + 4*3600))}}}"
+  assert_plain_contains "5hr (▲"
+}
+
+@test "burn-rate forecast: under-pace usage keeps the plain countdown" {
+  now=$(date +%s)
+  # 10% used ~1h into a 5h window -> you'll reset long before the limit.
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":10},\"rate_limits\":{\"five_hour\":{\"used_percentage\":10,\"resets_at\":$((now + 4*3600))}}}"
+  assert_plain_contains "5hr ("
+  assert_plain_not_contains "5hr (▲"
+}
+
+@test "usage_forecast=false suppresses the forecast even when over pace" {
+  write_conf "usage_forecast=false"
+  now=$(date +%s)
+  run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":10},\"rate_limits\":{\"five_hour\":{\"used_percentage\":60,\"resets_at\":$((now + 4*3600))}}}"
+  assert_plain_not_contains "5hr (▲"
 }
 
 @test "countdown is the default when usage_label is unset" {

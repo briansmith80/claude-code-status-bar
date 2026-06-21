@@ -1,71 +1,112 @@
 ---
-description: Customize your claude-code-status-bar settings
+description: Customize your claude-code-status-bar settings (guided wizard)
 allowed-tools: Bash, Read, Edit, Write, AskUserQuestion
 ---
 
-# claude-code-status-bar Configuration
+# claude-code-status-bar — Guided configuration wizard
 
-You are helping the user customize their status bar. The config file is `~/.claude/statusline.conf`.
+You are a setup wizard for the user's status bar. Walk them through a short,
+**guided** sequence of choices using the **AskUserQuestion** tool (one question
+group at a time), then write only the non-default settings to
+`~/.claude/statusline.conf`. Be friendly and fast. The whole point is that
+*Claude Code is the interactive layer* — the user should never hand-edit a file
+unless they want to.
 
-## Step 1: Read Current Config
+Rules for every question:
+- Make the FIRST option the user's CURRENT value (or the default), labelled
+  "(keep current)". This lets them breeze through with one keypress.
+- Use `multiSelect: true` for the toggle groups (Q3–Q5).
+- Skip any group the user says they don't care about. Don't force all six.
+- After the questions, PREVIEW before you save, then write only the diff.
+
+## Step 1 — Read the current config and orient
 
 ```bash
 conf_file="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/statusline.conf"
-if [ -f "$conf_file" ]; then
-  echo "Current config:"
-  cat "$conf_file"
-else
-  echo "No config file yet — using defaults."
-fi
+if [ -f "$conf_file" ]; then echo "=== current statusline.conf ==="; cat "$conf_file"; else echo "No config yet — all defaults."; fi
 ```
 
-## Step 2: Ask What to Change
+Summarise the current state in one or two plain sentences (theme, layout, and
+anything already non-default). Then offer to preview the themes live — this is
+the closest thing to a visual picker and it shows each theme's gradient bars:
 
-Ask the user what they'd like to customize. Present these categories:
+```bash
+bash ~/.claude/statusline-command.sh --demo
+```
 
-### Themes
-- `colour_theme` — Pick one of: `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `matrix`, `mono` (default: default). Tip: preview every theme (with its gradient bars) in the terminal first by running `bash ~/.claude/statusline-command.sh --demo`.
+## Step 2 — Run the guided questions (AskUserQuestion)
 
-### Layout (1–3 lines)
-- `layout` — Choose a preset: `classic` (all metrics on line 1, the live activity on line 2 — the default), `three-line` (model/usage/cost on line 1, dir + git state on line 2, activity on line 3), or `stacked`.
-- `line1` / `line2` / `line3` — Override any line with a space-separated list of segment tokens (these win over the preset, per line). **Quote any value with spaces**, e.g. `line2="dir branch lines_changed ahead_behind"`. Set a line to `""` to hide that row. Tokens: `dir`, `branch`, `model`, `context`, `usage_5h`, `usage_7d`, `lines_changed`, `dirty`, `ahead_behind`, `stash`, `pr`, `duration`, `worktree`, `cost`, `cost_rate`, `vim`, `agent`, `effort`, `fast_mode`, `tokens`, `update`, `activity`. Notes: `activity` is the live line (needs Node.js); unknown tokens are ignored; a token still obeys its `show_*` toggle; a segment lives on the first line that lists it; segments you don't list anywhere won't show. **Tip:** on a 3-line layout with colours, if you see occasional garbled redraws, that's Claude Code's known multi-line + ANSI behaviour — preview with the Step 4 test command.
+Ask these as a sequence of AskUserQuestion calls. You can batch up to 4 related
+questions per call. For each option list, lead with the current/default value.
 
-### Segments (toggle on/off)
-- `show_directory` — Working directory
-- `show_branch` — Git branch
-- `show_model` — Model name (tier-colored)
-- `show_context_bar` — Context window progress bar
-- `show_lines_changed` — Lines added/removed
-- `show_dirty_count` — Uncommitted file count
-- `show_ahead_behind` — Commits ahead/behind remote
-- `show_stash` — Git stash count
-- `show_duration` — Session duration
-- `show_worktree` — Worktree indicator
-- `show_cost` — Session cost in USD
-- `show_cost_rate` — Cost per hour (off by default)
-- `show_usage_5h` — 5-hour usage limit
-- `show_usage_7d` — 7-day usage limit
-- `show_pr` — Open pull request number, coloured by review state (needs Claude Code 2.1.145+)
-- `show_tokens` — Token counts (off by default)
-- `show_effort` — Reasoning effort level, e.g. eff:xhigh (needs Claude Code 2.1.133+)
-- `show_fast_mode` — Fast mode indicator while fast mode is on
-- `show_vim_mode` — Vim mode indicator
-- `show_agent` — Agent name
-- `show_activity` — Live activity line (tools, agents, todos)
+**Q1 — Theme** (single select): `default`, `nord`, `dracula`, `solarized`,
+`tokyo-night`, `catppuccin`, `matrix`, `mono`. Tell them they can run
+`--demo <theme>` to preview just one. (Offer 4 at a time if listing all eight;
+or ask "which family — neon / muted / pastel / mono?" first, then narrow.)
 
-### Display Options
-- `use_icons` — Unicode icons before segments (default: true)
-- `icon_set` — `classic` (today's icons — the default) or `modern` (a refreshed set: directory ↱, branch ⑂, lines-changed ⇄, duration ⏱; model ◆ unchanged). `use_icons=false` removes all icons regardless of this setting.
-- `bar_gradient` — Progress-bar gradient (default: true). `true` = the theme's own gradient ramp; `false` = flat single-colour bars; `heat` = a fixed green→yellow→orange→red ramp regardless of theme
-- `auto_hide` — Hide zero/empty values (default: true)
-- `usage_label` — Usage bar reset label: countdown, e.g. 2h20m (default), or clock, e.g. 2pm
-- `activity_ttl_seconds` — Hide the live activity line when its cache is older than this (default: 120)
-- `activity_colour` — Per-segment theme colours on the activity line: spinner on running tools, heat-coloured elapsed times, red failures, completion flash, gradient todo bar. Set false for the classic all-dim line (default: true)
-- `activity_fresh_seconds` — Drop the activity line back to all-dim when its data is older than this, so stale info reads as stale (default: 45)
-- `activity_pulse` — Opt-in: the running tool/agent label breathes (alternates bold/faint each re-render) (default: false). Needs a low odd `refreshInterval` such as 3 to animate; this command offers to set that for you (see below).
-- `activity_scanner` — Opt-in: a small sweeping tracker bar appears on line 2 while something has been running over 30 seconds (default: false). Needs a low `refreshInterval` such as 3 to animate (see below).
+**Q2 — Layout** (single select):
+- `classic` — every metric on line 1, live activity on line 2 (the default)
+- `three-line` — model/usage/cost · dir + git state · activity
+- `stacked` — dir/model/usage · git state/duration · activity
 
-**If the user enables `activity_pulse` or `activity_scanner`, offer to set `refreshInterval: 3` for them.** These effects are wall-clock driven, so they only animate when the bar re-renders often; on the default `refreshInterval` of 60 they sit static (not broken, just not moving). A value of `3` is low enough to animate, odd (so the pulse alternates instead of getting stuck on one beat), and safe on every platform (comfortably above the script's runtime). If the user agrees, merge `refreshInterval` into the existing `statusLine` block in `settings.json` without disturbing anything else, for example:
+**Q3 — Usage & limits** (multiSelect). Frame each as a feature to keep/enable:
+- **Burn-rate forecast** (`usage_forecast`, default ON) — when you're on track
+  to hit a limit before it resets, the countdown becomes a `▲time-to-limit`
+  warning (e.g. `▲1h20m`). Quiet unless you're over pace. Recommend keeping ON.
+- **Clock reset labels** (`usage_label=clock`, default countdown) — show the
+  reset time (`2pm`) instead of the countdown (`2h20m`).
+- **5-hour limit** (`show_usage_5h`, default ON) / **7-day limit**
+  (`show_usage_7d`, default ON) — uncheck to hide.
+
+**Q4 — Segments** (multiSelect). Offer the commonly-changed ones:
+- Turn ON (off by default): cost-per-hour (`show_cost_rate`), token counts
+  (`show_tokens`).
+- Turn OFF (on by default) for a leaner bar: session cost (`show_cost`),
+  lines-changed (`show_lines_changed`), dirty count (`show_dirty_count`),
+  ahead/behind (`show_ahead_behind`), stash (`show_stash`), worktree
+  (`show_worktree`), duration (`show_duration`), PR (`show_pr`).
+
+**Q5 — Live activity line** (multiSelect):
+- **Colourful activity** (`activity_colour`, default ON) — spinner, heat-coloured
+  elapsed, red failures, completion flash, gradient todo bar.
+- **Pulse** (`activity_pulse`) / **Scanner** (`activity_scanner`) — opt-in motion
+  effects. If enabled, OFFER to set `refreshInterval: 3` (Step 5) so they animate.
+- **Turn the activity line off** (`show_activity=false`) — drops the Node helper.
+
+**Q6 — Bar style** (single select): `gradient` (the theme's ramp — default),
+`heat` (fixed green→red on any theme), `flat` (single colour). Maps to
+`bar_gradient=true|heat|false`.
+
+## Step 3 — Preview before saving
+
+Render the pending choices against a sample payload WITHOUT committing, by
+sourcing the would-be settings inline:
+
+```bash
+# Replace KEY=VALUE pairs with the user's pending choices.
+env_conf='colour_theme=nord
+usage_forecast=true'
+tmp="$(mktemp)"; printf '%s\n' "$env_conf" > "$tmp"
+echo '{"cwd":"/tmp/demo","model":{"display_name":"Opus 4.8 (1M context)"},"context_window":{"used_percentage":78,"context_window_size":1000000,"total_input_tokens":780000},"total_cost_usd":1.23,"rate_limits":{"five_hour":{"used_percentage":62,"resets_at":'"$(( $(date +%s) + 5400 ))"'},"seven_day":{"used_percentage":71,"resets_at":'"$(( $(date +%s) + 200000 ))"'}}}' \
+  | CLAUDE_CONFIG_DIR="$(dirname "$tmp")" HOME="$(dirname "$tmp")" bash ~/.claude/statusline-command.sh 2>/dev/null || true
+rm -f "$tmp"
+```
+
+Show the rendered bar, confirm it looks right, then save.
+
+## Step 4 — Write the diff
+
+Write ONLY the keys that differ from defaults to `~/.claude/statusline.conf`,
+one `key=value` per line with a short comment header. PRESERVE any existing keys
+the wizard didn't touch (read the file, merge, write back). Never write a key
+that equals its default — keep the file minimal so future defaults still apply.
+
+## Step 5 — refreshInterval offer (only if pulse/scanner enabled)
+
+`activity_pulse` / `activity_scanner` are wall-clock driven, so they only
+animate when the bar re-renders often. On the default `refreshInterval` of 60
+they sit static (not broken, just still). Offer to set `refreshInterval: 3`
+(low enough to animate, odd so the pulse alternates, safe on every platform):
 
 ```bash
 settings_file="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
@@ -79,30 +120,53 @@ console.log("Set statusLine.refreshInterval=3");
 ' "$settings_file"
 ```
 
-(No Node.js available? Edit `settings.json` directly to add `"refreshInterval": 3` inside the `statusLine` block.) If the user would rather keep their current interval, leave it and tell them the effect stays static until they lower it.
-- `pr_link` — Wrap the PR segment in an OSC 8 hyperlink to the pull request (clickable in terminals that support links) (default: true)
-- `subagent_rows` — Set to false to keep Claude Code's default subagent panel rows (default: true)
-- `usage_cache_seconds` — OAuth fallback refresh interval in seconds; ignored when stdin provides rate limits (default: 600)
-- `auto_update` — Opt-in: when a newer version is detected, download and install it automatically in the background (atomic; never touches statusline.conf or settings.json) (default: false)
-- `bar_width` — Progress bar width in characters (default: 10)
-- `branch_max_length` — Truncate long branch names (default: unlimited)
-- `dir_style` — Directory display: `auto` (full path when the line fits the terminal width, basename when it would overflow; the default), `full` (always the whole path), or `basename` (just the last folder)
-- `context_warn_threshold` — auto = warn within 20k tokens of Claude Code's auto-compact point (default); or a raw percentage like 80
-- `enable_truncation` — Drop low-priority segments when the line is too wide for the terminal (default: true; pairs with `dir_style=auto` so the path collapses before any segment is dropped)
-- `max_width` — Override terminal width for truncation
+(No Node.js? Edit `settings.json` directly to add `"refreshInterval": 3` inside
+the `statusLine` block.) Tell the user changes take effect on the next response.
 
-### Grouping
-- `use_groups` — Wrap related segments in brackets (default: false)
-- `group_open` / `group_close` — Bracket characters (default: `[` / `]`)
+---
 
-## Step 3: Apply Changes
+## Appendix — full option reference
 
-Write the user's preferences to `~/.claude/statusline.conf`. Only include settings that differ from defaults. Format as `key=value`, one per line, with comments.
+For power users who say "show me everything" or want a key the wizard didn't
+cover. Every key goes in `~/.claude/statusline.conf` as `key=value`.
 
-## Step 4: Test
+### Themes & styling
+- `colour_theme` — `default`, `nord`, `dracula`, `solarized`, `tokyo-night`, `catppuccin`, `matrix`, `mono`. Preview with `--demo`.
+- `bar_gradient` — `true` (theme ramp, default), `false` (flat), `heat` (fixed green→red).
+- `use_icons` (default true) · `icon_set` — `classic` (default) or `modern` (dir ↱, branch ⑂, lines ⇄, duration ⏱).
+
+### Layout
+- `layout` — `classic` (default), `three-line`, `stacked`.
+- `line1` / `line2` / `line3` — space-separated segment tokens (override the preset, per line). **Quote values with spaces.** `""` hides a row. Tokens: `dir`, `branch`, `model`, `context`, `usage_5h`, `usage_7d`, `lines_changed`, `dirty`, `ahead_behind`, `stash`, `pr`, `duration`, `worktree`, `cost`, `cost_rate`, `vim`, `agent`, `effort`, `fast_mode`, `tokens`, `update`, `activity`.
+- `bar_width` (default 10) · `branch_max_length` (default unlimited) · `dir_style` — `auto` (default) / `full` / `basename` · `enable_truncation` (default true) · `max_width`.
+- `use_groups` (default false) · `group_open` / `group_close` (default `[` / `]`).
+
+### Segments (all on unless noted)
+`show_directory` · `show_branch` · `show_model` · `show_context_bar` · `show_lines_changed` · `show_dirty_count` · `show_ahead_behind` · `show_stash` · `show_duration` · `show_worktree` · `show_cost` · `show_cost_rate` (off) · `show_usage_5h` · `show_usage_7d` · `show_pr` (CC 2.1.145+) · `show_tokens` (off) · `show_effort` (CC 2.1.133+) · `show_fast_mode` · `show_vim_mode` · `show_agent` · `show_activity`.
+
+### Usage, cost & context
+- `usage_label` — `countdown` (default, e.g. 2h20m) or `clock` (e.g. 2pm).
+- `usage_forecast` (default true) — ▲time-to-limit warning when on track to hit a limit before reset; quiet otherwise.
+- `usage_cache_seconds` (default 600) — OAuth fallback refresh; ignored when stdin provides limits.
+- `context_warn_threshold` — `auto` (within 20k tokens of auto-compact, default) or a raw % like 80.
+- `auto_hide` (default true) — hide zero/empty values.
+
+### Git performance (large / network repos)
+- `git_untracked` (default true) — `false` skips the untracked-file scan (faster on huge/network repos; untracked then don't count as dirty).
+- `git_timeout` (default 0=off) — `N` wraps git in `timeout N` so a hung mount can't stall the render.
+
+### Live activity line
+- `activity_colour` (default true) · `activity_ttl_seconds` (default 120) · `activity_fresh_seconds` (default 45) · `activity_pulse` (off) · `activity_scanner` (off, needs `refreshInterval` ~3).
+- `pr_link` (default true) — clickable OSC 8 hyperlink on the PR segment.
+- `subagent_rows` (default true) — false keeps Claude Code's built-in subagent rows.
+
+### Updates
+- `auto_update` (default false) — opt-in: download + install a newer version in the background (atomic, SHA256-verified; never touches statusline.conf or settings.json).
+
+## Final test
 
 ```bash
 echo '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":65},"total_cost_usd":1.50}' | bash ~/.claude/statusline-command.sh
 ```
 
-Tell the user the changes will take effect after the next Claude Code response.
+Tell the user the changes take effect after the next Claude Code response.

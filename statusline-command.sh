@@ -506,6 +506,10 @@ show_cost_rate=false
 show_usage_5h=true
 show_usage_7d=true
 usage_label="countdown"
+# Burn-rate forecast: when usage is on track to hit the limit BEFORE the window
+# resets, the countdown label becomes a "▲time-to-limit" warning (e.g. ▲1h20m).
+# Only appears when you're over an even pace, so it stays quiet otherwise.
+usage_forecast=true
 show_pr=true
 pr_link=true
 usage_cache_seconds=600
@@ -657,6 +661,7 @@ case "${1:-}" in
       printf 'subagent_rows=%s\n'          "${subagent_rows}"
       printf 'usage_cache_seconds=%s\n'    "${usage_cache_seconds}"
       printf 'usage_label=%s\n'            "${usage_label}"
+      printf 'usage_forecast=%s\n'         "${usage_forecast}"
       printf 'use_groups=%s\n'             "${use_groups}"
       printf 'use_icons=%s\n'              "${use_icons}"
     } | LC_ALL=C sort
@@ -776,8 +781,10 @@ case "${1:-}" in
     # docs/assets/themes/generate-theme-demos.sh): a 1M-context model name (which
     # exercises the " context" trim and matches the 1M window), varied bar fills
     # (low 5h, mid context, near-full weekly) so the whole green->red gradient
-    # range shows, and tokens kept below the auto-compact warning band (no ▲).
-    demo_json="{\"cwd\":\"$PWD\",\"model\":{\"display_name\":\"Opus 4.8 (1M context)\"},\"context_window\":{\"used_percentage\":78,\"context_window_size\":1000000,\"total_input_tokens\":780000},\"total_cost_usd\":0.45,\"rate_limits\":{\"five_hour\":{\"used_percentage\":37,\"resets_at\":$(( NOW_EPOCH + 8400 ))},\"seven_day\":{\"used_percentage\":98,\"resets_at\":$(( NOW_EPOCH + 97200 ))}}}"
+    # range shows, tokens kept below the auto-compact warning band, and both
+    # usage windows kept UNDER pace (weekly resets soon, an end-of-week scene) so
+    # the theme preview stays clean and deterministic with no ▲ forecast/warning.
+    demo_json="{\"cwd\":\"$PWD\",\"model\":{\"display_name\":\"Opus 4.8 (1M context)\"},\"context_window\":{\"used_percentage\":78,\"context_window_size\":1000000,\"total_input_tokens\":780000},\"total_cost_usd\":0.45,\"rate_limits\":{\"five_hour\":{\"used_percentage\":37,\"resets_at\":$(( NOW_EPOCH + 8400 ))},\"seven_day\":{\"used_percentage\":98,\"resets_at\":$(( NOW_EPOCH + 3600 ))}}}"
     for demo_t in $demo_themes; do
       printf '%s\n' "── ${demo_t} ──"
       printf '%s' "$demo_json" | STATUSLINE_THEME="$demo_t" STATUSLINE_DEMO=1 bash "$0" 2>/dev/null || true
@@ -1651,6 +1658,41 @@ format_reset_label() {
   fi
 }
 
+# Burn-rate forecast: project when the limit will be hit at the CURRENT rate.
+# Returns a short "time to limit" duration in REPLY (e.g. "1h20m") only when
+# usage is running ahead of an even pace — i.e. on track to reach 100% BEFORE
+# the window resets; returns non-zero / empty otherwise (you'll reset first, so
+# the plain countdown is the useful label). Pure integer arithmetic, no fork:
+# it reuses the same window maths as the pacing marker (used% per elapsed-second
+# extrapolated to 100%). The 2-minute elapsed floor avoids jumpy forecasts from
+# a tiny early-window sample.
+# Usage: calc_forecast "$resets_at" "$window_secs" "$used_pct"; label=$REPLY
+calc_forecast() {
+  local resets_at="$1" window_secs="$2" used_pct="$3"
+  local reset_ts start_ts elapsed time_to_reset secs dd hh mm
+  REPLY=""
+  case "$used_pct" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$used_pct" -le 0 ] && return 1
+  iso_to_epoch "$resets_at" || return 1
+  reset_ts=$REPLY
+  time_to_reset=$(( reset_ts - NOW_EPOCH ))
+  [ "$time_to_reset" -le 0 ] && return 1
+  start_ts=$(( reset_ts - window_secs ))
+  elapsed=$(( NOW_EPOCH - start_ts ))
+  [ "$elapsed" -lt 120 ] && return 1
+  [ "$elapsed" -gt "$window_secs" ] && elapsed=$window_secs
+  if [ "$used_pct" -ge 100 ]; then REPLY="now"; return 0; fi
+  # Seconds to reach 100% at the current burn rate: (100-used)*elapsed/used.
+  secs=$(( (100 - used_pct) * elapsed / used_pct ))
+  # Only a forecast when you'd hit the limit before the window resets (over pace).
+  [ "$secs" -ge "$time_to_reset" ] && return 1
+  dd=$(( secs / 86400 )); hh=$(( (secs % 86400) / 3600 )); mm=$(( (secs % 3600) / 60 ))
+  if   [ "$dd" -gt 0 ]; then REPLY="${dd}d${hh}h"
+  elif [ "$hh" -gt 0 ]; then REPLY="${hh}h${mm}m"
+  elif [ "$mm" -gt 0 ]; then REPLY="${mm}m"
+  else REPLY="<1m"; fi
+}
+
 sl_profile "usage"
 # ── Context Window Progress Bar ───────────────────────────────
 # Visual bar showing how much of the context window has been consumed.
@@ -1989,6 +2031,11 @@ if [ "$show_usage_5h" = "true" ] && [ -n "$usage_5h" ]; then
     [ "$usage_label" = "countdown" ] && u5_label_style="countdown"
     format_reset_label "$usage_5h_resets" "$u5_label_style" || true; u5_reset_label=$REPLY
     [ -n "$u5_reset_label" ] && u5_label="(${u5_reset_label})"
+    # Burn-rate forecast: when on track to hit the limit before reset, swap the
+    # countdown for a "▲ time-to-limit" warning (the more actionable number).
+    if [ "${usage_forecast:-true}" = "true" ] && calc_forecast "$usage_5h_resets" $((5 * 3600)) "$u5_int" && [ -n "$REPLY" ]; then
+      u5_label="(▲${REPLY})"
+    fi
   fi
   build_progress_bar "$u5_int" "$u5_target"; u5_bar_output="$REPLY_COLOUR"$'\n'"$REPLY"
   u5_bar_clr="${u5_bar_output%%$'\n'*}"
@@ -2007,6 +2054,9 @@ if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
     [ "$usage_label" = "countdown" ] && u7_label_style="countdown"
     format_reset_label "$usage_7d_resets" "$u7_label_style" || true; u7_reset_label=$REPLY
     [ -n "$u7_reset_label" ] && u7_label="(${u7_reset_label})"
+    if [ "${usage_forecast:-true}" = "true" ] && calc_forecast "$usage_7d_resets" $((7 * 86400)) "$u7_int" && [ -n "$REPLY" ]; then
+      u7_label="(▲${REPLY})"
+    fi
   fi
   build_progress_bar "$u7_int" "$u7_target"; u7_bar_output="$REPLY_COLOUR"$'\n'"$REPLY"
   u7_bar_clr="${u7_bar_output%%$'\n'*}"

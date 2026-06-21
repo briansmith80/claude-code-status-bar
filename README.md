@@ -37,7 +37,7 @@ Claude Code warns you about your rate limit and your full context window only on
 - **Live activity**: a second line of running tools, subagents, and todo progress.
 - **Cost**: session cost and burn rate, colour-coded.
 
-Pure bash, no jq, no compiled binaries, one-line install, eight colour themes. Works on macOS, Linux, and Windows (Git Bash); every network call runs in the background, so the bar itself never blocks. Backed by 166 automated tests on all three platforms (plus ShellCheck) in CI.
+Pure bash, no jq, no compiled binaries, one-line install, eight colour themes. Works on macOS, Linux, and Windows (Git Bash); every network call runs in the background, so the bar itself never blocks. Backed by 169 automated tests on all three platforms (plus ShellCheck) in CI.
 
 ## Install
 
@@ -130,10 +130,30 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 
 - **Auto-compact awareness**: the context bar marks the exact point where Claude Code will auto-compact and fires a `▲` warning within 20k tokens of it, on any window size.
 - **Pacing markers**: a `│` on each usage bar shows where your usage *should* be for even consumption, so "37% used" becomes "37% used and comfortably under pace".
+- **Burn-rate forecast**: when you're on track to hit a limit *before* it resets, the countdown turns into a `▲time-to-limit` warning (e.g. `▲1h20m`). It stays quiet while you're under pace, so it only speaks up when it matters.
 - **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
 - **Subagent panel rows**: a status icon, elapsed time, token cost, and a live `tok/s` burn rate for every running Task-tool subagent.
 - **Pure bash, no jq**: bash 3.2+ (stock macOS works); JSON is parsed with bash regex, so there's nothing to compile or install on Windows.
 - **Never blocks**: update checks, the usage fallback, and transcript parsing all run in background subshells; the bar renders from caches.
+
+## How it compares
+
+There are a lot of Claude Code status lines now. Here's where this one is different from the most popular ones, focused on the things that actually bite you in daily use:
+
+| | **this** | claude-hud | ccstatusline | claude-powerline |
+|---|:---:|:---:|:---:|:---:|
+| Native Windows / Git Bash (one codebase) | ✅ | ⚠️ known bugs | ⚠️ needs Node | ⚠️ needs Node |
+| No required runtime (pure bash; Node *optional*) | ✅ | ❌ Node | ❌ Node | ❌ Node |
+| Runs nothing extra on every render (no `npx`/`node` in the hot path) | ✅ | ❌ | ❌ | ❌ |
+| Pacing marker **+ burn-rate forecast** (`▲time-to-limit`) | ✅ | ❌ | ❌ | ❌ |
+| Warns *before* auto-compact (real CC compact maths) | ✅ | ⚠️ counter | ⚠️ counter | ⚠️ threshold |
+| Stdin-native limits **with OAuth fallback** for older CC | ✅ | ⚠️ | ⚠️ | ⚠️ vanishes w/o hook data |
+| Checksum-verified self-update (per-release `SHA256SUMS`) | ✅ | ❌ | ❌ | ❌ |
+| Live activity (tools/subagents/todos) that degrades w/o Node | ✅ | ✅ (Node-only) | ⚠️ | ⚠️ |
+| Guided in-Claude config wizard (`/configure`) | ✅ | ⚠️ | ✅ TUI | ✅ wizard + web |
+| Automated tests + CI across macOS / Linux / Windows | ✅ 166 | ❌ | ❌ | ❌ |
+
+<sub>Snapshot of public docs, June 2026; the others are good tools and evolve quickly — check their repos for the latest. ✅ yes · ⚠️ partial/caveated · ❌ no.</sub>
 
 ## Layouts (1–3 lines)
 
@@ -488,6 +508,7 @@ The installer wires this into `settings.json` when Node.js is present, leaving a
 
 Points that matter for a tool that runs on every response and can read your OAuth token:
 
+- **Nothing is downloaded or executed on the render path.** This is a copied local script (plus an optional local helper), not an `npx`/`npm exec` that resolves a moving version on every keystroke. The only network calls are the opt-in update check and the usage-API fallback, both run in detached background subshells and never on the critical path.
 - All cache and temp files are created with `umask 077` (owner-readable only).
 - The OAuth token is passed to curl via `--config -` on stdin, so it never appears in the process list. The wget fallback writes the bearer header to a `0600` temp file passed via `--config` (never on argv, where `ps aux` could read it) and runs with `--max-redirect=0` to prevent token leakage on redirects; curl is still strongly preferred.
 - The self-updater (`--update` and the opt-in `auto_update`) **and the installers** (`install.sh` / `install.ps1`, which double as the update path) verify every downloaded file against a per-release `SHA256SUMS` before installing it, and abort on any mismatch leaving the install untouched. The update source can only be set by a real environment variable, never by `statusline.conf`.

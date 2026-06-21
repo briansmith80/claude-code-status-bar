@@ -71,6 +71,10 @@
 # ── Usage-limit labels ──────────────────────────────────────
 # countdown = time remaining like 2h20m (default) · clock = reset time like 2pm
 # usage_label=countdown
+# Burn-rate forecast: when you're on track to hit a limit BEFORE it resets, the
+# countdown becomes a ▲time-to-limit warning (e.g. ▲1h20m). Only shows when
+# you're over an even pace, so it stays quiet otherwise. Set false to disable.
+# usage_forecast=true
 
 # ── Segments — turn any off with =false (all on unless noted) ─
 # show_directory  show_branch  show_model  show_context_bar  show_cost

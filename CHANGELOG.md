@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.22.0] - 2026-06-21
+
+The first release informed by a competitive review of the statusline landscape: it ships the most-requested missing feature (a burn-rate forecast), turns `/configure` into a guided wizard, and sharpens how the README positions the project.
+
+### Added
+
+- **Burn-rate forecast (`usage_forecast`, default on).** When your usage is on track to hit a limit *before* the window resets, the countdown label becomes a `▲time-to-limit` warning (e.g. `▲1h20m`), the more actionable number when you're burning hot. It only appears when you're running over an even pace (it reuses the same window maths as the pacing marker, so it's consistent with the `│` you already see), and reverts to the plain countdown otherwise. Pure-bash and fork-free. Set `usage_forecast=false` to always show the plain countdown.
+- **Guided `/configure` wizard.** The `/claude-code-status-bar:configure` slash command is now a step-by-step wizard: it reads your current config, offers a live `--demo` theme preview, walks you through theme / layout / usage / segments / activity / bar-style choices with `AskUserQuestion` (each defaulting to "keep current"), previews the result, and writes only the diff to `statusline.conf`. Claude Code itself is the interactive layer, so there's no TUI to install. The full key reference is kept as an appendix.
+
+### Docs
+
+- README gains a **"How it compares"** table (vs claude-hud / ccstatusline / claude-powerline) leading with the differentiators that matter day to day: native Windows from one codebase, no required runtime (pure bash, Node optional), nothing run on the render hot path, pacing + burn-rate forecast, warns *before* auto-compact, checksum-verified self-update, and automated tests across three platforms. The Security section now states explicitly that nothing is downloaded or executed on the render path (no `npx` in the hot path), the supply-chain property reviewers increasingly look for.
+
+### Internal
+
+- 3 new forecast tests in `tests/cc21.bats`; `usage_forecast` added to `--dump-config` and `statusline.conf.example`. Suite 169.
+
 ## [2.21.0] - 2026-06-20
 
 A performance release for the live-activity line. Every activity visual is unchanged: the spinner, the bold green completion flash, the elapsed-time heat colours, the brighten-then-settle, and the staleness fade all behave exactly as before.
