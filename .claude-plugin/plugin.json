@@ -12,11 +12,21 @@
   "keywords": [
     "statusline",
     "status-bar",
+    "claude-code",
     "usage",
-    "context",
+    "rate-limit",
+    "burn-rate",
+    "forecast",
+    "context-window",
+    "auto-compact",
     "git",
+    "cost",
+    "subagent",
+    "activity",
     "themes",
-    "pacing"
+    "pacing",
+    "windows",
+    "bash"
   ],
   "commands": [
     "./commands/setup.md",
