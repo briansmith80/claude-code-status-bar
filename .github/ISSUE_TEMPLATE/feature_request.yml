@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest a new segment, option, or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Note the project's constraints (pure-bash core, no jq,
+        never block the render) in CONTRIBUTING.md, so proposals that fit those tend
+        to land fastest.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: The use case or pain point, not just the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What it would look like in the bar or config (a mock of the rendered line helps).
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

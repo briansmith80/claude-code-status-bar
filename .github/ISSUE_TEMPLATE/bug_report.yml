@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in the status bar renders wrong, errors, or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A render is driven by the JSON Claude Code sends on
+        stdin, so the more of the details below you can include, the faster this is to fix.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw vs what you expected. A screenshot of the bar helps.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Status bar version
+      description: Output of `bash ~/.claude/statusline-command.sh --version`
+      placeholder: "2.22.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS / shell
+      options:
+        - macOS
+        - Linux
+        - Windows (Git Bash / MSYS2)
+        - Other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: cc-version
+    attributes:
+      label: Claude Code version
+      placeholder: "e.g. 2.1.170"
+    validations:
+      required: false
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config / diagnostics
+      description: Non-default lines from `~/.claude/statusline.conf`, and optionally the output of `bash ~/.claude/statusline-command.sh --dump-config`. Redact anything sensitive.
+      render: shell
+    validations:
+      required: false
