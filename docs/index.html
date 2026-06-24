@@ -241,6 +241,7 @@
   .cfg-controls { display:grid; gap:16px; grid-template-columns:1fr; align-items:start; margin-top:16px; }
   .cfg-grp { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px 17px; }
   .cfg-grp > .cfg-row { margin-top:11px; }
+  .cfg-col { display:flex; flex-direction:column; gap:16px; }
   .cfg-toggles { display:grid; gap:9px 16px; grid-template-columns:1fr 1fr; margin-top:12px; }
   .cfg-tog { display:flex; align-items:center; gap:9px; font-size:13.5px; color:var(--text); cursor:pointer; }
   .cfg-tog input { accent-color:var(--accent); width:15px; height:15px; flex:none; }
@@ -271,6 +272,7 @@
     .cfg-grp.s2 { grid-column: span 2; }
     .cfg-grp.s3 { grid-column: span 3; }
     .cfg-grp.s4 { grid-column: span 4; }
+    .cfg-col.s2 { grid-column: span 2; }
   }
   @media (max-width: 520px) {
     .cfg-toggles { grid-template-columns:1fr; }
@@ -1309,11 +1311,23 @@
       g.appendChild(togRow('Auto-update in background','auto_update'));
       host.appendChild(g);
 
-      g=grp('Segments','s2');
+      // Left column: Segments stacked directly above Claude API status, beside Layout.
+      var leftCol=el('div','cfg-col s2');
+
+      g=grp('Segments');
       var tg=el('div','cfg-toggles');
       ALL.filter(function(t){ return SEG[t].show && t!=='claude_status'; }).forEach(function(t){ tg.appendChild(segTog(t)); });
       g.appendChild(tg);
-      host.appendChild(g);
+      leftCol.appendChild(g);
+
+      g=grp('Claude API status');
+      g.appendChild(togRow('Show status badge','show_claude_status'));
+      g.appendChild(selRow('Surface when','claude_status_min',['major','minor'],{'major':'major + critical','minor':'minor + maintenance too'}));
+      g.appendChild(selRow('Poll interval','claude_status_cache_seconds',['120','300','600','900'],{'120':'2 min','300':'5 min (default)','600':'10 min','900':'15 min'}));
+      g.appendChild(el('p','cfg-hint','Off by default. Polls status.claude.com in the background (never on the render path) and shows the badge ONLY when Claude is degraded. Set the "Claude status" sample (top-left) to a degraded state to preview it.'));
+      leftCol.appendChild(g);
+
+      host.appendChild(leftCol);
 
       g=grp('Layout','s4');
       g.appendChild(selRow('Preset','layout',['classic','three-line','stacked'],null,function(v){ state.layout=v; state.comp=expandPreset(v); buildComposer(); }));
@@ -1325,13 +1339,6 @@
       ch.appendChild(el('p','cfg-hint','Drag a segment to a line, or use its 1 · 2 · 3 · ✕ buttons. Order within a line is the display order. Anything in OFF (or toggled off in Segments) does not appear.'));
       g.appendChild(ch);
       var zones=el('div','cfg-zones'); zones.id='cfg-zones'; g.appendChild(zones);
-      host.appendChild(g);
-
-      g=grp('Claude API status','s2');
-      g.appendChild(togRow('Show status badge','show_claude_status'));
-      g.appendChild(selRow('Surface when','claude_status_min',['major','minor'],{'major':'major + critical','minor':'minor + maintenance too'}));
-      g.appendChild(selRow('Poll interval','claude_status_cache_seconds',['120','300','600','900'],{'120':'2 min','300':'5 min (default)','600':'10 min','900':'15 min'}));
-      g.appendChild(el('p','cfg-hint','Off by default. Polls status.claude.com in the background (never on the render path) and shows the badge ONLY when Claude is degraded. Set the "Claude status" sample (top-left) to a degraded state to preview it.'));
       host.appendChild(g);
 
       buildComposer();
