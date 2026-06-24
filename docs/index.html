@@ -827,7 +827,7 @@
 
     // Segment model — mirrors statusline-command.sh add-order, priorities, groups.
     var ALL = ['dir','branch','vim','model','agent','effort','fast_mode','context','tokens',
-               'usage_5h','usage_7d','lines_changed','dirty','ahead_behind','stash','pr',
+               'usage_5h','usage_7d','lines_changed','dirty','ahead_behind','stash','pr','claude_status',
                'duration','worktree','cost','cost_rate','update'];
     var TOKENS = ALL.concat(['activity']);
     var SEG = {
@@ -847,6 +847,7 @@
       ahead_behind: {pri:6, grp:'git',     show:'show_ahead_behind',  label:'ahead/behind', role:'info'},
       stash:        {pri:6, grp:'git',     show:'show_stash',         label:'stash',        role:'warn'},
       pr:           {pri:6, grp:'git',     show:'show_pr',            label:'PR',           role:'add'},
+      claude_status:{pri:3, grp:'',        show:'show_claude_status', label:'Claude status',role:'del'},
       duration:     {pri:7, grp:'session', show:'show_duration',      label:'duration',     role:'info'},
       worktree:     {pri:8, grp:'',        show:'show_worktree',      label:'worktree',     role:'branch'},
       cost:         {pri:4, grp:'session', show:'show_cost',          label:'cost',         role:'warn'},
@@ -877,6 +878,7 @@
       colour_theme:'default', bar_gradient:'true', icon_set:'classic', use_icons:'true',
       layout:'classic', dir_style:'auto', bar_width:'10', enable_truncation:'true', use_groups:'false',
       usage_label:'countdown', usage_forecast:'true',
+      show_claude_status:'false', claude_status_min:'major', claude_status_cache_seconds:'300',
       show_directory:'true', show_branch:'true', show_model:'true', show_context_bar:'true',
       show_usage_5h:'true', show_usage_7d:'true', show_cost:'true', show_cost_rate:'false',
       show_lines_changed:'true', show_dirty_count:'true', show_ahead_behind:'true', show_stash:'true',
@@ -968,6 +970,10 @@
     function modelRole(n){ if(/Haiku/i.test(n)) return 'add'; if(/Sonnet/i.test(n)) return 'warn'; if(/Opus/i.test(n)) return 'opus'; if(/Fable|Mythos/i.test(n)) return 'fable'; return 'model'; }
     function costRole(v){ var c=Math.round(parseFloat(v)*100); return c>=500?'bar_high':(c>=100?'warn':'add'); }
     function prRole(s){ return s==='approved'?'add':(s==='changes_requested'?'del':(s==='draft'?'dim':(s==='pending'?'warn':'info'))); }
+    // Claude API status: severity rank + tier floor, mirroring statusline-command.sh.
+    function csRank(s){ return s==='critical'?3:(s==='major'?2:((s==='minor'||s==='maintenance')?1:0)); }
+    function csFloor(){ var m=state.claude_status_min; return (m==='minor'||m==='maintenance')?1:(m==='critical'?3:2); }
+    function claudeStatusVisible(){ return state.show_claude_status==='true' && state.cstatus && state.cstatus!=='none' && csRank(state.cstatus)>=csFloor(); }
     function fmtDur(s){ var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),mm=Math.floor((s%3600)/60); if(d>0) return d+'d'+h+'h'; if(h>0) return h+'h'+mm+'m'; if(mm>0) return mm+'m'; return '<1m'; }
     function usagePace(which){ var m=BARMETA[which]; return Math.floor(m.elapsed/m.window*100); }
     function usageLabel(which,p){
@@ -1025,6 +1031,15 @@
         case 'cost': text='$'+SAMPLE.cost; html=span(text,costRole(SAMPLE.cost)); break;
         case 'cost_rate': text='$'+SAMPLE.rate+'/hr'; html=span(text,costRole(SAMPLE.rate)); break;
         case 'update': text=(state.use_icons==='true'?'↑ ':'update ')+SAMPLE.update; html=span(text,'add'); break;
+        case 'claude_status': {
+          var ci=state.cstatus, crole, cg;
+          if(ci==='critical'){ crole='del'; cg='●'; text='Claude: critical outage'; }
+          else if(ci==='major'){ crole='del'; cg='●'; text='Claude: major outage'; }
+          else if(ci==='minor'){ crole='warn'; cg='▲'; text='Claude: degraded'; }
+          else { crole='info'; cg='◷'; text='Claude: maintenance'; }
+          if(state.use_icons==='true') text=cg+' '+text;
+          html=span(text,crole); break;
+        }
         default: text=''; html='';
       }
       return {tok:tok, name:tok, html:html, w:text.length};
@@ -1095,6 +1110,7 @@
         var t=tokens[i];
         if(t==='activity'){ if(state.show_activity==='true') hasAct=true; continue; }
         var sh=SEG[t].show; if(sh && state[sh]!=='true') continue;
+        if(t==='claude_status' && !claudeStatusVisible()) continue;
         normal.push(t);
       }
       if(!normal.length && !hasAct) return null;
@@ -1106,8 +1122,8 @@
     // ----- layout presets + composer state -----
     function expandPreset(name){
       var p;
-      if(name==='three-line') p={l1:['vim','model','agent','effort','fast_mode','context','usage_5h','usage_7d','tokens','duration','cost','cost_rate','update'], l2:['dir','branch','lines_changed','dirty','ahead_behind','stash','pr','worktree'], l3:['activity']};
-      else if(name==='stacked') p={l1:['dir','branch','model','context','usage_5h','usage_7d','cost'], l2:['lines_changed','dirty','ahead_behind','stash','pr','duration','worktree','update'], l3:['activity']};
+      if(name==='three-line') p={l1:['vim','model','agent','effort','fast_mode','context','usage_5h','usage_7d','tokens','duration','claude_status','cost','cost_rate','update'], l2:['dir','branch','lines_changed','dirty','ahead_behind','stash','pr','worktree'], l3:['activity']};
+      else if(name==='stacked') p={l1:['dir','branch','model','context','usage_5h','usage_7d','claude_status','cost'], l2:['lines_changed','dirty','ahead_behind','stash','pr','duration','worktree','update'], l3:['activity']};
       else p={l1:ALL.slice(), l2:['activity'], l3:[]};
       var placed={}; [].concat(p.l1,p.l2,p.l3).forEach(function(t){ placed[t]=1; });
       p.off=TOKENS.filter(function(t){ return !placed[t]; });
@@ -1156,6 +1172,11 @@
         '# ── Usage limits ──',
         bc('usage_label','countdown | clock'),
         b('usage_forecast'),
+        '',
+        '# ── Claude API status (status.claude.com) ──',
+        b('show_claude_status'),
+        bc('claude_status_min','major (major+critical) | minor (also minor+maintenance)'),
+        b('claude_status_cache_seconds'),
         '',
         '# ── Segments (set =false to hide) ──',
         b('show_directory'), b('show_branch'), b('show_model'), b('show_context_bar'),
@@ -1290,7 +1311,7 @@
 
       g=grp('Segments','s2');
       var tg=el('div','cfg-toggles');
-      ALL.filter(function(t){ return SEG[t].show; }).forEach(function(t){ tg.appendChild(segTog(t)); });
+      ALL.filter(function(t){ return SEG[t].show && t!=='claude_status'; }).forEach(function(t){ tg.appendChild(segTog(t)); });
       g.appendChild(tg);
       host.appendChild(g);
 
@@ -1306,6 +1327,13 @@
       var zones=el('div','cfg-zones'); zones.id='cfg-zones'; g.appendChild(zones);
       host.appendChild(g);
 
+      g=grp('Claude API status','s2');
+      g.appendChild(togRow('Show status badge','show_claude_status'));
+      g.appendChild(selRow('Surface when','claude_status_min',['major','minor'],{'major':'major + critical','minor':'minor + maintenance too'}));
+      g.appendChild(selRow('Poll interval','claude_status_cache_seconds',['120','300','600','900'],{'120':'2 min','300':'5 min (default)','600':'10 min','900':'15 min'}));
+      g.appendChild(el('p','cfg-hint','Off by default. Polls status.claude.com in the background (never on the render path) and shows the badge ONLY when Claude is degraded. Set the "Claude status" sample (top-left) to a degraded state to preview it.'));
+      host.appendChild(g);
+
       buildComposer();
     }
 
@@ -1315,6 +1343,7 @@
       host.appendChild(rngRow('5-hour %','h5',0,100));
       host.appendChild(rngRow('Weekly %','wk',0,100));
       host.appendChild(selRow('Model','model',['Opus 4.8','Sonnet 4.6','Haiku 4.5','Fable 5']));
+      host.appendChild(selRow('Claude status','cstatus',['none','minor','major','critical','maintenance']));
       host.appendChild(rngRow('Width (cols)','width',40,180));
     }
 
@@ -1397,7 +1426,7 @@
 
     // ----- init -----
     state=clone(DEFAULTS);
-    state.ctx='64'; state.h5='42'; state.wk='71'; state.model='Opus 4.8'; state.width='150';
+    state.ctx='64'; state.h5='42'; state.wk='71'; state.model='Opus 4.8'; state.width='150'; state.cstatus='major';
     state.comp=expandPreset('classic');
     var hm=location.hash.match(/cfg=([^&]+)/);
     if(hm){ try{ applyDiff(JSON.parse(decodeURIComponent(hm[1]))); }catch(_){} }

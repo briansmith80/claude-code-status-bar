@@ -147,12 +147,13 @@ There are a lot of Claude Code status lines now. Here's where this one is differ
 | No required runtime (pure bash; Node *optional*) | ✅ | ❌ Node | ❌ Node | ❌ Node |
 | Runs nothing extra on every render (no `npx`/`node` in the hot path) | ✅ | ❌ | ❌ | ❌ |
 | Pacing marker **+ burn-rate forecast** (`▲time-to-limit`) | ✅ | ❌ | ❌ | ❌ |
+| **Claude API status early-warning** (degraded badge from status.claude.com) | ✅ | ❌ | ❌ | ❌ |
 | Warns *before* auto-compact (real CC compact maths) | ✅ | ⚠️ counter | ⚠️ counter | ⚠️ threshold |
 | Stdin-native limits **with OAuth fallback** for older CC | ✅ | ⚠️ | ⚠️ | ⚠️ vanishes w/o hook data |
 | Checksum-verified self-update (per-release `SHA256SUMS`) | ✅ | ❌ | ❌ | ❌ |
 | Live activity (tools/subagents/todos) that degrades w/o Node | ✅ | ✅ (Node-only) | ⚠️ | ⚠️ |
 | Guided in-Claude config wizard (`/configure`) | ✅ | ⚠️ | ✅ TUI | ✅ wizard + web |
-| Automated tests + CI across macOS / Linux / Windows | ✅ 166 | ❌ | ❌ | ❌ |
+| Automated tests + CI across macOS / Linux / Windows | ✅ 187 | ❌ | ❌ | ❌ |
 
 <sub>Snapshot of public docs, June 2026; the others are good tools and evolve quickly — check their repos for the latest. ✅ yes · ⚠️ partial/caveated · ❌ no.</sub>
 
@@ -299,6 +300,7 @@ The full list (every segment toggle, the activity-line options, grouping, and ti
 - **Gradient bars** (`bar_gradient`, on by default): each filled cell is interpolated along the theme's gradient (the `default` theme uses a green→red heat ramp). `false` gives flat bars; `heat` forces green→red on any theme. No-op under `mono`/`NO_COLOR`. Preview with `--demo`.
 - **Context warnings are compaction-aware**: Claude Code auto-compacts at a fixed reserve below the window (~83% of a 200k window, ~97% of a 1M one). With `context_warn_threshold=auto` (default) the `│` marker sits at that point and `▲` fires within 20k tokens of it. Honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting, and `DISABLE_AUTO_COMPACT`; set a number to use a fixed percentage instead.
 - **Animated effects** (opt-in `activity_pulse`, `activity_scanner`): need a low **odd** `refreshInterval` such as `3` to animate, otherwise they sit static. `/claude-code-status-bar:configure` can set it for you.
+- **Claude API status** (opt-in `show_claude_status`, off by default): a degraded-only early-warning badge fed by the public [`status.claude.com`](https://status.claude.com) page. It polls in the background (never on the render path, so it can't slow or block the bar) and appears **only when Claude is degraded** — `claude_status_min=major` (default) shows major/critical outages, `minor` also surfaces minor degradation and maintenance windows. It's an early warning, not ground truth: a status page is reactive and can lag a live incident.
 - **Narrow terminals**: with `enable_truncation=true` (default) low-priority segments drop tier by tier (update notice first, directory and branch last), after `dir_style=auto` has already collapsed the path to its basename.
 - **Groups**: `use_groups=true` brackets related segments: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`.
 - **Trust level**: the config is sourced as bash, so treat it like your `.bashrc` and only put your own settings in it. (`show_usage_weekly` still works as an alias for `show_usage_7d`.)
@@ -387,6 +389,7 @@ rm -f ~/.claude/.statusline-usage-cache
 rm -f ~/.claude/.statusline-usage-backoff
 rm -f ~/.claude/.statusline-activity-cache
 rm -f ~/.claude/.statusline-activity-cache.*
+rm -f ~/.claude/.statusline-claude-status-cache
 rm -rf ~/.claude/.statusline-transcript-cache
 rm -f ~/.claude/statusline.conf   # your config; skip this line to keep it
 ```
@@ -397,10 +400,10 @@ Then remove the `"statusLine"` block from `~/.claude/settings.json`.
 
 ## Segments
 
-All segments are on by default except token counts and cost rate. Zero-valued segments auto-hide (configurable via `auto_hide`), and segments whose data is missing are simply omitted, so your actual bar is usually shorter than the full list.
+All segments are on by default except token counts, cost rate, and the Claude API status badge. Zero-valued segments auto-hide (configurable via `auto_hide`), and segments whose data is missing are simply omitted, so your actual bar is usually shorter than the full list.
 
 <details>
-<summary>All 21 line-one segments</summary>
+<summary>All 22 line-one segments</summary>
 
 <br>
 
@@ -426,6 +429,7 @@ All segments are on by default except token counts and cost rate. Zero-valued se
 | Worktree | `⊞ hotfix` | `show_worktree` | Worktree name; covers `--worktree` sessions and any linked git worktree (CC 2.1.145+) |
 | Cost | `$0.45` | `show_cost` | Green under $1, yellow $1-5, red $5+ |
 | Cost rate | `$2.10/hr` | `show_cost_rate` *(off)* | Burn rate; appears once the session is over a minute old |
+| Claude API status | `● Claude: major outage` | `show_claude_status` *(off)* | Opt-in early-warning badge; shows **only when Claude is degraded** (polls `status.claude.com` in the background, never on the render path). `claude_status_min=major` (default) shows major/critical, `minor` adds minor + maintenance; links to the status page when `pr_link=true` |
 | Update notice | `↑ 2.18.1` | *(automatic)* | Background version check against GitHub every 6 hours; shows the new version, links to its release notes, and `--update` installs it |
 | Live activity | *(its own line by default; place anywhere via `layout`)* | `show_activity` | Running tools, tool counts, subagents, todo progress; `activity_colour=false` for the classic all-dim look |
 

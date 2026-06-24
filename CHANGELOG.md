@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.23.0] - 2026-06-24
+
+Adds an opt-in early-warning for Claude API degradation, built on the same never-block background-fetch pattern as the update check, so it costs nothing on the render path.
+
+### Added
+
+- **Claude API status segment (`show_claude_status`, off by default).** A degraded-only badge fed by the public `status.claude.com` Atlassian Statuspage. It shows `● Claude: major outage` / `critical`, `▲ Claude: degraded`, or `◷ Claude: maintenance` **only when Claude is degraded**, and nothing when healthy (like the update notice). It polls `summary.json` in a fully-detached background subshell on a configurable interval (`claude_status_cache_seconds`, default 300s) and caches a single token, so the render only ever reads a tiny cache: zero forks on the hot path, never blocks. The tier floor `claude_status_min` (default `major`) keeps it quiet for everything but request-breaking outages; set `minor` to also surface minor degradation and maintenance windows. The badge links to the status page when `pr_link=true` (the shared hyperlink toggle).
+  - **Catches the under-report case.** The page-wide indicator can read "All Systems Operational" while an incident is still in `monitoring` (its components have already recovered). Because we poll `summary.json`, the worst-of (page indicator, any active incident's `impact`) drives the badge, so a still-tracked major/critical incident is not missed.
+  - **Fail-silent by design.** The background fetch writes the cache only for a well-formed body, so a network blip, a blocked host, or the status page itself being down never flashes a false "down": the last-good value (or silence) stands. A staleness ceiling (6x the poll interval, ~30 min) drops a phantom outage after a long sleep. It's an early warning, not ground truth: a status page is reactive and can lag a live incident.
+  - **Hardened source (S2).** The endpoint is a fixed constant, not a config key, so a sourced `statusline.conf` cannot repoint the fetch; only an env var (`STATUSLINE_CLAUDE_STATUS_URL`, used by the tests) can. No auth header is ever sent to the public endpoint.
+
+### Docs
+
+- README "How it compares" gains an upstream-status-early-warning row (no surveyed statusline ships one); the Segments table, Configuration notes, and Uninstall list document the new segment. The web configurator (`docs/index.html`) gains an "Claude status" control group (enable + tier floor + poll interval) and a sample-state selector so the live preview can show the degraded badge.
+
+### Internal
+
+- New `tests/claude_status.bats` (16 tests: display policy, tier floor, glyph/colour, staleness ceiling, fail-silent guard, OSC 8 link, and the `summary.json` parser + under-report escalation via a `file://` fixture). `show_claude_status`/`claude_status_min`/`claude_status_cache_seconds` added to `--dump-config` and `statusline.conf.example`; `.statusline-claude-status-cache` added to `--uninstall`. Suite 187.
+
 ## [2.22.1] - 2026-06-21
 
 ### Fixed

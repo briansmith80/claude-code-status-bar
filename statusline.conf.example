@@ -76,6 +76,19 @@
 # you're over an even pace, so it stays quiet otherwise. Set false to disable.
 # usage_forecast=true
 
+# ── Claude API status (status.claude.com) ───────────────────
+# Opt-in early-warning badge — shows ONLY when Claude is degraded (nothing when
+# healthy). Polls the public Claude status page in the background (never on the
+# render path, so it can't slow or block the bar). It's an early warning, not
+# ground truth: a status page is reactive and can lag a live incident. OFF by
+# default because it contacts an extra host (status.claude.com).
+# show_claude_status=false
+# claude_status_min=major          # major = only major/critical outages (default) ·
+#                                  # minor = also minor degradation + maintenance windows
+# claude_status_cache_seconds=300  # background poll interval (the status page's edge
+#                                  # cache is ~10s, so polling faster gains nothing)
+# The badge links to status.claude.com when pr_link=true (the shared link toggle).
+
 # ── Segments — turn any off with =false (all on unless noted) ─
 # show_directory  show_branch  show_model  show_context_bar  show_cost
 # show_lines_changed  show_dirty_count  show_ahead_behind  show_stash

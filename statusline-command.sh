@@ -76,6 +76,20 @@ _ENV_REPO_RAW="${STATUSLINE_REPO_RAW:-}"
 REPO_RAW_DEFAULT="https://raw.githubusercontent.com/briansmith80/claude-code-status-bar/main"
 REPO_RAW="${_ENV_REPO_RAW:-$REPO_RAW_DEFAULT}"
 
+# ── Claude API status (status.claude.com) ────────────────────
+# Optional, default-off early-warning segment. Polls the public Atlassian
+# Statuspage summary.json in a detached background subshell (like the update
+# check) and caches the worst-of (page indicator, active-incident impact), so
+# the render only ever reads a tiny cache — never blocks, never forks on the
+# hot path. SECURITY (S2): capture the URL override from the *real* environment
+# here, BEFORE statusline.conf is sourced; it is re-pinned AFTER the conf load,
+# so a sourced conf line can never repoint the fetch. Only a genuine env var
+# (a fork, or a file:// path for tests) can — never the config file.
+CLAUDE_STATUS_CACHE_FILE="${SCRIPT_DIR}/.statusline-claude-status-cache"
+_ENV_CLAUDE_STATUS_URL="${STATUSLINE_CLAUDE_STATUS_URL:-}"
+CLAUDE_STATUS_URL_DEFAULT="https://status.claude.com/api/v2/summary.json"
+CLAUDE_STATUS_URL="${_ENV_CLAUDE_STATUS_URL:-$CLAUDE_STATUS_URL_DEFAULT}"
+
 # ── Shared Helpers ──────────────────────────────────────────
 # HTTP GET helper — returns body on stdout. Usage: http_get URL [TIMEOUT]
 # Supports optional auth headers via $HTTP_AUTH_HEADER.
@@ -460,6 +474,64 @@ check_for_update() {
   ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
 }
 
+# Map a Claude-status indicator to a numeric severity rank (higher = worse),
+# returned in REPLY. maintenance ranks with minor so the default major-floor
+# treats a planned window as non-alarming noise (shown only when min=minor).
+claude_status_rank() {
+  case "$1" in
+    critical)          REPLY=3 ;;
+    major)             REPLY=2 ;;
+    minor|maintenance) REPLY=1 ;;
+    *)                 REPLY=0 ;;
+  esac
+}
+
+# Refresh the Claude-API-status cache (opt-in; see show_claude_status). Reads
+# the last-known status into the cs_ts/cs_ind globals for THIS render, then —
+# only if the cache is stale or missing — spawns a fully-detached background
+# fetch (never blocks). Mirrors check_for_update; the cache line is "<epoch>
+# <indicator>" where <indicator> is the worst-of the page indicator and any
+# active incident's impact (so a 'monitoring' incident whose components have
+# recovered, which leaves the page-wide indicator at 'none', is still caught).
+check_claude_status() {
+  if [ -f "$CLAUDE_STATUS_CACHE_FILE" ]; then
+    read -r cs_ts cs_ind < "$CLAUDE_STATUS_CACHE_FILE" 2>/dev/null || true
+    case "$cs_ts" in *[!0-9]*) cs_ts="" ;; esac
+    # Fresh enough — render uses cs_ind/cs_ts; do not touch the network.
+    if [ -n "$cs_ts" ] && [ $(( NOW_EPOCH - cs_ts )) -lt "$claude_status_cache_seconds" ]; then
+      return
+    fi
+  fi
+
+  # Stale or missing — refresh in a detached background subshell. The render
+  # still shows the last-known cs_ind (subject to the segment's staleness ceiling).
+  (
+    body=$(http_get "$CLAUDE_STATUS_URL" 3) || body=""
+    # Write ONLY a well-formed body: a failed/garbage fetch (network blip, the
+    # status page itself down, a proxied env that can't reach it) leaves the
+    # previous cache untouched, so the bar never flashes a false "down".
+    case "$body" in *'"indicator"'*) ;; *) body="" ;; esac
+    if [ -n "$body" ]; then
+      page="none"
+      [[ $body =~ \"indicator\"[[:space:]]*:[[:space:]]*\"([a-z]+)\" ]] && page="${BASH_REMATCH[1]}"
+      case "$page" in none|minor|major|critical|maintenance) ;; *) page="none" ;; esac
+      # summary.json's incidents[] holds only UNRESOLVED incidents, and "impact"
+      # appears on incidents (components use "status"), so scanning for it catches
+      # an active incident the page-wide indicator may under-report.
+      case "$body" in
+        *'"impact":"critical"'*) inc="critical" ;;
+        *'"impact":"major"'*)    inc="major" ;;
+        *'"impact":"minor"'*)    inc="minor" ;;
+        *)                       inc="none" ;;
+      esac
+      claude_status_rank "$page"; page_rank=$REPLY
+      claude_status_rank "$inc";  inc_rank=$REPLY
+      if [ "$inc_rank" -gt "$page_rank" ]; then eff="$inc"; else eff="$page"; fi
+      echo "$(date +%s) $eff" > "$CLAUDE_STATUS_CACHE_FILE"
+    fi
+  ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
+}
+
 # Skip the background update check for diagnostic / management flags
 # (they would race with cache deletion or pollute --dump-config output).
 case "${1:-}" in
@@ -477,7 +549,7 @@ esac
 #   show_cost=false
 #
 # Segment priorities (used by truncation — lower = kept longer):
-#   1=dir+branch  2=context  3=model,usage  4=cost  5=lines,dirty
+#   1=dir+branch  2=context  3=model,usage,claude-status  4=cost  5=lines,dirty
 #   6=ahead/behind,stash  7=duration  8=worktree  9=update
 
 show_directory=true
@@ -512,6 +584,17 @@ usage_label="countdown"
 usage_forecast=true
 show_pr=true
 pr_link=true
+# Claude API status (status.claude.com). Opt-in early-warning segment: polls
+# the public Statuspage in the background and shows a badge ONLY when Claude is
+# degraded (nothing when healthy). Off by default — it adds an outbound host.
+# claude_status_min is the floor: 'major' (default) shows only major/critical
+# outages; 'minor' also surfaces minor degradation + maintenance windows.
+# It's an early warning, not ground truth — it can lag a live incident.
+# claude_status_cache_seconds is the background poll interval (also the link's
+# OSC 8 hyperlink reuses the pr_link toggle).
+show_claude_status=false
+claude_status_min=major
+claude_status_cache_seconds=300
 usage_cache_seconds=600
 # Opt-in: when an update is detected, download and install it in the
 # background automatically (atomic; never touches statusline.conf/settings.json).
@@ -587,6 +670,8 @@ STATUSLINE_CONF="${SCRIPT_DIR}/statusline.conf"
 # STATUSLINE_REPO_RAW) to repoint the self-updater — the update source can only
 # come from a real environment variable, never from the sourced config file.
 REPO_RAW="${_ENV_REPO_RAW:-$REPO_RAW_DEFAULT}"
+# Same S2 re-pin for the Claude-status fetch source (captured near the top).
+CLAUDE_STATUS_URL="${_ENV_CLAUDE_STATUS_URL:-$CLAUDE_STATUS_URL_DEFAULT}"
 
 # Backwards compatibility: accept old name
 [ "${show_usage_weekly:-}" = "true" ] && show_usage_7d=true
@@ -619,6 +704,9 @@ case "${1:-}" in
       printf 'bar_gradient=%s\n'           "${bar_gradient}"
       printf 'bar_width=%s\n'              "${bar_width}"
       printf 'branch_max_length=%s\n'      "${branch_max_length}"
+      printf 'claude_status_cache_seconds=%s\n' "${claude_status_cache_seconds}"
+      printf 'claude_status_min=%s\n'      "${claude_status_min}"
+      printf 'show_claude_status=%s\n'     "${show_claude_status}"
       printf 'dir_style=%s\n'              "${dir_style}"
       printf 'colour_theme=%s\n'           "${colour_theme}"
       printf 'context_warn_threshold=%s\n' "${context_warn_threshold}"
@@ -680,6 +768,7 @@ case "${1:-}" in
       "${SCRIPT_DIR}/.statusline-usage-cache"
       "${SCRIPT_DIR}/.statusline-usage-backoff"
       "${SCRIPT_DIR}/.statusline-activity-cache"
+      "${SCRIPT_DIR}/.statusline-claude-status-cache"
     )
     UNINSTALL_DIRS=(
       "${SCRIPT_DIR}/.statusline-transcript-cache"
@@ -793,6 +882,13 @@ case "${1:-}" in
     exit 0
     ;;
 esac
+
+# ── Claude API status refresh (opt-in, default off) ──────────
+# Reaches here only on a normal render (every management flag above exits), so
+# --dump-config/--benchmark/--demo/--uninstall never trigger a fetch. Detached,
+# never blocks; sets cs_ind/cs_ts for the segment built later.
+cs_ind="" cs_ts=""
+[ "$show_claude_status" = "true" ] && check_claude_status
 
 # ── Auto-update (opt-in) ─────────────────────────────────────
 # With auto_update=true, once the background check has flagged a newer
@@ -2145,6 +2241,39 @@ if [ "$show_pr" = "true" ]; then
   fi
 fi
 
+# Claude API status (priority 3) — shows ONLY when degraded. cs_ind/cs_ts were
+# set by check_claude_status from the background-refreshed cache. The staleness
+# ceiling (cache_seconds * 6 ≈ 30 min) drops a phantom outage after a long sleep
+# or a sustained fetch failure; the tier floor (claude_status_min) suppresses
+# the noisier minor/maintenance states out of the box.
+if [ "$show_claude_status" = "true" ] && [ -n "$cs_ind" ] && [ "$cs_ind" != "none" ]; then
+  case "$cs_ts" in ''|*[!0-9]*) cs_ts=0 ;; esac
+  if [ "$cs_ts" -gt 0 ] && [ $(( NOW_EPOCH - cs_ts )) -le $(( claude_status_cache_seconds * 6 )) ]; then
+    claude_status_rank "$cs_ind"; cs_rk=$REPLY
+    case "$claude_status_min" in
+      minor|maintenance) cs_floor=1 ;;
+      critical)          cs_floor=3 ;;
+      *)                 cs_floor=2 ;;   # 'major' (default)
+    esac
+    if [ "$cs_rk" -ge "$cs_floor" ]; then
+      case "$cs_ind" in
+        critical)    cs_clr="$CLR_DEL";  cs_g="●"; cs_t="Claude: critical outage" ;;
+        major)       cs_clr="$CLR_DEL";  cs_g="●"; cs_t="Claude: major outage" ;;
+        minor)       cs_clr="$CLR_WARN"; cs_g="▲"; cs_t="Claude: degraded" ;;
+        maintenance) cs_clr="$CLR_INFO"; cs_g="◷"; cs_t="Claude: maintenance" ;;
+      esac
+      cs_seg_text="$cs_t"
+      [ "$use_icons" = "true" ] && cs_seg_text="${cs_g} ${cs_t}"
+      # Fixed, trusted literal URL — trivially satisfies the PR segment's
+      # OSC 8 allowlist; reuse the same hyperlink form, gated on pr_link.
+      if [ "$pr_link" = "true" ]; then
+        cs_seg_text="${ESC_CH}]8;;https://status.claude.com${ESC_CH}\\${cs_seg_text}${ESC_CH}]8;;${ESC_CH}\\"
+      fi
+      add_seg "${cs_clr}${cs_seg_text}${CLR_RESET}" 3 "" "claude_status"
+    fi
+  fi
+fi
+
 # Session duration (priority 7)
 if [ "$show_duration" = "true" ] && [ -n "$duration_ms" ] && [ "$duration_ms" != "0" ]; then
   total_secs=$(( ${duration_ms%%.*} / 1000 ))
@@ -2388,11 +2517,11 @@ assemble_line() {
 resolve_layout_preset() {
   case "${1:-classic}" in
     three-line)
-      lp1="vim model agent effort fast_mode context usage_5h usage_7d tokens duration cost cost_rate update"
+      lp1="vim model agent effort fast_mode context usage_5h usage_7d tokens duration claude_status cost cost_rate update"
       lp2="dir branch lines_changed dirty ahead_behind stash pr worktree"
       lp3="activity" ;;
     stacked)
-      lp1="dir branch model context usage_5h usage_7d cost"
+      lp1="dir branch model context usage_5h usage_7d claude_status cost"
       lp2="lines_changed dirty ahead_behind stash pr duration worktree update"
       lp3="activity" ;;
     classic|*)
