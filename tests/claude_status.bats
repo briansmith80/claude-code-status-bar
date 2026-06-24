@@ -129,7 +129,7 @@ skip_if_windows() {
   assert_plain_not_contains "●"
 }
 
-# ── summary.json parser + under-report escalation (file://) ──
+# ── status.json parser (file://) ─────────────────────────────
 
 # Run the background writer against a local fixture and wait for the cache.
 write_status_via_fixture() {
@@ -147,24 +147,40 @@ write_status_via_fixture() {
   return 0
 }
 
-@test "summary.json: a critical incident while indicator=none escalates to critical" {
+@test "status.json: the page indicator is cached verbatim (critical)" {
   command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
   skip_if_windows
-  local fx="${TEST_HOME}/under.json"
+  local fx="${TEST_HOME}/crit.json"
   cat > "$fx" <<'EOF'
-{"page":{"id":"x"},"components":[{"name":"claude.ai","status":"operational"}],"incidents":[{"id":"a","name":"Elevated errors","status":"monitoring","impact":"critical","resolved_at":null}],"scheduled_maintenances":[],"status":{"indicator":"none","description":"All Systems Operational"}}
+{"page":{"id":"x"},"status":{"indicator":"critical","description":"Major Service Outage"}}
 EOF
   write_status_via_fixture "$fx"
   read -r _ ind < "${TEST_HOME}/.claude/.statusline-claude-status-cache"
   [ "$ind" = "critical" ]
 }
 
-@test "summary.json: a fully healthy page caches 'none'" {
+@test "status.json: a healthy page caches 'none'" {
   command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
   skip_if_windows
   local fx="${TEST_HOME}/healthy.json"
   cat > "$fx" <<'EOF'
-{"page":{"id":"x"},"components":[{"name":"claude.ai","status":"operational"}],"incidents":[],"scheduled_maintenances":[],"status":{"indicator":"none","description":"All Systems Operational"}}
+{"page":{"id":"x"},"status":{"indicator":"none","description":"All Systems Operational"}}
+EOF
+  write_status_via_fixture "$fx"
+  read -r _ ind < "${TEST_HOME}/.claude/.statusline-claude-status-cache"
+  [ "$ind" = "none" ]
+}
+
+@test "an open critical incident while indicator=none is NOT surfaced (trust the indicator, v2.23.1)" {
+  # Regression: a mitigated 'monitoring' incident (components recovered) or a
+  # long-lived suspension leaves the page indicator at 'none'. We deliberately
+  # do NOT escalate on the incident's impact, so the badge stays clear while
+  # requests still work. (v2.23.0 took the worst-of and wrongly read 'critical'.)
+  command -v curl >/dev/null 2>&1 || skip "curl required for file:// fetch"
+  skip_if_windows
+  local fx="${TEST_HOME}/underreport.json"
+  cat > "$fx" <<'EOF'
+{"page":{"id":"x"},"components":[{"name":"claude.ai","status":"operational"}],"incidents":[{"id":"a","name":"Suspended access to a model","status":"monitoring","impact":"critical","resolved_at":null}],"status":{"indicator":"none","description":"All Systems Operational"}}
 EOF
   write_status_via_fixture "$fx"
   read -r _ ind < "${TEST_HOME}/.claude/.statusline-claude-status-cache"

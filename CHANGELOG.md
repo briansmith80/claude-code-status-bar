@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.23.1] - 2026-06-24
+
+### Fixed
+
+- **Claude API status no longer shows a persistent false "critical outage" for a mitigated incident.** v2.23.0 polled `summary.json` and took the worst-of (page indicator, any open incident's `impact`) to catch incidents the page-wide indicator under-reports. In practice that over-reported: a long-lived `monitoring`-state incident (components already recovered, e.g. a multi-day model/feature suspension) kept the badge pinned to `● Claude: critical outage` even though every component was operational and requests worked. The segment now polls `status.json` and trusts the page's current overall `indicator` (which Statuspage derives from live component health), and deliberately does NOT escalate on open incidents. The badge now reflects whether Claude is degraded *right now*, the actionable early-warning, and a mitigated/monitoring incident correctly reads as healthy. The fetch is smaller too (~190 B vs ~5 KB). `tests/claude_status.bats` updated (the under-report fixture now asserts the incident is intentionally not surfaced); suite 188.
+
 ## [2.23.0] - 2026-06-24
 
 Adds an opt-in early-warning for Claude API degradation, built on the same never-block background-fetch pattern as the update check, so it costs nothing on the render path.

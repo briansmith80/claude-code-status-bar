@@ -78,16 +78,19 @@ REPO_RAW="${_ENV_REPO_RAW:-$REPO_RAW_DEFAULT}"
 
 # ── Claude API status (status.claude.com) ────────────────────
 # Optional, default-off early-warning segment. Polls the public Atlassian
-# Statuspage summary.json in a detached background subshell (like the update
-# check) and caches the worst-of (page indicator, active-incident impact), so
-# the render only ever reads a tiny cache — never blocks, never forks on the
-# hot path. SECURITY (S2): capture the URL override from the *real* environment
-# here, BEFORE statusline.conf is sourced; it is re-pinned AFTER the conf load,
-# so a sourced conf line can never repoint the fetch. Only a genuine env var
-# (a fork, or a file:// path for tests) can — never the config file.
+# Statuspage status.json in a detached background subshell (like the update
+# check) and caches the page's current overall indicator, so the render only
+# ever reads a tiny cache: never blocks, never forks on the hot path. We trust
+# the indicator (Statuspage derives it from CURRENT component health) and do
+# NOT escalate on open incidents: a mitigated 'monitoring' incident or a
+# long-lived feature suspension leaves the indicator at 'none', and surfacing
+# it would cry wolf while requests still work. SECURITY (S2): capture the URL
+# override from the *real* environment here, BEFORE statusline.conf is sourced;
+# it is re-pinned AFTER the conf load, so a sourced conf line can never repoint
+# the fetch. Only a genuine env var (a fork, or a file:// path for tests) can.
 CLAUDE_STATUS_CACHE_FILE="${SCRIPT_DIR}/.statusline-claude-status-cache"
 _ENV_CLAUDE_STATUS_URL="${STATUSLINE_CLAUDE_STATUS_URL:-}"
-CLAUDE_STATUS_URL_DEFAULT="https://status.claude.com/api/v2/summary.json"
+CLAUDE_STATUS_URL_DEFAULT="https://status.claude.com/api/v2/status.json"
 CLAUDE_STATUS_URL="${_ENV_CLAUDE_STATUS_URL:-$CLAUDE_STATUS_URL_DEFAULT}"
 
 # ── Shared Helpers ──────────────────────────────────────────
@@ -487,23 +490,25 @@ claude_status_rank() {
 }
 
 # Refresh the Claude-API-status cache (opt-in; see show_claude_status). Reads
-# the last-known status into the cs_ts/cs_ind globals for THIS render, then —
-# only if the cache is stale or missing — spawns a fully-detached background
+# the last-known status into the cs_ts/cs_ind globals for THIS render, then,
+# only if the cache is stale or missing, spawns a fully-detached background
 # fetch (never blocks). Mirrors check_for_update; the cache line is "<epoch>
-# <indicator>" where <indicator> is the worst-of the page indicator and any
-# active incident's impact (so a 'monitoring' incident whose components have
-# recovered, which leaves the page-wide indicator at 'none', is still caught).
+# <indicator>" = the status page's current overall indicator. We trust the
+# indicator (Statuspage derives it from CURRENT component health) and do NOT
+# escalate on open incidents: a mitigated 'monitoring' incident or a long-lived
+# suspension leaves the indicator at 'none', and surfacing it would cry wolf
+# while requests still work.
 check_claude_status() {
   if [ -f "$CLAUDE_STATUS_CACHE_FILE" ]; then
     read -r cs_ts cs_ind < "$CLAUDE_STATUS_CACHE_FILE" 2>/dev/null || true
     case "$cs_ts" in *[!0-9]*) cs_ts="" ;; esac
-    # Fresh enough — render uses cs_ind/cs_ts; do not touch the network.
+    # Fresh enough: render uses cs_ind/cs_ts; do not touch the network.
     if [ -n "$cs_ts" ] && [ $(( NOW_EPOCH - cs_ts )) -lt "$claude_status_cache_seconds" ]; then
       return
     fi
   fi
 
-  # Stale or missing — refresh in a detached background subshell. The render
+  # Stale or missing: refresh in a detached background subshell. The render
   # still shows the last-known cs_ind (subject to the segment's staleness ceiling).
   (
     body=$(http_get "$CLAUDE_STATUS_URL" 3) || body=""
@@ -512,22 +517,10 @@ check_claude_status() {
     # previous cache untouched, so the bar never flashes a false "down".
     case "$body" in *'"indicator"'*) ;; *) body="" ;; esac
     if [ -n "$body" ]; then
-      page="none"
-      [[ $body =~ \"indicator\"[[:space:]]*:[[:space:]]*\"([a-z]+)\" ]] && page="${BASH_REMATCH[1]}"
-      case "$page" in none|minor|major|critical|maintenance) ;; *) page="none" ;; esac
-      # summary.json's incidents[] holds only UNRESOLVED incidents, and "impact"
-      # appears on incidents (components use "status"), so scanning for it catches
-      # an active incident the page-wide indicator may under-report.
-      case "$body" in
-        *'"impact":"critical"'*) inc="critical" ;;
-        *'"impact":"major"'*)    inc="major" ;;
-        *'"impact":"minor"'*)    inc="minor" ;;
-        *)                       inc="none" ;;
-      esac
-      claude_status_rank "$page"; page_rank=$REPLY
-      claude_status_rank "$inc";  inc_rank=$REPLY
-      if [ "$inc_rank" -gt "$page_rank" ]; then eff="$inc"; else eff="$page"; fi
-      echo "$(date +%s) $eff" > "$CLAUDE_STATUS_CACHE_FILE"
+      ind="none"
+      [[ $body =~ \"indicator\"[[:space:]]*:[[:space:]]*\"([a-z]+)\" ]] && ind="${BASH_REMATCH[1]}"
+      case "$ind" in none|minor|major|critical|maintenance) ;; *) ind="none" ;; esac
+      echo "$(date +%s) $ind" > "$CLAUDE_STATUS_CACHE_FILE"
     fi
   ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
 }
