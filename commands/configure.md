@@ -57,6 +57,15 @@ or ask "which family — neon / muted / pastel / mono?" first, then narrow.)
   reset time (`2pm`) instead of the countdown (`2h20m`).
 - **5-hour limit** (`show_usage_5h`, default ON) / **7-day limit**
   (`show_usage_7d`, default ON) — uncheck to hide.
+- **Claude API status badge** (`show_claude_status`, default OFF): a
+  degraded-only early warning fed by the public `status.claude.com` page. It
+  shows `● Claude: major outage` (or `critical` / `degraded` / `maintenance`)
+  ONLY when Claude is degraded, nothing when healthy, and polls in the
+  background so it never touches the render path. If they turn it ON, ask one
+  quick follow-up (single select) for sensitivity: **major + critical only**
+  (`claude_status_min=major`, the default) or **also minor degradation +
+  maintenance** (`claude_status_min=minor`). The poll interval defaults to 5 min
+  (`claude_status_cache_seconds=300`) and is rarely worth changing.
 
 **Q4 — Segments** (multiSelect). Offer the commonly-changed ones:
 - Turn ON (off by default): cost-per-hour (`show_cost_rate`), token counts
@@ -150,6 +159,12 @@ cover. Every key goes in `~/.claude/statusline.conf` as `key=value`.
 - `usage_cache_seconds` (default 600) — OAuth fallback refresh; ignored when stdin provides limits.
 - `context_warn_threshold` — `auto` (within 20k tokens of auto-compact, default) or a raw % like 80.
 - `auto_hide` (default true) — hide zero/empty values.
+
+### Claude API status (status.claude.com)
+- `show_claude_status` (default false): opt-in, degraded-only early-warning badge fed by the public Claude status page. Polls in the background (never on the render path) and shows nothing when Claude is healthy.
+- `claude_status_min` (default `major`): `major` surfaces major + critical outages; `minor` also surfaces minor degradation and maintenance windows.
+- `claude_status_cache_seconds` (default 300): background poll interval. The status page's edge cache is about 10s, so a shorter interval rarely helps.
+- The badge links to status.claude.com when `pr_link=true` (the shared hyperlink toggle).
 
 ### Git performance (large / network repos)
 - `git_untracked` (default true) — `false` skips the untracked-file scan (faster on huge/network repos; untracked then don't count as dirty).
