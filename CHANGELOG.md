@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.23.2] - 2026-06-25
+
+### Fixed
+
+- **Windows paths no longer render with doubled backslashes** (e.g. `C:\\laragon\\www\\project` instead of `C:\laragon\www\project`). Claude Code feeds the status bar its data as JSON, which escapes every backslash in a Windows path as `\\`. The bar parses JSON with bash regex (no `jq`, by design) and was emitting the captured string verbatim, so the JSON `\\` separators showed through as literal doubled backslashes. The string extractor (`extract_from`) now decodes JSON string escapes (`\\`→`\`, `\/`→`/`, `\"`→`"`, plus `\n \t \r \b \f`) via a new single-pass, fork-free `json_unescape` helper. A fast-path returns the value untouched when it contains no backslash, so macOS/Linux paths and every other field pay nothing. The decode is a left-to-right scan (not a naive global replace) so adjacent escapes — consecutive separators and UNC `\\\\server` prefixes — decode correctly. macOS/Linux were never affected (forward-slash paths aren't escaped in JSON). 2 new tests in `tests/segments.bats`. Suite 190.
+
 ## [2.23.1] - 2026-06-24
 
 ### Fixed

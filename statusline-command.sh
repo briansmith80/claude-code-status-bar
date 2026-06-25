@@ -1064,12 +1064,51 @@ sl_profile "startup+config"
 
 # Extract a string value by key from a JSON string
 # Usage: extract_from "$json" "key"; value=$REPLY
+# Decode JSON string escapes (\\ \/ \" \n \t \r \b \f) in a value; result in
+# REPLY. Single-pass, chunk-based, pure bash (no forks). The fast-path returns
+# the value untouched when it has no backslash — the common case for every
+# macOS/Linux path and model name. The motivating case is the Windows cwd,
+# which JSON encodes with "\\" separators (otherwise rendered as doubled "\\").
+# A naive global "\\"->"\" replace mis-decodes a "\\" adjacent to a real "\n"
+# escape; scanning left-to-right one backslash at a time is correct. \uXXXX is
+# left literal (rare in the fields we extract; bash 3.2 can't decode it cheaply).
+json_unescape() {
+  local s="$1"
+  case $s in
+    *\\*) ;;                     # has a backslash — decode below
+    *) REPLY=$s; return ;;       # fast path: nothing to unescape
+  esac
+  local out="" chunk c
+  while [ -n "$s" ]; do
+    chunk=${s%%\\*}              # text before the next backslash
+    if [ "$chunk" = "$s" ]; then # no further backslash
+      out+=$s; break
+    fi
+    out+=$chunk
+    c=${s:${#chunk}+1:1}        # the char escaped by that backslash
+    case $c in
+      n)  out+=$'\n' ;;
+      t)  out+=$'\t' ;;
+      r)  out+=$'\r' ;;
+      b)  out+=$'\b' ;;
+      f)  out+=$'\f' ;;
+      /)  out+='/'   ;;
+      \\) out+='\'   ;;
+      \") out+='"'   ;;
+      '') out+='\'   ;;          # trailing lone backslash
+      *)  out+="\\$c" ;;         # unknown escape — keep both bytes verbatim
+    esac
+    s=${s:${#chunk}+2}          # past chunk + backslash + escaped char
+  done
+  REPLY=$out
+}
+
 extract_from() {
   local json="$1" key="$2"
   local pattern="\"$key\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
   REPLY=""
   if [[ $json =~ $pattern ]]; then
-    REPLY="${BASH_REMATCH[1]}"
+    json_unescape "${BASH_REMATCH[1]}"
   fi
 }
 

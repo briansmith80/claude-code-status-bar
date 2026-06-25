@@ -12,6 +12,25 @@ load test_helper
   assert_plain_contains "/tmp/cc-test-dir"
 }
 
+@test "Windows cwd: JSON-escaped backslashes decode to single backslashes" {
+  # Claude Code sends Windows paths as valid JSON, escaping each separator as
+  # "\\". The bar must decode it back to a single "\" instead of echoing the
+  # doubled form. A non-existent path keeps it deterministic (no git runs).
+  run_statusline '{"cwd":"C:\\Users\\dev\\my-project","model":{"display_name":"Opus"},"context_window":{"used_percentage":42}}'
+  [ "$status" -eq 0 ]
+  assert_plain_contains 'C:\Users\dev\my-project'
+  assert_plain_not_contains 'C:\\Users'
+}
+
+@test "UNC-style cwd with consecutive backslashes decodes correctly" {
+  # "\\\\server\\share" (JSON) -> "\\server\share". Guards the single-pass
+  # decoder against off-by-one drift across adjacent escapes.
+  run_statusline '{"cwd":"\\\\server\\share\\proj","model":{"display_name":"Opus"},"context_window":{"used_percentage":42}}'
+  [ "$status" -eq 0 ]
+  assert_plain_contains '\\server\share\proj'
+  assert_plain_not_contains '\\\\server'
+}
+
 @test "model name appears" {
   run_statusline '{"cwd":"/tmp","display_name":"Haiku","used_percentage":5,"total_cost_usd":0.01}'
   [ "$status" -eq 0 ]

@@ -1,6 +1,6 @@
 {
   "name": "claude-code-status-bar",
-  "version": "2.23.1",
+  "version": "2.23.2",
   "description": "Warns you before a rate limit or auto-compact, not after. A pure-bash Claude Code status bar (no jq, Node optional) for macOS, Linux, and Windows: usage pacing + burn-rate forecast, context warnings, live activity, cost, git, and 8 themes.",
   "author": {
     "name": "briansmith80",
