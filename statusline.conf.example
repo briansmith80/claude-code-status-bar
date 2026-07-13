@@ -75,6 +75,15 @@
 # countdown becomes a ▲time-to-limit warning (e.g. ▲1h20m). Only shows when
 # you're over an even pace, so it stays quiet otherwise. Set false to disable.
 # usage_forecast=true
+# Model-scoped weekly swap: some plans carry a per-model weekly limit (the
+# "Fable"/"Opus" row on claude.ai) alongside the all-models one. When that
+# scoped limit is running HIGHER — i.e. it will throttle you first — the wk bar
+# swaps to it, named: "wk:Fable (3d17h) ███░░ 36%". Reads your existing Claude
+# Code login in the background (nothing extra to set up); where that data
+# isn't available (API-key sessions, CI tokens) the plain all-models bar
+# simply stays — fail-silent, never a prompt or an error. Set false to always
+# keep the plain all-models wk bar (and skip the background fetch).
+# usage_scoped=true
 
 # ── Claude API status (status.claude.com) ───────────────────
 # Opt-in early-warning badge — shows ONLY when Claude is degraded (nothing when
@@ -128,4 +137,5 @@
 # ── Timing (defaults are sensible) ──────────────────────────
 # activity_ttl_seconds=120   # hide line 2 when its cache is older than this
 # activity_fresh_seconds=45  # fade line 2 to dim when its data is older
-# usage_cache_seconds=600    # OAuth fallback refresh (ignored when stdin has limits)
+# usage_cache_seconds=600    # OAuth usage refresh (fallback 5h/7d numbers on old
+#                            # Claude Code; the scoped-weekly data on new ones)

@@ -132,6 +132,7 @@ curl -fsSL https://raw.githubusercontent.com/briansmith80/claude-code-status-bar
 - **Auto-compact awareness**: the context bar marks the exact point where Claude Code will auto-compact and fires a `▲` warning within 20k tokens of it, on any window size.
 - **Pacing markers**: a `│` on each usage bar shows where your usage *should* be for even consumption, so "37% used" becomes "37% used and comfortably under pace".
 - **Burn-rate forecast**: when you're on track to hit a limit *before* it resets, the countdown turns into a `▲time-to-limit` warning (e.g. `▲1h20m`). It stays quiet while you're under pace, so it only speaks up when it matters.
+- **Model-scoped weekly limits**: if your plan carries a per-model weekly cap (the "Fable"/"Opus" row on claude.ai) and it's running hotter than the all-models one, the weekly bar swaps to it — `wk:Fable (3d17h) ███░░ 36%` — because that's the limit that will actually throttle you.
 - **Live activity line**: running tools, completed tool counts, subagent status, and todo progress, parsed from Claude Code's transcript by an optional Node.js helper.
 - **Subagent panel rows**: a status icon, elapsed time, token cost, and a live `tok/s` burn rate for every running Task-tool subagent.
 - **Pure bash, no jq**: bash 3.2+ (stock macOS works); JSON is parsed with bash regex, so there's nothing to compile or install on Windows.
@@ -228,8 +229,9 @@ The bar shows your Anthropic usage limits as colour-coded progress bars with res
 ```
 
 - **5hr** / **wk**: the rolling 5-hour and 7-day windows, each with the time remaining until reset.
+- **`wk:Fable`** (model-scoped swap, on by default): some plans have a per-model weekly cap alongside the all-models one — the "Fable" or "Opus" row on claude.ai's usage page. When that scoped cap is running **higher** than the all-models one, it binds first, so the weekly bar swaps to it and names the model. Under or at the all-models level, the plain `wk` bar stays. Pacing marker, countdown, and burn-rate forecast all compute on whichever limit is shown. Set `usage_scoped=false` for the plain all-models bar always.
 - **`│` pacing marker**: where your usage *should* be for even consumption across the window. Bar past the marker means you are ahead of pace and may hit the limit early; behind it means you have headroom.
-- **`~` suffix** (e.g. `37%~`): the data came from the OAuth fallback and is stale (more than two refresh intervals old).
+- **`~` suffix** (e.g. `37%~`): the data came from the OAuth cache and is stale (more than two refresh intervals old).
 
 ### Label style: reset time or countdown
 
@@ -261,8 +263,8 @@ On Windows the script takes ~285ms to run, so keep `refreshInterval` at `2` or h
 
 <br>
 
-1. **Stdin (preferred)**: Claude Code 2.1+ sends `rate_limits` directly in the JSON it pipes to the bar. Real-time, zero network requests, no configuration.
-2. **OAuth API (fallback)**: older Claude Code versions don't send `rate_limits`, so the script fetches them from `api.anthropic.com/api/oauth/usage` in a background subshell, cached for 10 minutes (`usage_cache_seconds`); on repeated failures it backs off exponentially, up to 30 minutes (tracked in `~/.claude/.statusline-usage-backoff`). It reads your existing Claude Code token, so nothing extra is needed:
+1. **Stdin (preferred)**: Claude Code 2.1+ sends `rate_limits` directly in the JSON it pipes to the bar. Real-time, zero network requests, no configuration. The 5h and all-models weekly numbers always come from here when available.
+2. **OAuth API (fallback + scoped limits)**: the script fetches `api.anthropic.com/api/oauth/usage` in a background subshell, cached for 10 minutes (`usage_cache_seconds`); on repeated failures it backs off exponentially, up to 30 minutes (tracked in `~/.claude/.statusline-usage-backoff`). For older Claude Code versions this supplies the 5h/7d numbers themselves; on current versions it is only read for the model-scoped weekly limit (`usage_scoped`), which Claude Code doesn't forward on stdin. It reads your existing Claude Code token, so nothing extra is needed:
 
 | Platform | Credential source |
 |----------|------------------|
@@ -272,7 +274,7 @@ On Windows the script takes ~285ms to run, so keep `refreshInterval` at `2` or h
 
 The token must have the `user:profile` scope, which browser sign-in grants automatically. Tokens created with `claude setup-token` only have `user:inference` and will not work; quit all Claude Code instances and restart to trigger a fresh browser OAuth login.
 
-If neither source has data, the usage segments are hidden. Run `--dump-stdin` (see [CLI flags](#cli-flags)) to check which fields your Claude Code version sends.
+Everything about the OAuth path is fail-silent: no usable token (API-key sessions, CI) means the fetch quietly backs off and the bar renders from stdin exactly as before — no prompt, no error, no delay. If neither source has data, the usage segments are hidden. Run `--dump-stdin` (see [CLI flags](#cli-flags)) to check which fields your Claude Code version sends.
 
 </details>
 
@@ -419,7 +421,7 @@ All segments are on by default except token counts, cost rate, and the Claude AP
 | Context bar | `███████░│░ 78% of 200k` | `show_context_bar` | Green under 50%, yellow 50-79%, red 80%+. The `│` marker sits at the auto-compact point; `▲` appears within 20k tokens of it |
 | Token counts | `45k in 12k out` | `show_tokens` *(off)* | Tokens in the current context (cumulative session totals before CC 2.1.132) |
 | 5-hour usage | `5hr (2h20m) ███│░░░░░░ 37%` | `show_usage_5h` | Rolling 5-hour window with countdown to reset and pacing marker |
-| Weekly usage | `wk (3d4h) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with countdown to reset and pacing marker |
+| Weekly usage | `wk (3d4h) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with countdown to reset and pacing marker. Swaps to a per-model weekly cap (`wk:Fable … 36%`) when that cap is the binding one; `usage_scoped=false` disables |
 | Lines changed | `+42 -7` | `show_lines_changed` | Session lines added (green) and removed (red) |
 | Dirty count | `● 3 dirty` | `show_dirty_count` | Staged + unstaged + untracked files |
 | Ahead/behind | `↓2 ↑1` | `show_ahead_behind` | Commits behind/ahead of upstream; hidden when there is no upstream |
@@ -618,6 +620,8 @@ See [`tests/README.md`](tests/README.md) for layout details.
 
 Full release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.24.0**: Model-scoped weekly limits — when your plan's per-model weekly cap (the "Fable"/"Opus" row on claude.ai) is running higher than the all-models one, the weekly bar swaps to it: `wk:Fable (3d17h) ███░░ 36%`. On by default, fail-silent, `usage_scoped=false` to disable.
+- **2.23.0–2.23.2**: Opt-in Claude API status badge (degraded-only early warning fed by status.claude.com), plus a fix for doubled backslashes in Windows paths.
 - **2.22.0 / 2.22.1**: Burn-rate forecast — a `▲time-to-limit` warning when you're on track to hit a limit before it resets — plus a guided `/configure` wizard, and a fix so stale todos no longer linger on the activity line.
 - **2.21.0**: Performance — the live-activity helper now runs only when the line can actually change instead of on every render, so idle sessions stop re-spawning Node; every visual effect (spinner, flash, heat, fade) is unchanged.
 - **2.20.0–2.20.2**: Security & performance hardening — checksum-verified (`SHA256SUMS`) self-update *and* installers, a line-1 control-sequence-injection fix, restored never-block guarantees, and opt-in `git_untracked` / `git_timeout` knobs for large or network-mounted repos.

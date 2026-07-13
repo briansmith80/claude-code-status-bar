@@ -5,7 +5,7 @@ principles we hold to, the competitive landscape, and the candidate work that
 remains. It supersedes the former `ROADMAP.md` and `SPRINTS.md` (both retired —
 everything they planned shipped). **Shipped history lives in
 [CHANGELOG.md](../CHANGELOG.md)**; the project ships feature-based,
-**feedback-driven** releases (latest **v2.19.1**) — promote items from here on
+**feedback-driven** releases (latest **v2.24.0**) — promote items from here on
 demand, not in list order.
 
 ---
@@ -24,6 +24,7 @@ demand, not in list order.
 - **Pure bash core** — no jq, no compiled binaries; optional Node.js helper for live activity.
 - **Stdin-native rate limits** — reads usage data directly from Claude Code stdin (zero network requests).
 - **Pacing markers** on usage progress bars (unique to us).
+- **Model-scoped weekly limits** — the weekly bar swaps to a per-model cap (`wk:Fable`) when it's the binding one, read from the OAuth usage API's `limits[]` (v2.24.0; no surveyed statusline surfaces these).
 - **Colourful live activity line** — running tools/agents with a spinner, heat-coloured elapsed times, completion flash, gradient todo bar, stale fade; theme-aware and NO_COLOR-safe (v2.7.0).
 - **Compaction-aware context warnings** — mirrors Claude Code's real auto-compact maths, not a guessed percentage (v2.6.0).
 - **Subagent panel renderer** — Task-tool agent rows with elapsed, tokens, tok/s (v2.5.0).

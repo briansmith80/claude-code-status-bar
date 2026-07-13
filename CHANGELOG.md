@@ -2,7 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.23.2] - 2026-06-25
+## [2.24.0] - 2026-07-13
+
+Makes the weekly bar honest for accounts with per-model weekly limits: it now shows whichever weekly limit will actually throttle you.
+
+### Added
+
+- **Model-scoped weekly limit swap (`usage_scoped`, on by default).** Some plans carry a per-model weekly cap alongside the all-models one — the "Fable" or "Opus" row on claude.ai's usage page. When that scoped cap is running **higher** than the all-models weekly (i.e. it binds first), the `wk` bar swaps to it and names the model: `wk:Fable (3d17h) ███░│░░ 36%`. The pacing marker, countdown label, and burn-rate forecast all compute on the swapped numbers, so the `▲time-to-limit` warning tracks the limit you'll actually hit. At or below the all-models level the plain `wk` bar stays; the segment keeps its name/slot so layouts and truncation are unaffected.
+  - **Data source.** Claude Code (through 2.1.177) does not forward scoped limits on stdin; they only exist in the OAuth usage API's `limits[]` array. The existing background OAuth fetch (10-min cache, exponential backoff, fully detached, zero hot-path forks) now also runs on stdin-native Claude Code to read that entry. The stdin 5h/7d numbers are never overwritten — the cache is read solely for the `weekly_scoped` entry.
+  - **Fail-silent everywhere.** No usable token (API-key sessions, `setup-token` CI tokens), a failed fetch, or a missing `limits[]` entry simply leaves the plain all-models bar — no prompt, no error, no render delay. A staleness ceiling (6× `usage_cache_seconds`, ≈1h default) keeps a dead cache from swapping the bar onto ancient numbers, and a `~` suffix marks a swapped value that's more than two refresh intervals old. The model name is `sanitize()`d and capped at 12 chars. Set `usage_scoped=false` for the plain all-models bar always (this also skips the background fetch when stdin covers the numbers).
+  - **Fewer wasted forks.** A token-less machine now writes the same exponential backoff marker as a failed fetch, so it stops re-spawning a doomed fetch subshell on every render (at most one attempt per 30 min).
+
+### Docs
+
+- README: Highlights entry, usage-section explainer, updated "Where the usage data comes from" (the OAuth path is now fallback + scoped-limit source), Segments-table row, and the fail-silent note. `statusline.conf.example` and the `/configure` wizard document the new key. The web configurator gains a "Model-scoped weekly swap" toggle plus a "Scoped weekly %" sample slider so the swap previews live (`wk:` prefix follows the sample model).
+
+### Internal
+
+- New `tests/usage_scoped.bats` (11 tests: default-on registration, swap/no-swap policy including the equal case, `usage_scoped=false`, staleness ceiling, OAuth-fallback path, stdin numbers untouched, missing display_name, control-byte sanitization, no-cache no-op). `--demo` pins `usage_scoped=false` so theme previews stay deterministic regardless of the machine's real account state. Suite 201.
 
 ### Fixed
 

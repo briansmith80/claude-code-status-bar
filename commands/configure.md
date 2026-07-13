@@ -57,6 +57,13 @@ or ask "which family — neon / muted / pastel / mono?" first, then narrow.)
   reset time (`2pm`) instead of the countdown (`2h20m`).
 - **5-hour limit** (`show_usage_5h`, default ON) / **7-day limit**
   (`show_usage_7d`, default ON) — uncheck to hide.
+- **Model-scoped weekly swap** (`usage_scoped`, default ON) — plans with a
+  per-model weekly cap (the "Fable"/"Opus" row on claude.ai) get the weekly
+  bar swapped to that cap when it's running higher than the all-models one
+  (it binds first): `wk:Fable (3d17h) ███░░ 36%`. Reads the OAuth usage data
+  in the background; fail-silent where unavailable. Recommend keeping ON —
+  set `usage_scoped=false` only if they want the plain all-models bar always
+  (that also skips the background fetch on modern Claude Code).
 - **Claude API status badge** (`show_claude_status`, default OFF): a
   degraded-only early warning fed by the public `status.claude.com` page. It
   shows `● Claude: major outage` (or `critical` / `degraded` / `maintenance`)
@@ -156,7 +163,8 @@ cover. Every key goes in `~/.claude/statusline.conf` as `key=value`.
 ### Usage, cost & context
 - `usage_label` — `countdown` (default, e.g. 2h20m) or `clock` (e.g. 2pm).
 - `usage_forecast` (default true) — ▲time-to-limit warning when on track to hit a limit before reset; quiet otherwise.
-- `usage_cache_seconds` (default 600) — OAuth fallback refresh; ignored when stdin provides limits.
+- `usage_scoped` (default true) — swap the weekly bar to a per-model weekly cap ("wk:Fable") when that cap is running higher than the all-models one. Reads the OAuth usage data in the background; fail-silent where unavailable.
+- `usage_cache_seconds` (default 600) — OAuth usage refresh (fallback 5h/7d numbers on old Claude Code; the scoped-weekly data on new ones).
 - `context_warn_threshold` — `auto` (within 20k tokens of auto-compact, default) or a raw % like 80.
 - `auto_hide` (default true) — hide zero/empty values.
 

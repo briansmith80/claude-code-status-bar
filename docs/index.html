@@ -879,7 +879,7 @@
     var DEFAULTS = {
       colour_theme:'default', bar_gradient:'true', icon_set:'classic', use_icons:'true',
       layout:'classic', dir_style:'auto', bar_width:'10', enable_truncation:'true', use_groups:'false',
-      usage_label:'countdown', usage_forecast:'true',
+      usage_label:'countdown', usage_forecast:'true', usage_scoped:'true',
       show_claude_status:'false', claude_status_min:'major', claude_status_cache_seconds:'300',
       show_directory:'true', show_branch:'true', show_model:'true', show_context_bar:'true',
       show_usage_5h:'true', show_usage_7d:'true', show_cost:'true', show_cost_rate:'false',
@@ -1000,10 +1000,18 @@
       return {tok:'context', name:'context', html:pre+bb.html+' '+span(pct,thRole), w:(preT+rep('#',bb.w)+' '+pct).length};
     }
     function usageSeg(which){
-      var key=which==='5h'?'ctxH5':'ctxWk', p=+state[which==='5h'?'h5':'wk'];
+      var p=+state[which==='5h'?'h5':'wk'];
+      var prefix=which==='5h'?'5hr':'wk';
+      // Model-scoped weekly swap (usage_scoped, mirrors statusline-command.sh):
+      // when the sample scoped % runs higher than the all-models weekly, the wk
+      // bar swaps to it and names the model ("wk:Fable").
+      if(which==='wk' && state.usage_scoped==='true'){
+        var sp=+state.wksc||0;
+        if(sp>p){ p=sp; prefix='wk:'+String(state.model||'').split(' ')[0]; }
+      }
       var label=usageLabel(which,p), bb=bar(p,usagePace(which));
       var thRole=p>=80?'bar_high':(p>=50?'bar_med':'bar_ok');
-      var head=(which==='5h'?'5hr':'wk')+(label?' '+label:'');
+      var head=prefix+(label?' '+label:'');
       var name=which==='5h'?'usage_5h':'usage_7d';
       return {tok:name, name:name, html:esc(head)+' '+bb.html+' '+span(p+'%',thRole), w:(head+' '+rep('#',bb.w)+' '+p+'%').length};
     }
@@ -1174,6 +1182,7 @@
         '# ── Usage limits ──',
         bc('usage_label','countdown | clock'),
         b('usage_forecast'),
+        bc('usage_scoped','swap wk bar to a higher per-model weekly cap (wk:Fable)'),
         '',
         '# ── Claude API status (status.claude.com) ──',
         b('show_claude_status'),
@@ -1296,6 +1305,8 @@
       g=grp('Usage limits','s2');
       g.appendChild(selRow('Label','usage_label',['countdown','clock']));
       g.appendChild(togRow('Burn-rate forecast','usage_forecast'));
+      g.appendChild(togRow('Model-scoped weekly swap','usage_scoped'));
+      g.appendChild(el('p','cfg-hint','When your plan has a per-model weekly cap (the "Fable"/"Opus" row on claude.ai) running higher than the all-models one, the wk bar swaps to it. Raise the "Scoped weekly %" sample above "Weekly %" to preview.'));
       host.appendChild(g);
 
       g=grp('Live activity line','s2');
@@ -1349,6 +1360,7 @@
       host.appendChild(rngRow('Context %','ctx',0,100));
       host.appendChild(rngRow('5-hour %','h5',0,100));
       host.appendChild(rngRow('Weekly %','wk',0,100));
+      host.appendChild(rngRow('Scoped weekly %','wksc',0,100));
       host.appendChild(selRow('Model','model',['Opus 4.8','Sonnet 4.6','Haiku 4.5','Fable 5']));
       host.appendChild(selRow('Claude status','cstatus',['none','minor','major','critical','maintenance']));
       host.appendChild(rngRow('Width (cols)','width',40,180));
@@ -1433,7 +1445,7 @@
 
     // ----- init -----
     state=clone(DEFAULTS);
-    state.ctx='64'; state.h5='42'; state.wk='71'; state.model='Opus 4.8'; state.width='150'; state.cstatus='major';
+    state.ctx='64'; state.h5='42'; state.wk='71'; state.wksc='0'; state.model='Opus 4.8'; state.width='150'; state.cstatus='major';
     state.comp=expandPreset('classic');
     var hm=location.hash.match(/cfg=([^&]+)/);
     if(hm){ try{ applyDiff(JSON.parse(decodeURIComponent(hm[1]))); }catch(_){} }

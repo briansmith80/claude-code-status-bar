@@ -575,6 +575,15 @@ usage_label="countdown"
 # resets, the countdown label becomes a "▲time-to-limit" warning (e.g. ▲1h20m).
 # Only appears when you're over an even pace, so it stays quiet otherwise.
 usage_forecast=true
+# Model-scoped weekly swap (on by default): some plans carry a per-model weekly
+# limit ("Fable"/"Opus" rows on claude.ai) alongside the all-models one. When
+# that scoped limit is HIGHER — i.e. it's the one that will throttle you first —
+# the wk bar swaps to it ("wk:Fable (…) 36%"). The data only exists in the OAuth
+# usage API (Claude Code doesn't forward it on stdin), so this keeps the
+# background usage fetch alive even on stdin-native Claude Code — fail-silent,
+# cached, never on the render hot path. false = plain all-models wk bar (and no
+# OAuth fetch when stdin already covers the numbers).
+usage_scoped=true
 show_pr=true
 pr_link=true
 # Claude API status (status.claude.com). Opt-in early-warning segment: polls
@@ -682,6 +691,9 @@ if [ "${STATUSLINE_DEMO:-}" = "1" ]; then
   show_dirty_count=false
   show_ahead_behind=false
   show_stash=false
+  # Keep the preview deterministic: the scoped-weekly swap reads the REAL
+  # usage cache, which would vary the canned wk bar per machine/account.
+  usage_scoped=false
 fi
 
 # ── Post-config CLI Flags ─────────────────────────────────────
@@ -743,6 +755,7 @@ case "${1:-}" in
       printf 'usage_cache_seconds=%s\n'    "${usage_cache_seconds}"
       printf 'usage_label=%s\n'            "${usage_label}"
       printf 'usage_forecast=%s\n'         "${usage_forecast}"
+      printf 'usage_scoped=%s\n'           "${usage_scoped}"
       printf 'use_groups=%s\n'             "${use_groups}"
       printf 'use_icons=%s\n'              "${use_icons}"
     } | LC_ALL=C sort
@@ -1586,9 +1599,23 @@ if [[ $input =~ $rl_guard ]]; then
   fi
 fi
 
-# ── Phase 2: OAuth API Fallback (older Claude Code versions) ─
-# Only runs if stdin didn't provide rate limits.
+# ── Phase 2: OAuth usage API (fallback + scoped-limit source) ─
+# Runs when stdin lacked rate limits (full fallback for the 5h/7d numbers,
+# older Claude Code versions), OR when the model-scoped weekly swap needs the
+# limits[] array that Claude Code does not forward on stdin (usage_scoped,
+# default on). In the scoped-only case the stdin 5h/7d numbers are never
+# overwritten — the cache is read solely for the weekly_scoped entry.
+usage_wk_scoped="" usage_wk_scoped_resets="" usage_wk_scoped_model=""
+scoped_stale=false
+oauth_wanted=false
 if [ "$stdin_usage" = "false" ]; then
+  if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
+    oauth_wanted=true
+  fi
+elif [ "$usage_scoped" = "true" ] && [ "$show_usage_7d" = "true" ]; then
+  oauth_wanted=true
+fi
+if [ "$oauth_wanted" = "true" ]; then
 
 USAGE_CACHE_FILE="${SCRIPT_DIR}/.statusline-usage-cache"
 
@@ -1622,7 +1649,9 @@ usage_backoff_increase() {
 
 fetch_usage_data() {
   local token response
-  token=$(fetch_usage_token) || return 1
+  # No credentials also backs off (30-min cap) so a token-less machine isn't
+  # re-spawning a doomed fetch subshell on every render.
+  token=$(fetch_usage_token) || { usage_backoff_increase; return 1; }
   HTTP_AUTH_HEADER="Authorization: Bearer $token"
   response=$(http_get "https://api.anthropic.com/api/oauth/usage" 3) || {
     HTTP_AUTH_HEADER=""
@@ -1640,11 +1669,11 @@ fetch_usage_data() {
   echo "${NOW_EPOCH} ${response}" > "$USAGE_CACHE_FILE"
 }
 
-# Refresh cache if stale or missing (only when usage segments are enabled).
-# Runs in a background subshell so it never blocks the statusline.
-if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
+# Refresh cache if stale or missing (segment gating already done above via
+# oauth_wanted). Runs in a background subshell so it never blocks the statusline.
   needs_fetch=false
   usage_stale=false
+  cache_age=0
   if [ ! -f "$USAGE_CACHE_FILE" ]; then
     needs_fetch=true
   else
@@ -1669,9 +1698,12 @@ if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
     if [ "$cache_age" -gt "$effective_interval" ] 2>/dev/null; then
       needs_fetch=true
     fi
-    # Mark stale if cache is older than twice the base interval
+    # Mark stale if cache is older than twice the base interval. The 5h/7d
+    # suffix only applies when the numbers came from this cache (OAuth path);
+    # stdin numbers are real-time and must never inherit cache staleness.
     if [ "$cache_age" -gt $(( usage_cache_seconds * 2 )) ] 2>/dev/null; then
-      usage_stale=true
+      [ "$stdin_usage" = "false" ] && usage_stale=true
+      scoped_stale=true
     fi
   fi
   if [ "$needs_fetch" = "true" ]; then
@@ -1689,25 +1721,48 @@ if [ "$show_usage_5h" = "true" ] || [ "$show_usage_7d" = "true" ]; then
       *) usage_json="" ;; # discard non-JSON (stale or corrupt cache)
     esac
     if [ -n "$usage_json" ]; then
-      # Extract five_hour block
-      fh_pattern='"five_hour"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
-      if [[ $usage_json =~ $fh_pattern ]]; then
-        fh_block="${BASH_REMATCH[1]}"
-        extract_num_from "$fh_block" "utilization"; usage_5h=$REPLY
-        extract_from "$fh_block" "resets_at"; usage_5h_resets=$REPLY
+      # 5h/7d numbers only on the fallback path — stdin values are real-time
+      # and preferred, never overwritten from a (up to 10-min-old) cache.
+      if [ "$stdin_usage" = "false" ]; then
+        # Extract five_hour block
+        fh_pattern='"five_hour"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
+        if [[ $usage_json =~ $fh_pattern ]]; then
+          fh_block="${BASH_REMATCH[1]}"
+          extract_num_from "$fh_block" "utilization"; usage_5h=$REPLY
+          extract_from "$fh_block" "resets_at"; usage_5h_resets=$REPLY
+        fi
+        # Extract seven_day block
+        sd_pattern='"seven_day"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
+        if [[ $usage_json =~ $sd_pattern ]]; then
+          sd_block="${BASH_REMATCH[1]}"
+          extract_num_from "$sd_block" "utilization"; usage_7d=$REPLY
+          extract_from "$sd_block" "resets_at"; usage_7d_resets=$REPLY
+        fi
       fi
-      # Extract seven_day block
-      sd_pattern='"seven_day"[[:space:]]*:[[:space:]]*\{([^}]+)\}'
-      if [[ $usage_json =~ $sd_pattern ]]; then
-        sd_block="${BASH_REMATCH[1]}"
-        extract_num_from "$sd_block" "utilization"; usage_7d=$REPLY
-        extract_from "$sd_block" "resets_at"; usage_7d_resets=$REPLY
+      # Model-scoped weekly limit — the "Fable"/"Opus" row on claude.ai. Only
+      # present in the OAuth payload's limits[] array as a weekly_scoped entry:
+      #   {"kind":"weekly_scoped",…,"percent":36,"resets_at":"…",
+      #    "scope":{"model":{"id":…,"display_name":"Fable"},…},…}
+      # percent, resets_at AND the model display_name all sit before the first
+      # close-brace (the inner model object's), so one [^}]* capture reaches
+      # them; a reordered payload just misses fields and fails silent (no swap).
+      # First weekly_scoped entry wins. A staleness ceiling (6× the refresh
+      # interval, ≈1h default) keeps a dead cache from swapping the bar onto
+      # ancient numbers — beyond it the plain all-models bar stands.
+      if [ "$usage_scoped" = "true" ] && [ "$show_usage_7d" = "true" ] \
+         && [ "$cache_age" -le $(( usage_cache_seconds * 6 )) ] 2>/dev/null; then
+        ws_pattern='"kind"[[:space:]]*:[[:space:]]*"weekly_scoped"([^}]*)'
+        if [[ $usage_json =~ $ws_pattern ]]; then
+          ws_block="${BASH_REMATCH[1]}"
+          extract_num_from "$ws_block" "percent"; usage_wk_scoped=$REPLY
+          extract_from "$ws_block" "resets_at"; usage_wk_scoped_resets=$REPLY
+          extract_from "$ws_block" "display_name"; usage_wk_scoped_model=$REPLY
+        fi
       fi
     fi
   fi
-fi
 
-fi  # end OAuth fallback (stdin_usage=false)
+fi  # end OAuth phase (fallback and/or scoped-limit source)
 
 # Calculate pacing targets — what percentage you *should* have used
 # for even consumption across the rolling window. Result in REPLY.
@@ -2174,22 +2229,46 @@ fi
 # Weekly usage limit (priority 3)
 if [ "$show_usage_7d" = "true" ] && [ -n "$usage_7d" ]; then
   u7_int="${usage_7d%%.*}"
+  u7_resets="$usage_7d_resets"
+  u7_prefix="wk"
+  u7_suffix="$usage_stale_suffix"
+  # Model-scoped weekly swap (usage_scoped, default on): when a per-model
+  # weekly limit is running HIGHER than the all-models one, it is the limit
+  # that will actually throttle you — show it instead, with the model named in
+  # the prefix ("wk:Fable"). Everything downstream (pacing marker, countdown,
+  # burn-rate forecast) computes on the swapped numbers. Same segment name and
+  # slot, so layouts/truncation are unaffected. Equal or lower scoped usage
+  # keeps the plain all-models bar.
+  if [ -n "$usage_wk_scoped" ]; then
+    ws_int="${usage_wk_scoped%%.*}"
+    if [ "$ws_int" -gt "$u7_int" ] 2>/dev/null; then
+      u7_int="$ws_int"
+      u7_resets="$usage_wk_scoped_resets"
+      if [ -n "$usage_wk_scoped_model" ]; then
+        sanitize "$usage_wk_scoped_model"; ws_name="${REPLY:0:12}"
+        [ -n "$ws_name" ] && u7_prefix="wk:${ws_name}"
+      fi
+      # Scoped data always comes from the cache; mark it when it's aged even
+      # if the (stdin-fed) 5h bar is real-time.
+      [ "$scoped_stale" = "true" ] && u7_suffix="~"
+    fi
+  fi
   u7_target=""
   u7_label=""
-  if [ -n "$usage_7d_resets" ]; then
-    calc_pacing_target "$usage_7d_resets" $((7 * 86400)) || true; u7_target=$REPLY
+  if [ -n "$u7_resets" ]; then
+    calc_pacing_target "$u7_resets" $((7 * 86400)) || true; u7_target=$REPLY
     u7_label_style="day"
     [ "$usage_label" = "countdown" ] && u7_label_style="countdown"
-    format_reset_label "$usage_7d_resets" "$u7_label_style" || true; u7_reset_label=$REPLY
+    format_reset_label "$u7_resets" "$u7_label_style" || true; u7_reset_label=$REPLY
     [ -n "$u7_reset_label" ] && u7_label="(${u7_reset_label})"
-    if [ "${usage_forecast:-true}" = "true" ] && calc_forecast "$usage_7d_resets" $((7 * 86400)) "$u7_int" && [ -n "$REPLY" ]; then
+    if [ "${usage_forecast:-true}" = "true" ] && calc_forecast "$u7_resets" $((7 * 86400)) "$u7_int" && [ -n "$REPLY" ]; then
       u7_label="(▲${REPLY})"
     fi
   fi
   build_progress_bar "$u7_int" "$u7_target"; u7_bar_output="$REPLY_COLOUR"$'\n'"$REPLY"
   u7_bar_clr="${u7_bar_output%%$'\n'*}"
   u7_bar="${u7_bar_output#*$'\n'}"
-  add_seg "wk${u7_label:+ ${u7_label}} ${u7_bar} ${u7_bar_clr}${u7_int}%${CLR_RESET}${usage_stale_suffix}" 3 "usage" "usage_7d"
+  add_seg "${u7_prefix}${u7_label:+ ${u7_label}} ${u7_bar} ${u7_bar_clr}${u7_int}%${CLR_RESET}${u7_suffix}" 3 "usage" "usage_7d"
 fi
 
 # Lines changed (priority 5)
