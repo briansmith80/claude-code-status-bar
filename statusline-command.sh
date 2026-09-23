@@ -1630,6 +1630,15 @@ fetch_usage_token() {
     creds=$(cat "${SCRIPT_DIR}/.credentials.json" 2>/dev/null) || creds=""
   fi
   [ -z "$creds" ] && return 1
+  # The same Keychain item / credentials file also holds OAuth tokens that
+  # Claude Code stores for MCP servers ("mcpOAuth": {"<server>": {"accessToken":
+  # …}}), and those entries can precede Claude Code's own login. A first-match
+  # read of "accessToken" would then send an MCP server's token — typically
+  # long expired — and every fetch would 401 into backoff. Read the token from
+  # the claudeAiOauth entry; fall back to the first match only when that entry
+  # is absent.
+  extract_block "$creds" "claudeAiOauth"
+  [ -n "$REPLY" ] && creds=$REPLY
   extract_from "$creds" "accessToken"; token=$REPLY
   [ -z "$token" ] && return 1
   echo "$token"
