@@ -11,6 +11,9 @@ statusline.conf
 # Windows/MSYS crash artifacts
 *.stackdump
 
+# Type declarations the Claude Code engine lays beside a loaded mod
+mods/*/.claude-plugin/types/
+
 # Node deps + lockfile for the demo/asset generators (npm i @resvg/resvg-js gifenc)
 node_modules/
 package-lock.json

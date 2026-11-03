@@ -13,6 +13,14 @@
       "homepage": "https://github.com/briansmith80/claude-code-status-bar",
       "license": "MIT",
       "keywords": ["statusline", "status-bar", "claude-code", "usage", "rate-limit", "burn-rate", "forecast", "context-window", "auto-compact", "git", "cost", "subagent", "activity", "themes", "pacing", "windows", "bash"]
+    },
+    {
+      "name": "pacing-mod",
+      "source": "./mods/pacing-mod",
+      "description": "Usage pacing pane for the Claude Code Desktop app and VS Code, where the status line does not run: 5-hour and weekly limits with an even-pace marker and burn-rate forecast, in the status bar's 8 themes.",
+      "homepage": "https://github.com/briansmith80/claude-code-status-bar/tree/main/mods/pacing-mod",
+      "license": "MIT",
+      "keywords": ["mod", "pane", "desktop", "vscode", "usage", "rate-limit", "pacing", "burn-rate", "forecast", "themes"]
     }
   ]
 }

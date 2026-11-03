@@ -1,0 +1,55 @@
+{
+  "name": "pacing-mod",
+  "version": "0.1.0",
+  "description": "Usage pacing pane for Claude Code: 5-hour and weekly limits, even-pace marker, burn-rate forecast. Works in the Desktop Code tab and VS Code, where the status line does not run.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "theme": {
+      "title": "Theme",
+      "type": "string",
+      "description": "Colour theme for the pacing bars. status-bar follows colour_theme in ~/.claude/statusline.conf.",
+      "default": "status-bar",
+      "options": [
+        "status-bar",
+        "default",
+        "nord",
+        "dracula",
+        "solarized",
+        "tokyo-night",
+        "catppuccin",
+        "matrix",
+        "mono"
+      ]
+    },
+    "band": {
+      "title": "Desktop band",
+      "type": "boolean",
+      "description": "Show the one-line pacing band above the prompt in the Desktop app and VS Code.",
+      "default": true
+    },
+    "context": {
+      "title": "Context card",
+      "type": "boolean",
+      "description": "Show the context window card (fill, tokens, auto-compact point) in the pane and band.",
+      "default": true
+    },
+    "session": {
+      "title": "Session row",
+      "type": "boolean",
+      "description": "Show the session's duration and cost under the cards.",
+      "default": true
+    },
+    "toasts": {
+      "title": "Toasts",
+      "type": "boolean",
+      "description": "Toast once per window when you are on track to hit a limit, or pass 90%.",
+      "default": true
+    },
+    "notify": {
+      "title": "Native notifications",
+      "type": "boolean",
+      "description": "Also raise a native notification (your preferredNotifChannel) for the same alerts, so they reach you when the window is not in front.",
+      "default": false
+    }
+  }
+}
