@@ -533,7 +533,7 @@
       <div class="trust">
         <div class="card"><h3>Pure bash, no jq, no binaries</h3><p>Core runs on bash 3.2+, so it works on stock macOS. JSON is parsed with bash regex; there is nothing compiled to audit.</p></div>
         <div class="card"><h3>Never blocks the bar</h3><p>Every network call, the version check, the OAuth usage fallback, and transcript parsing, runs in a background subshell. The bar only reads caches, even offline.</p></div>
-        <div class="card"><h3>124 tests on 3 platforms in CI</h3><p>124 automated BATS tests across 13 files run on Linux, macOS, and Windows on every change, plus ShellCheck linting. MIT licensed.</p></div>
+        <div class="card"><h3>219 tests on 3 platforms in CI</h3><p>219 automated BATS tests across 20 files run on Linux, macOS, and Windows on every change, plus ShellCheck linting. MIT licensed.</p></div>
         <div class="card"><h3>Security-hardened</h3><p>Cache and temp files use <code>umask 077</code>, the OAuth token is passed to curl on stdin so it never appears in the process list, and all branch names, paths, and transcript text are stripped of control characters before printing.</p></div>
       </div>
     </div>
@@ -627,7 +627,7 @@
         <a class="btn primary" href="#install">Other install options</a>
         <a class="btn ghost" href="https://github.com/briansmith80/claude-code-status-bar">View on GitHub</a>
       </div>
-      <p class="note">Pure bash, eight truecolour themes, 124 tests across three platforms, and it never blocks the bar.</p>
+      <p class="note">Pure bash, eight truecolour themes, 219 tests across three platforms, and it never blocks the bar.</p>
     </div>
   </section>
 </main>

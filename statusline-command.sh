@@ -41,10 +41,16 @@ VERSION="unknown"
 [ -f "$VERSION_FILE" ] && read -r VERSION < "$VERSION_FILE" 2>/dev/null || true
 VERSION="${VERSION//[[:space:]]/}"
 
-# Capture current epoch once — reused throughout to avoid repeated date forks.
-# bash 5 has it built in (no fork); stock macOS bash 3.2 falls back to date.
-NOW_EPOCH="${EPOCHSECONDS:-}"
-case "$NOW_EPOCH" in ''|*[!0-9]*) NOW_EPOCH=$(date +%s) ;; esac
+# Current epoch into REPLY. bash 5 has it built in (no fork); stock macOS
+# bash 3.2 falls back to a date fork.
+fresh_epoch() {
+  REPLY="${EPOCHSECONDS:-}"
+  case "$REPLY" in ''|*[!0-9]*) REPLY=$(date +%s) ;; esac
+}
+# Captured once at start and reused for every display calculation. Claim
+# files and the git cache stamp the real time instead (fresh_epoch), so a
+# slow render does not write a stamp that is already seconds old.
+fresh_epoch; NOW_EPOCH=$REPLY
 
 # ── Profiling (STATUSLINE_PROFILE=1) ──────────────────────────
 # Per-phase wall-clock to stderr. Each checkpoint costs one date fork, so
@@ -158,29 +164,57 @@ EOF
 # render's stdout pipe open.
 spawn_detached() {
   ( { set -m; } 2>/dev/null || true
+    set +e   # a job must reach its cleanup (lock release) even if a step fails
     "$@" >/dev/null 2>&1 </dev/null & ) 2>/dev/null
 }
 
-# Cross-session claim, fork-free. Succeeds when claim file $1 is missing (atomic
-# create via noclobber, so exactly one render wins) or older than $2 seconds
-# (taken over by overwrite; two renders racing that exact instant can both win,
-# which only means one duplicate background job). Used to stop every render of
-# every session spawning the same fetch while a cache is stale, and to keep two
-# renders from refreshing the same git repo at once. The holder removes the file
-# when done (a lock), or leaves it to expire (a minimum gap between attempts).
+# Age of claim file $1 in seconds into REPLY, and its holder token into
+# CLAIM_HOLDER. A missing or malformed file, or one stamped in the future
+# (the clock stepped backwards), reads as very old, so a claim can never pin
+# forever. Fork-free on bash 5.
+claim_age() {
+  local ts="" now
+  REPLY=999999 CLAIM_HOLDER=""
+  [ -f "$1" ] || return 0
+  read -r ts CLAIM_HOLDER < "$1" 2>/dev/null || ts=""
+  case "$ts" in ''|*[!0-9]*) return 0 ;; esac
+  fresh_epoch; now=$REPLY; REPLY=999999
+  [ "$ts" -le "$now" ] && REPLY=$(( now - ts ))
+  return 0
+}
+
+# Cross-session claim. Succeeds when claim file $1 is missing (atomic create
+# via noclobber, so exactly one render wins) or older than $2 seconds (taken
+# over by overwrite; two renders racing that exact instant can both win, which
+# only means one duplicate background job). Used to stop every render of every
+# session spawning the same fetch while a cache is stale, and to keep two
+# renders from refreshing the same git repo at once. The file holds
+# "<epoch> <token>"; the token (CLAIM_TOKEN) lets the holder release only its
+# own claim (release_claim), or it is left to expire (a minimum gap between
+# attempts).
 claim_slot() {
-  local f="$1" ts="" rc=0
+  local f="$1" now rc=0
+  fresh_epoch; now=$REPLY
+  CLAIM_TOKEN="$$.$RANDOM"
   if [ -f "$f" ]; then
-    read -r ts < "$f" 2>/dev/null || ts=""
-    case "$ts" in ''|*[!0-9]*) ts=0 ;; esac
-    [ $(( NOW_EPOCH - ts )) -lt "$2" ] && return 1
-    printf '%s\n' "$NOW_EPOCH" > "$f" 2>/dev/null || return 1
+    claim_age "$f"
+    [ "$REPLY" -lt "$2" ] && return 1
+    printf '%s %s\n' "$now" "$CLAIM_TOKEN" > "$f" 2>/dev/null || return 1
     return 0
   fi
   set -C
-  { printf '%s\n' "$NOW_EPOCH" > "$f"; } 2>/dev/null || rc=1
+  { printf '%s %s\n' "$now" "$CLAIM_TOKEN" > "$f"; } 2>/dev/null || rc=1
   set +C
   return $rc
+}
+
+# Remove claim file $1 only while token $2 still holds it, so a job that
+# outlived its claim (taken over after it expired) never deletes the newer
+# holder's claim.
+release_claim() {
+  claim_age "$1"
+  [ "$CLAIM_HOLDER" = "$2" ] && rm -f "$1" 2>/dev/null
+  return 0
 }
 
 # Delete per-session and per-folder caches (and their locks) untouched for a
@@ -850,9 +884,11 @@ case "${1:-}" in
       "${SCRIPT_DIR}/.statusline-usage-backoff"
       "${SCRIPT_DIR}/.statusline-activity-cache"
       "${SCRIPT_DIR}/.statusline-claude-status-cache"
+      "${SCRIPT_DIR}/statusline.conf.example"
     )
     UNINSTALL_DIRS=(
       "${SCRIPT_DIR}/.statusline-transcript-cache"
+      "${SCRIPT_DIR}/.statusline-autoupdate.lock"
     )
     echo "This will remove the following files:"
     for f in "${UNINSTALL_FILES[@]}"; do
@@ -861,6 +897,9 @@ case "${1:-}" in
     for d in "${UNINSTALL_DIRS[@]}"; do
       echo "  $d/ (directory)"
     done
+    echo "  ${SCRIPT_DIR}/.statusline-activity-cache.* (per-session activity caches)"
+    echo "  ${SCRIPT_DIR}/.statusline-git-cache.* (per-folder git caches)"
+    echo "  ${SCRIPT_DIR}/.statusline-*.lock (claim files)"
     echo ""
     echo "Your config file (${SCRIPT_DIR}/statusline.conf) will be kept"
     echo "unless you confirm its removal in a follow-up prompt."
@@ -1141,7 +1180,20 @@ apply_icon_set
 
 # ── End Configuration ─────────────────────────────────────────
 
-input=$(cat)
+# Read stdin without a fork where bash can (mapfile, bash 4+): this is the
+# last subshell on a warm render. Bash 3.2 (stock macOS) keeps $(cat). Never
+# `read -r -d ''`: it silently yields nothing on MSYS2 (see CLAUDE.md).
+if [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then
+  mapfile -t _in_lines
+  if [ "${#_in_lines[@]}" -gt 0 ]; then
+    printf -v input '%s\n' "${_in_lines[@]}"; input="${input%$'\n'}"
+  else
+    input=""
+  fi
+  unset _in_lines
+else
+  input=$(cat)
+fi
 sl_profile "startup+config"
 
 # ── JSON Parsing Helpers ──────────────────────────────────────
@@ -1362,22 +1414,22 @@ sl_profile "stdin+fields"
 # Result cache (git_cache_seconds, default 5): each folder's result is cached
 # in ~/.claude/.statusline-git-cache.<hash>, shared by every session. A fresh
 # result is shown as is (no git at all). Once it is older than
-# git_cache_seconds it is still shown, and a detached background job refreshes
-# it for the next render (one job per folder at a time). The render itself only
-# runs git when it has no usable result: the first render in a folder, after a
-# settings change, or when the result is over GIT_CACHE_MAX_AGE old. This keeps
-# git out of the render's process tree, so Claude Code's tree kill of a
-# cancelled render can't leave a suspended git.exe behind on Windows (see
-# spawn_detached), and cuts git runs from two per render per session to about
-# two per folder every git_cache_seconds. The cost: a dirty count or branch
-# switch can show up to git_cache_seconds plus one refresh late.
-# git_cache_seconds=0 turns the cache off (every render runs git, as before).
+# git_cache_seconds it is still shown, however old (after a sleep it may be
+# hours old, for one render), and a detached background job refreshes it for
+# the next render (one job per folder at a time). The render itself only runs
+# git when it has no result at all: the first render in a folder, or after a
+# git setting changed. This keeps git out of the render's process tree, so
+# Claude Code's tree kill of a cancelled render can't leave a suspended git.exe
+# behind on Windows (see spawn_detached), and cuts git runs from two per render
+# per session to about two per folder every git_cache_seconds. The cost: a
+# dirty count or branch switch can show up to git_cache_seconds plus one
+# refresh late. git_cache_seconds=0 turns the cache off (every render runs
+# git, as before).
 branch=""
 dirty_count=""
 ahead_count=""
 behind_count=""
 stash_count=""
-GIT_CACHE_MAX_AGE=300
 # Optional best-effort timeout prefix (git_timeout>0) so a hung network mount
 # can't stall the render; resolved once, empty when disabled or no timeout cmd.
 git_tmo=""
@@ -1458,8 +1510,13 @@ git_probe() {
     fi
   fi
   [ -n "$file" ] || return 0
+  [ -d "$file" ] && return 0   # never move the result INTO a stray directory
   tmp="${file}.tmp.$$.$RANDOM"
-  if printf '%s\n' "$NOW_EPOCH" "$git_sig" "$dir" "$git_c_repo" "$git_c_common" "$git_c_oid" \
+  # Stamp the time the result was taken, not the render's start: on a loaded
+  # PC a render can take seconds, and a cache born that old would look stale
+  # on the very next render and keep a refresh permanently in flight.
+  fresh_epoch
+  if printf '%s\n' "$REPLY" "$git_sig" "$dir" "$git_c_repo" "$git_c_common" "$git_c_oid" \
        "$git_c_head" "$git_c_ahead" "$git_c_behind" "$git_c_entries" "end" > "$tmp" 2>/dev/null; then
     mv -f "$tmp" "$file" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
   else
@@ -1484,11 +1541,12 @@ git_cache_read() {
   git_c_ahead=$ahead git_c_behind=$behind git_c_entries=$entries
 }
 
-# Background job (via spawn_detached): refresh one folder's cache, then free
-# its lock. On ~1 in 37 runs it also sweeps old caches.
+# Background job (via spawn_detached): refresh folder $1's cache $2, then
+# release its lock (held under token $3). On ~1 in 37 runs it also sweeps old
+# caches.
 git_refresh_job() {
   git_probe "$1" "$2"
-  rm -f "${2}.lock"
+  release_claim "${2}.lock" "$3"
   if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then sweep_old_caches; fi
 }
 
@@ -1501,14 +1559,24 @@ if [ -n "$cwd" ] && [ -d "$cwd" ]; then
   else
     fnv_hash "$cwd"
     GIT_CACHE_FILE="${SCRIPT_DIR}/.statusline-git-cache.${REPLY}"
-    git_age=-1
-    if git_cache_read "$GIT_CACHE_FILE" "$cwd"; then git_age=$(( NOW_EPOCH - git_c_ts )); fi
-    if [ "$git_age" -ge 0 ] && [ "$git_age" -le "$GIT_CACHE_MAX_AGE" ]; then
-      if [ "$git_age" -ge "$git_cache_seconds" ] && claim_slot "${GIT_CACHE_FILE}.lock" 60; then
-        spawn_detached git_refresh_job "$cwd" "$GIT_CACHE_FILE"
+    git_age=-1 git_have=false
+    if git_cache_read "$GIT_CACHE_FILE" "$cwd"; then git_have=true; git_age=$(( NOW_EPOCH - git_c_ts )); fi
+    if [ "$git_have" = "true" ]; then
+      # Fresh: shown as is. Stale (or a clock step): shown, and refreshed by
+      # one detached job per folder; a render that finds the lock held just
+      # shows the old result.
+      if { [ "$git_age" -lt 0 ] || [ "$git_age" -ge "$git_cache_seconds" ]; } \
+         && claim_slot "${GIT_CACHE_FILE}.lock" 60; then
+        spawn_detached git_refresh_job "$cwd" "$GIT_CACHE_FILE" "$CLAIM_TOKEN"
       fi
     else
+      # No result for this folder yet (first render here, or a git setting
+      # changed): probe in the render so the branch shows at once, under the
+      # folder's lock. This is the one place git still runs inside the render.
+      git_claimed=false
+      claim_slot "${GIT_CACHE_FILE}.lock" 60 && git_claimed=true
       git_probe "$cwd" "$GIT_CACHE_FILE"
+      [ "$git_claimed" = "true" ] && release_claim "${GIT_CACHE_FILE}.lock" "$CLAIM_TOKEN"
     fi
   fi
 fi
@@ -1561,15 +1629,16 @@ HELPER_SCRIPT="${SCRIPT_DIR}/statusline-helper.js"
 activity_line=""
 activity_has_colour=false
 
-# Background job (via spawn_detached): run the Node helper, then free this
-# session's helper lock. On ~1 in 37 runs it also sweeps old caches.
+# Background job (via spawn_detached): run the Node helper, then release this
+# session's helper lock (held under token $1). On ~1 in 37 runs it also sweeps
+# old caches.
 activity_helper_job() {
   if [ "$activity_colour" = "true" ]; then
     node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null || true
   else
     node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null || true
   fi
-  rm -f "${ACTIVITY_CACHE_FILE}.lock"
+  release_claim "${ACTIVITY_CACHE_FILE}.lock" "$1"
   if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then sweep_old_caches; fi
 }
 
@@ -1698,11 +1767,8 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
     # idle re-stamp, which would overwrite the helper's fresh output with the
     # old line this render read.
     helper_busy=false
-    if [ -f "${ACTIVITY_CACHE_FILE}.lock" ]; then
-      read -r helper_lock_ts < "${ACTIVITY_CACHE_FILE}.lock" 2>/dev/null || helper_lock_ts=0
-      case "$helper_lock_ts" in ''|*[!0-9]*) helper_lock_ts=0 ;; esac
-      [ $(( NOW_EPOCH - helper_lock_ts )) -lt 30 ] && helper_busy=true
-    fi
+    claim_age "${ACTIVITY_CACHE_FILE}.lock"
+    [ "$REPLY" -lt 30 ] && helper_busy=true
     if [ "$spawn_helper" = "true" ]; then
       if [ "$helper_busy" = "true" ] || ! claim_slot "${ACTIVITY_CACHE_FILE}.lock" 30; then
         spawn_helper=false helper_busy=true
@@ -1711,7 +1777,7 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
 
     if [ "$spawn_helper" = "true" ]; then
       # Spawn the helper detached (non-blocking, outside the kill tree).
-      spawn_detached activity_helper_job
+      spawn_detached activity_helper_job "$CLAIM_TOKEN"
       : > "$ACTIVITY_SEEN_FILE" 2>/dev/null || true   # mark spawn time for the -nt gate
     elif [ "$helper_busy" = "false" ] && [ -n "$cached_act_json" ]; then
       # Idle: nothing to recompute. Keep the cached line "fresh" by re-stamping

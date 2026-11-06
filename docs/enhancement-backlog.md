@@ -150,10 +150,11 @@ Still open, in order of impact:
 
 | ID | Idea | Status | Notes |
 |----|------|--------|-------|
-| PF1 | **Helper minimum gap per session** | ⬜ | During a busy turn each session starts node about every refresh. Allow one run per ~2s per session, or keep a long-lived helper. |
-| PF2 | **Cold-start transcript parse cap (P-6)** | ⬜ | The first helper run reads the whole transcript into memory; parse only the tail on a cold start. |
-| PF3 | **Cold git probe in the background** | ⬜ | The first render in a folder (or after 5 min idle) still runs git in the render, the last in-tree native spawn. Option: background it and show no branch for one render. |
-| PF4 | **Atomic activity-cache write in the helper** | ⬜ | Temp file + rename, so a render never reads a half-written cache. Check Windows rename-over-open-file behaviour first. |
+| PF1 | **Stop the helper's per-second tick** | ⬜ | The largest remaining load with many sessions: while any tool or subagent is running, `computeNext` returns `now+1`, so every render spawns node (100 to 350 ms CPU, ~107 MB) just to advance the elapsed counter. Have the helper emit the running item's start epoch in a token and let bash format the elapsed time (it already drives the spinner from `NOW_EPOCH`). Old helper + new bash must degrade to today's behaviour. |
+| PF2 | **Cold-start transcript parse cap (P-6)** | ⬜ | The first helper run reads the whole transcript into one Buffer (68 MB transcript: 363 MB RSS, 2.4 to 6.5 s); parse only the tail on a cold start. |
+| PF3 | **Cold git probe in the background** | ⬜ | Narrowed in v2.25.0: only the first render in a folder (or after a git setting change) still runs git in the render; an old result is now always shown and refreshed in the background. Option: background that too and show no branch for one render. A cold probe over 3 s on a 3 s refresh is cancelled before it writes the cache and repeats every tick (`git_timeout` caps it; `git_untracked=false` avoids it). |
+| PF4 | **Atomic activity-cache write in the helper** | ⬜ | Both `writeFileSync` calls are in place, so a render can read a half-written cache once. Temp file + rename; check Windows rename-over-open-file behaviour first. |
+| PF5 | **One spawn for git refresh + helper** | ⬜ | When both are due in one render (about half of busy renders) they cost two `spawn_detached` (20 to 30 ms on Windows, 50 to 100 under load). Coalesce into one job. |
 
 ---
 

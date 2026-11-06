@@ -1,6 +1,6 @@
 # Performance and process-leak audit (November 2026)
 
-Written for v2.25.0. Trigger: on 6 Nov 2026 a Windows PC running about eight
+Written for v2.25.0. Trigger: over 5 to 6 Nov 2026 a Windows PC running about eight
 Claude Code sessions (status bar on a 3-second `refreshInterval`) had **416
 stuck `git.exe` processes using about 2.5 GB**. All were suspended: one thread,
 state Wait/Suspended, 0 ms CPU, parent gone. This file records the cause, the
@@ -46,13 +46,13 @@ render, so a cancel can kill it. "Detached" = started through
 | `cat` (read stdin) | In the tree | Every render | n/a | Can't (stdin closes) | Harmless (MSYS program) |
 | `date` | In the tree | Only bash 3.2 (stock macOS); bash 5 uses `$EPOCHSECONDS` | n/a | n/a | Harmless |
 | `git` x2 | Detached refresh job | Once per folder every `git_cache_seconds` (5 s), shared by all sessions | Yes, per folder | Lock stops a repeat for 60 s; `git_timeout` caps it | Unreachable |
-| `git` x2 | In the tree | Only with no usable cache: first render in a folder, a git setting changed, or 5+ min with no render there | Writes the cache | Render waits (as before); `git_timeout` caps it | **Can still orphan** (rare, see finding 9) |
+| `git` x2 | In the tree | Only with no cache at all: first render in a folder (caches are swept after a day unused), or a git setting changed | Writes the cache | Render waits (as before); `git_timeout` caps it | **Can still orphan** (rare, see finding 9) |
 | `mv`, `rm` | Mostly detached | With each git refresh / job end | n/a | n/a | Harmless (MSYS) |
 | `node statusline-helper.js` | Detached | When the transcript changed or a timed change is due; one run per session at a time | Parse state per transcript | Lock stops a second run for 30 s | Unreachable |
 | `curl` update check | Detached | Every 6 h; a failure retries after 30 s | Yes | `--max-time 3` | Unreachable |
 | `curl` OAuth usage | Detached | Every 10 min (`usage_cache_seconds`); failures back off to 30 min | Yes | `--max-time 3` | Unreachable |
 | `curl` Claude status (opt-in) | Detached | Every 5 min (`claude_status_cache_seconds`); a failure retries after 30 s | Yes | `--max-time 3` | Unreachable |
-| `find` (cache sweep) | Detached | About 1 in 37 background jobs | n/a | n/a | Unreachable |
+| `find` (cache sweep) | Detached | About 1 in 37 git-refresh or helper jobs | n/a | n/a | Unreachable |
 | `tput cols` | In the tree | Only if `COLUMNS` is unset (Claude Code sets it) | n/a | n/a | Harmless (MSYS) |
 | `timeout` | Wraps git | Only with `git_timeout>0` | n/a | Is the cap | Follows git |
 | auto-update (`curl` x5, `sha256sum`) | Detached | Opt-in, once per new version, lock dir | n/a | `--max-time` per file | Unreachable |
@@ -67,6 +67,15 @@ Network hosts: `raw.githubusercontent.com` (update check, auto-update),
 Same machine, heavily loaded at the time (59% CPU, 4.4 GB free of 32 GB, ~20
 `claude.exe`), so wall-clock numbers swing a lot between runs. Counts are
 stable.
+
+`--benchmark 10` (the canned payload, warm cache), three rounds each on the
+same machine at a quieter moment, after the pre-release audit fixes:
+
+| | v2.24.0 | v2.25.0 |
+|---|---|---|
+| Round 1 (min / avg / max) | 361 / 626 / 897 ms | 157 / 254 / 380 ms |
+| Round 2 | 433 / 697 / 963 ms | 165 / 311 / 602 ms |
+| Round 3 | 417 / 667 / 857 ms | 170 / 287 / 564 ms |
 
 Programs started by one render (shim log, this repo as the folder):
 
@@ -123,11 +132,15 @@ transcript growing every render, Claude status fetch failing (shims count):
 8. **Caches that grew forever. Low.** `.statusline-transcript-cache/` kept one
    file per transcript ever seen (269 files, 2.9 MB since June). *Fixed:* swept
    after 7 days unused. Git caches and locks are swept after a day.
-9. **Remaining in-tree git (cold cache). Low.** The first render in a folder,
-   after a git setting change, or after 5+ minutes idle there still runs git
-   inside the render, so a cancel at the wrong instant can still leave one
-   orphan. With a warm cache this is a handful of renders a day. *Option:* do
-   the cold probe in the background too and show no branch for one render.
+9. **Remaining in-tree git (cold cache). Low.** The first render in a folder
+   (or after a git setting change) still runs git inside the render, so a
+   cancel at the wrong instant can still leave one orphan. The pre-release
+   audit found the "5+ minutes idle" case did the same and, on a loaded PC,
+   a cold probe over 3 s was cancelled by the next tick before it wrote the
+   cache and repeated every tick; that case now shows the old result and
+   refreshes in the background, so in-tree git is down to the first render in
+   a folder. *Option:* do that cold probe in the background too and show no
+   branch for one render.
 10. **Non-atomic activity cache writes. Low.** The helper writes its cache in
     place, so a render can read a half-written file and skip line 2 once.
     *Partly fixed:* the bash side no longer re-stamps the file while a helper

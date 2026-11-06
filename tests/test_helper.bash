@@ -19,6 +19,16 @@ setup() {
   TEST_HOME="$(mktemp -d "${BATS_TMPDIR:-/tmp}/cc-statusline-XXXXXX")"
   mkdir -p "${TEST_HOME}/.claude"
 
+  # The script adopts a UTF-8 locale internally, so width assertions must
+  # count characters too. A shell with no locale (Git Bash with LANG unset)
+  # counts bytes and reads "…" as 3, so pin one here as the script does.
+  local probe="…"
+  if [ "${#probe}" -ne 1 ]; then
+    export LC_ALL=C.UTF-8
+    probe="…"
+    [ "${#probe}" -ne 1 ] && export LC_ALL=en_US.UTF-8
+  fi
+
   # Pin VERSION inside the sandbox to the repo's VERSION (or "test" fallback)
   # and pre-populate the update cache with the same string. This prevents the
   # script from showing "update available" or hitting the network.

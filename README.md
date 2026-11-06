@@ -154,7 +154,7 @@ There are a lot of Claude Code status lines now. Here's where this one is differ
 | Checksum-verified self-update (per-release `SHA256SUMS`) | ✅ | ❌ | ❌ | ❌ |
 | Live activity (tools/subagents/todos) that degrades w/o Node | ✅ | ✅ (Node-only) | ⚠️ | ⚠️ |
 | Guided in-Claude config wizard (`/configure`) | ✅ | ⚠️ | ✅ TUI | ✅ wizard + web |
-| Automated tests + CI across macOS / Linux / Windows | ✅ 187 | ❌ | ❌ | ❌ |
+| Automated tests + CI across macOS / Linux / Windows | ✅ 219 | ❌ | ❌ | ❌ |
 
 <sub>Snapshot of public docs, June 2026; the others are good tools and evolve quickly — check their repos for the latest. ✅ yes · ⚠️ partial/caveated · ❌ no.</sub>
 
@@ -396,6 +396,8 @@ rm -f ~/.claude/.statusline-claude-status-cache
 rm -f ~/.claude/.statusline-git-cache.*
 rm -f ~/.claude/.statusline-*.lock
 rm -rf ~/.claude/.statusline-transcript-cache
+rm -rf ~/.claude/.statusline-autoupdate.lock
+rm -f ~/.claude/statusline.conf.example
 rm -f ~/.claude/statusline.conf   # your config; skip this line to keep it
 ```
 
@@ -520,7 +522,7 @@ The installer wires this into `settings.json` when Node.js is present, leaving a
 
 Points that matter for a tool that runs on every response and can read your OAuth token:
 
-- **Nothing is downloaded or executed on the render path.** This is a copied local script (plus an optional local helper), not an `npx`/`npm exec` that resolves a moving version on every keystroke. The only network calls are the update check, the usage API, and the opt-in Claude status check. Each runs in a detached background job, at most once per 30 seconds across all sessions when it keeps failing, and never on the critical path.
+- **Nothing is downloaded or executed on the render path.** This is a copied local script (plus an optional local helper), not an `npx`/`npm exec` that resolves a moving version on every keystroke. The only network calls are the update check, the usage API, the opt-in Claude status check, and the opt-in self-update (`--update` or `auto_update`), which verifies every file against the release's checksums before swapping it in. Each runs in a detached background job, at most once per 30 seconds across all sessions when it keeps failing, and never on the critical path.
 - All cache and temp files are created with `umask 077` (owner-readable only).
 - The OAuth token is passed to curl via `--config -` on stdin, so it never appears in the process list. The wget fallback writes the bearer header to a `0600` temp file passed via `--config` (never on argv, where `ps aux` could read it) and runs with `--max-redirect=0` to prevent token leakage on redirects; curl is still strongly preferred.
 - The self-updater (`--update` and the opt-in `auto_update`) **and the installers** (`install.sh` / `install.ps1`, which double as the update path) verify every downloaded file against a per-release `SHA256SUMS` before installing it, and abort on any mismatch leaving the install untouched. The update source can only be set by a real environment variable, never by `statusline.conf`.
@@ -598,7 +600,7 @@ claude-code-status-bar/
 ├── .github/workflows/
 │   ├── shellcheck.yml            # lint (pushes to main, PRs)
 │   └── tests.yml                 # BATS suite on Linux, macOS, Windows (MSYS2)
-├── tests/                        # 146 BATS tests across 15 files
+├── tests/                        # 219 BATS tests across 20 files
 └── CLAUDE.md                     # project guide for working on this repo with Claude Code
 ```
 

@@ -92,12 +92,22 @@ wait_for_file_gone() {
   assert_plain_contains "2 dirty"
 }
 
-@test "a result over five minutes old is not shown: the render runs git" {
+@test "a result hours old is still shown (no git in the render), then refreshed" {
   require_git
   make_repo
   run_statusline "$(repo_json)"
   echo u > "${TEST_HOME}/work/u2.txt"
-  age_git_cache 400
+  age_git_cache 7200
+  f="$(git_cache_file)"
+  printf '%s\n' "$(date +%s)" > "${f}.lock"   # hold the folder so no refresh job starts
+  install_git_trap
+  run_statusline_env "$(repo_json)" "PATH=${TEST_HOME}/trap:${PATH}"
+  assert_plain_contains "1 dirty"        # old result shown, no git in the render
+  [ ! -f "${TEST_HOME}/git-calls.log" ]
+  rm -f "${f}.lock"
+  run_statusline "$(repo_json)"          # now a detached job (real git) refreshes it
+  assert_plain_contains "1 dirty"
+  wait_for_file_gone "${f}.lock"
   run_statusline "$(repo_json)"
   assert_plain_contains "2 dirty"
 }
@@ -209,4 +219,76 @@ wait_for_file_gone() {
   run_statusline "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"transcript_path\":\"${tr_file}\"}"
   [ -f "${cache}.seen" ]                           # spawned
   wait_for_file_gone "${cache}.lock"               # and the job freed the lock
+}
+
+# ── Audit follow-ups: claims, collisions, uninstall ──────────
+
+@test "a claim stamped in the future (clock stepped back) counts as expired" {
+  mkdir -p "${TEST_HOME}/trap"
+  printf '#!/bin/bash\necho x >> "%s/curl-calls.log"\nexit 7\n' "${TEST_HOME}" > "${TEST_HOME}/trap/curl"
+  chmod +x "${TEST_HOME}/trap/curl"
+  write_conf "show_claude_status=true" "claude_status_cache_seconds=1"
+  printf '%s\n' "$(( $(date +%s) + 3600 ))" > "${TEST_HOME}/.claude/.statusline-claude-status-cache.lock"
+  json='{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40}}'
+  run_statusline_env "$json" "PATH=${TEST_HOME}/trap:${PATH}"
+  sleep 1
+  [ "$(wc -l < "${TEST_HOME}/curl-calls.log")" -eq 1 ]
+}
+
+@test "the update check is throttled by its claim file too" {
+  mkdir -p "${TEST_HOME}/trap"
+  printf '#!/bin/bash\necho x >> "%s/curl-calls.log"\nexit 7\n' "${TEST_HOME}" > "${TEST_HOME}/trap/curl"
+  chmod +x "${TEST_HOME}/trap/curl"
+  # test_helper pins a fresh update cache; age it past the 6-hour interval
+  printf '%s 0.0.1\n' "$(( $(date +%s) - 30000 ))" > "${TEST_HOME}/.claude/.statusline-update-cache"
+  printf '%s\n' "$(date +%s)" > "${TEST_HOME}/.claude/.statusline-update-cache.lock"
+  json='{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40}}'
+  run_statusline_env "$json" "PATH=${TEST_HOME}/trap:${PATH}"
+  sleep 1
+  [ ! -f "${TEST_HOME}/curl-calls.log" ]
+  rm -f "${TEST_HOME}/.claude/.statusline-update-cache.lock"
+  run_statusline_env "$json" "PATH=${TEST_HOME}/trap:${PATH}"
+  sleep 1
+  [ "$(wc -l < "${TEST_HOME}/curl-calls.log")" -eq 1 ]
+}
+
+@test "a cached result for another folder (hash collision) is ignored" {
+  require_git
+  make_repo
+  run_statusline "$(repo_json)"
+  f="$(git_cache_file)"
+  awk 'NR==3{$0="/some/other/folder"}1' "$f" > "${f}.new" && mv -f "${f}.new" "$f"
+  install_git_trap
+  run_statusline_env "$(repo_json)" "PATH=${TEST_HOME}/trap:${PATH}"
+  [ -f "${TEST_HOME}/git-calls.log" ]
+}
+
+@test "a result over 5 min old is still shown while another render refreshes the folder" {
+  require_git
+  make_repo
+  run_statusline "$(repo_json)"
+  age_git_cache 301
+  f="$(git_cache_file)"
+  printf '%s\n' "$(date +%s)" > "${f}.lock"
+  install_git_trap
+  run_statusline_env "$(repo_json)" "PATH=${TEST_HOME}/trap:${PATH}"
+  assert_plain_contains "main"
+  [ ! -f "${TEST_HOME}/git-calls.log" ]
+}
+
+@test "--uninstall removes git caches, claim files, the conf template and the auto-update lock dir" {
+  d="${TEST_HOME}/.claude"
+  cp "${REPO_ROOT}/statusline.conf.example" "$d/statusline.conf.example"
+  : > "$d/.statusline-git-cache.deadbeef"; : > "$d/.statusline-git-cache.deadbeef.lock"
+  : > "$d/.statusline-update-cache.lock"; : > "$d/.statusline-activity-cache.abcd1234"
+  mkdir -p "$d/.statusline-autoupdate.lock"
+  run bash -c "printf 'y\nn\n' | HOME='${TEST_HOME}' bash '${STATUSLINE_SCRIPT}' --uninstall"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Removed installed files"* ]]
+  [ ! -e "$d/statusline.conf.example" ]
+  [ ! -e "$d/.statusline-git-cache.deadbeef" ]
+  [ ! -e "$d/.statusline-git-cache.deadbeef.lock" ]
+  [ ! -e "$d/.statusline-update-cache.lock" ]
+  [ ! -e "$d/.statusline-activity-cache.abcd1234" ]
+  [ ! -e "$d/.statusline-autoupdate.lock" ]
 }
