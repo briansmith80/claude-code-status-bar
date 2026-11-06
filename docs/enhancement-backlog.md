@@ -5,7 +5,7 @@ principles we hold to, the competitive landscape, and the candidate work that
 remains. It supersedes the former `ROADMAP.md` and `SPRINTS.md` (both retired —
 everything they planned shipped). **Shipped history lives in
 [CHANGELOG.md](../CHANGELOG.md)**; the project ships feature-based,
-**feedback-driven** releases (latest **v2.24.0**) — promote items from here on
+**feedback-driven** releases (latest **v2.25.0**) — promote items from here on
 demand, not in list order.
 
 ---
@@ -13,7 +13,7 @@ demand, not in list order.
 ## Principles
 
 1. **Stay pure bash core** — no jq, no compiled binaries. Optional Node.js helper for features that need it (transcript parsing). The core status bar works without Node.js.
-2. **Never block the status bar** — network/slow ops run in background subshells with caching; the render only ever reads caches.
+2. **Never block the status bar** — network/slow ops run in detached background jobs with caching; the render only ever reads caches. Background work must start through `spawn_detached` (outside the render's process tree, see the v2.25.0 audit), and a repeating fetch needs a `claim_slot` throttle.
 3. **Config survives updates** — `statusline.conf` is never overwritten.
 4. **Cross-platform first** — macOS, Linux, and Windows/MSYS2.
 5. **Security by default** — sanitize untrusted input, hide tokens, restrictive permissions, `%s`-only printing of transcript-derived text.
@@ -139,6 +139,21 @@ and the whole "velocity/trend/per-turn" family unlocks together.
 Highest value, lowest effort, unique: **A1** (compact countdown), **B1**
 (time-to-limit), **B4** (alert-only usage mode), **B3** (cleaner 100% state).
 **B2** (pace delta) and **D1** (cache ratio) are strong P1 follow-ons.
+
+---
+
+## Performance follow-ups (November 2026 audit)
+
+From [performance-audit-2026-11.md](performance-audit-2026-11.md). v2.25.0 fixed the
+leak, the per-render git cost, fetch retry storms and transcript-cache growth.
+Still open, in order of impact:
+
+| ID | Idea | Status | Notes |
+|----|------|--------|-------|
+| PF1 | **Helper minimum gap per session** | ⬜ | During a busy turn each session starts node about every refresh. Allow one run per ~2s per session, or keep a long-lived helper. |
+| PF2 | **Cold-start transcript parse cap (P-6)** | ⬜ | The first helper run reads the whole transcript into memory; parse only the tail on a cold start. |
+| PF3 | **Cold git probe in the background** | ⬜ | The first render in a folder (or after 5 min idle) still runs git in the render, the last in-tree native spawn. Option: background it and show no branch for one render. |
+| PF4 | **Atomic activity-cache write in the helper** | ⬜ | Temp file + rename, so a render never reads a half-written cache. Check Windows rename-over-open-file behaviour first. |
 
 ---
 

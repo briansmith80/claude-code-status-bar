@@ -303,6 +303,7 @@ The full list (every segment toggle, the activity-line options, grouping, and ti
 - **Context warnings are compaction-aware**: Claude Code auto-compacts at a fixed reserve below the window (~83% of a 200k window, ~97% of a 1M one). With `context_warn_threshold=auto` (default) the `│` marker sits at that point and `▲` fires within 20k tokens of it. Honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the `autoCompactWindow` setting, and `DISABLE_AUTO_COMPACT`; set a number to use a fixed percentage instead.
 - **Animated effects** (opt-in `activity_pulse`, `activity_scanner`): need a low **odd** `refreshInterval` such as `3` to animate, otherwise they sit static. `/claude-code-status-bar:configure` can set it for you.
 - **Claude API status** (opt-in `show_claude_status`, off by default): a degraded-only early-warning badge fed by the public [`status.claude.com`](https://status.claude.com) page. It polls in the background (never on the render path, so it can't slow or block the bar) and appears **only when Claude is degraded** — `claude_status_min=major` (default) shows major/critical outages, `minor` also surfaces minor degradation and maintenance windows. It's an early warning, not ground truth: a status page is reactive and can lag a live incident.
+- **Git results are cached** (`git_cache_seconds=5`, default): each folder's branch, dirty count and ahead/behind are reused for 5 seconds by every session, then refreshed by a background job, so most renders run no git at all. A branch switch or new file can show up a few seconds late. `git_cache_seconds=0` runs git on every render (the old behaviour). For huge or network-mounted repos, `git_untracked=false` skips the untracked-file scan and `git_timeout=N` caps each git call.
 - **Narrow terminals**: with `enable_truncation=true` (default) low-priority segments drop tier by tier (update notice first, directory and branch last), after `dir_style=auto` has already collapsed the path to its basename.
 - **Groups**: `use_groups=true` brackets related segments: `[model + context]` `[usage bars]` `[git stats]` `[duration + cost]`.
 - **Trust level**: the config is sourced as bash, so treat it like your `.bashrc` and only put your own settings in it. (`show_usage_weekly` still works as an alias for `show_usage_7d`.)
@@ -392,6 +393,8 @@ rm -f ~/.claude/.statusline-usage-backoff
 rm -f ~/.claude/.statusline-activity-cache
 rm -f ~/.claude/.statusline-activity-cache.*
 rm -f ~/.claude/.statusline-claude-status-cache
+rm -f ~/.claude/.statusline-git-cache.*
+rm -f ~/.claude/.statusline-*.lock
 rm -rf ~/.claude/.statusline-transcript-cache
 rm -f ~/.claude/statusline.conf   # your config; skip this line to keep it
 ```
@@ -510,12 +513,14 @@ The installer wires this into `settings.json` when Node.js is present, leaving a
 - **Usage shows `~` after the percentage.** The OAuth data is stale. Usually transient; if it persists, clear the two cache files above.
 - **The activity line never appears.** It needs Node.js on `PATH`, `~/.claude/statusline-helper.js`, and a Claude Code version that sends `transcript_path` (`--dump-stdin` reports this as YES/NO). It also lags one refresh behind and hides when its cache is older than `activity_ttl_seconds` (default 120).
 - **`--check-update` shows an old version right after a release.** GitHub's raw CDN caches for a few minutes. Try again shortly.
+- **The branch or dirty count lags a few seconds.** Expected: git results are cached per folder for `git_cache_seconds` (default 5) and refreshed in the background. Set `git_cache_seconds=0` to run git on every render.
+- **Windows: lots of stuck `git.exe`, `curl.exe` or `node.exe` processes (versions before 2.25.0).** Claude Code cancels a slow render by killing its whole process tree, and on Windows that could strand a child it had just started, suspended forever. 2.25.0 keeps that work outside the render. To clear leftovers once, in PowerShell: `Get-Process git,curl,node -ErrorAction SilentlyContinue | Where-Object { $t = @($_.Threads); $t.Count -gt 0 -and -not ($t | Where-Object { $_.ThreadState -ne 'Wait' -or $_.WaitReason -ne 'Suspended' }) } | Stop-Process -Force` (it only matches processes whose every thread is suspended).
 
 ## Security
 
 Points that matter for a tool that runs on every response and can read your OAuth token:
 
-- **Nothing is downloaded or executed on the render path.** This is a copied local script (plus an optional local helper), not an `npx`/`npm exec` that resolves a moving version on every keystroke. The only network calls are the opt-in update check and the usage-API fallback, both run in detached background subshells and never on the critical path.
+- **Nothing is downloaded or executed on the render path.** This is a copied local script (plus an optional local helper), not an `npx`/`npm exec` that resolves a moving version on every keystroke. The only network calls are the update check, the usage API, and the opt-in Claude status check. Each runs in a detached background job, at most once per 30 seconds across all sessions when it keeps failing, and never on the critical path.
 - All cache and temp files are created with `umask 077` (owner-readable only).
 - The OAuth token is passed to curl via `--config -` on stdin, so it never appears in the process list. The wget fallback writes the bearer header to a `0600` temp file passed via `--config` (never on argv, where `ps aux` could read it) and runs with `--max-redirect=0` to prevent token leakage on redirects; curl is still strongly preferred.
 - The self-updater (`--update` and the opt-in `auto_update`) **and the installers** (`install.sh` / `install.ps1`, which double as the update path) verify every downloaded file against a per-release `SHA256SUMS` before installing it, and abort on any mismatch leaving the install untouched. The update source can only be set by a real environment variable, never by `statusline.conf`.
@@ -529,16 +534,17 @@ Points that matter for a tool that runs on every response and can read your OAut
 
 <br>
 
-Claude Code pipes a JSON payload to the script on every refresh. The script parses it with bash regex (no jq), builds the segments, and prints one to three lines per your [layout](#layouts-13-lines). Everything slow happens in background subshells that write caches; the bar only ever reads caches, so it never waits on the network or on transcript parsing.
+Claude Code pipes a JSON payload to the script on every refresh. The script parses it with bash regex (no jq), builds the segments, and prints one to three lines per your [layout](#layouts-13-lines). Everything slow happens in detached background jobs that write caches; the bar only ever reads caches, so it never waits on the network, on transcript parsing, or (after the first render in a folder) on git.
 
 ```mermaid
 flowchart LR
     CC["Claude Code"] -->|"JSON on stdin"| S["statusline-command.sh"]
     S --> L["Lines 1–3 (per layout)"]
+    S -.->|"background, every 5s per folder"| G["git status"]
     S -.->|"background, every 6h"| U["Version check (GitHub)"]
-    S -.->|"background, only without stdin limits"| O["OAuth usage API"]
-    S -.->|"background, every refresh"| H["statusline-helper.js parses the transcript"]
-    U & O & H -.->|"write"| C["caches in ~/.claude/"]
+    S -.->|"background, every 10 min"| O["OAuth usage API"]
+    S -.->|"background, when the transcript changes"| H["statusline-helper.js parses the transcript"]
+    G & U & O & H -.->|"write"| C["caches in ~/.claude/"]
     C -.->|"read next refresh"| S
 ```
 
@@ -555,7 +561,10 @@ Files at `~/.claude/` after install:
 | `.statusline-usage-cache` | OAuth usage cache | Auto-refreshes |
 | `.statusline-usage-backoff` | OAuth failure backoff state | Auto-expires |
 | `.statusline-activity-cache.<id>` | Live activity cache (one per session) | Auto-refreshes, swept after a day |
-| `.statusline-transcript-cache/` | Parsed transcript cache | Auto-invalidates |
+| `.statusline-git-cache.<hash>` | Git result per folder (shared by sessions) | Refreshed every `git_cache_seconds`, swept after a day |
+| `.statusline-claude-status-cache` | Claude API status (opt-in) | Auto-refreshes |
+| `.statusline-*.lock` | Tiny claim files that stop sessions repeating the same background job | Auto-expire |
+| `.statusline-transcript-cache/` | Parsed transcript cache | Auto-invalidates, swept after 7 days unused |
 
 All caches are created with `umask 077`, so they are readable only by you.
 
@@ -620,6 +629,7 @@ See [`tests/README.md`](tests/README.md) for layout details.
 
 Full release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.25.0**: Windows process-leak fix and a lighter bar with many sessions open. Git results are cached per folder (`git_cache_seconds=5`) and refreshed in the background, every background job runs outside the render's process tree (Claude Code's tree kill of a cancelled render could strand suspended `git.exe`/`curl.exe`/`node.exe` processes), and a failing fetch is retried once per 30 seconds instead of on every render.
 - **2.24.0**: Model-scoped weekly limits — when your plan's per-model weekly cap (the "Fable"/"Opus" row on claude.ai) is running higher than the all-models one, the weekly bar swaps to it: `wk:Fable (3d17h) ███░░ 36%`. On by default, fail-silent, `usage_scoped=false` to disable.
 - **2.23.0–2.23.2**: Opt-in Claude API status badge (degraded-only early warning fed by status.claude.com), plus a fix for doubled backslashes in Windows paths.
 - **2.22.0 / 2.22.1**: Burn-rate forecast — a `▲time-to-limit` warning when you're on track to hit a limit before it resets — plus a guided `/configure` wizard, and a fix so stale todos no longer linger on the activity line.

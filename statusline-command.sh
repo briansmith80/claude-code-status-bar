@@ -41,8 +41,10 @@ VERSION="unknown"
 [ -f "$VERSION_FILE" ] && read -r VERSION < "$VERSION_FILE" 2>/dev/null || true
 VERSION="${VERSION//[[:space:]]/}"
 
-# Capture current epoch once — reused throughout to avoid repeated date forks
-NOW_EPOCH=$(date +%s)
+# Capture current epoch once — reused throughout to avoid repeated date forks.
+# bash 5 has it built in (no fork); stock macOS bash 3.2 falls back to date.
+NOW_EPOCH="${EPOCHSECONDS:-}"
+case "$NOW_EPOCH" in ''|*[!0-9]*) NOW_EPOCH=$(date +%s) ;; esac
 
 # ── Profiling (STATUSLINE_PROFILE=1) ──────────────────────────
 # Per-phase wall-clock to stderr. Each checkpoint costs one date fork, so
@@ -64,6 +66,9 @@ fi
 
 UPDATE_CHECK_INTERVAL=21600  # seconds between update checks (6 hours)
 UPDATE_CACHE_FILE="${SCRIPT_DIR}/.statusline-update-cache"
+# Minimum gap between attempts at the same background fetch, shared by every
+# session (see claim_slot). Stops a failing fetch being retried every render.
+FETCH_RETRY_SECONDS=30
 # Base raw URL for VERSION and the self-update download. Overridable via
 # STATUSLINE_REPO_RAW (point at a fork, or a file:// path for testing).
 # SECURITY (S2): capture the override from the *real* environment here, before
@@ -136,6 +141,56 @@ EOF
     fi
   else
     return 1
+  fi
+}
+
+# ── Detached background work ─────────────────────────────────
+# Run "$@" (usually a function) in the background, OUTSIDE this render's
+# process tree. Claude Code cancels an in-flight render whenever the next one
+# starts, and on Windows it does so with a tree kill (`taskkill /T /F`). MSYS2
+# bash starts a native program (git, curl, node) suspended and resumes it a
+# moment later; a tree kill that lands in between kills bash but leaves the
+# child suspended forever: an orphan that holds memory and never exits. The
+# double fork leaves the worker's parent a subshell that exits at once, so the
+# tree kill can't reach the worker. On Linux/macOS Claude Code kills the
+# render's process group instead; `set -m` gives the worker its own group, so
+# that can't reach it either. Fully redirected, so it also never holds the
+# render's stdout pipe open.
+spawn_detached() {
+  ( { set -m; } 2>/dev/null || true
+    "$@" >/dev/null 2>&1 </dev/null & ) 2>/dev/null
+}
+
+# Cross-session claim, fork-free. Succeeds when claim file $1 is missing (atomic
+# create via noclobber, so exactly one render wins) or older than $2 seconds
+# (taken over by overwrite; two renders racing that exact instant can both win,
+# which only means one duplicate background job). Used to stop every render of
+# every session spawning the same fetch while a cache is stale, and to keep two
+# renders from refreshing the same git repo at once. The holder removes the file
+# when done (a lock), or leaves it to expire (a minimum gap between attempts).
+claim_slot() {
+  local f="$1" ts="" rc=0
+  if [ -f "$f" ]; then
+    read -r ts < "$f" 2>/dev/null || ts=""
+    case "$ts" in ''|*[!0-9]*) ts=0 ;; esac
+    [ $(( NOW_EPOCH - ts )) -lt "$2" ] && return 1
+    printf '%s\n' "$NOW_EPOCH" > "$f" 2>/dev/null || return 1
+    return 0
+  fi
+  set -C
+  { printf '%s\n' "$NOW_EPOCH" > "$f"; } 2>/dev/null || rc=1
+  set +C
+  return $rc
+}
+
+# Delete per-session and per-folder caches (and their locks) untouched for a
+# day, and parsed-transcript caches untouched for a week, so ~/.claude never
+# fills up. Only ever called from background jobs, on ~1 in 37 runs.
+sweep_old_caches() {
+  find "$SCRIPT_DIR" -maxdepth 1 \( -name '.statusline-activity-cache.*' -o -name '.statusline-git-cache.*' \) \
+    -mmin +1440 -delete 2>/dev/null || true
+  if [ -d "${SCRIPT_DIR}/.statusline-transcript-cache" ]; then
+    find "${SCRIPT_DIR}/.statusline-transcript-cache" -maxdepth 1 -name '*.json' -mtime +7 -delete 2>/dev/null || true
   fi
 }
 
@@ -468,13 +523,19 @@ check_for_update() {
     fi
   fi
 
-  # Cache is stale or missing — fetch in background and write cache
-  (
-    remote_version=$(http_get "${REPO_RAW}/VERSION" 3 | tr -d '[:space:]') || remote_version=""
-    if [ -n "$remote_version" ]; then
-      echo "$(date +%s) $remote_version" > "$UPDATE_CACHE_FILE"
-    fi
-  ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
+  # Cache is stale or missing: fetch in the background and write the cache.
+  # The claim allows one attempt per FETCH_RETRY_SECONDS across all sessions,
+  # so a failing fetch (offline, blocked) is not retried by every render.
+  claim_slot "${UPDATE_CACHE_FILE}.lock" "$FETCH_RETRY_SECONDS" || return 0
+  spawn_detached update_check_job
+}
+
+update_check_job() {
+  local remote_version
+  remote_version=$(http_get "${REPO_RAW}/VERSION" 3 | tr -d '[:space:]') || remote_version=""
+  if [ -n "$remote_version" ]; then
+    echo "$(date +%s) $remote_version" > "$UPDATE_CACHE_FILE"
+  fi
 }
 
 # Map a Claude-status indicator to a numeric severity rank (higher = worse),
@@ -508,21 +569,27 @@ check_claude_status() {
     fi
   fi
 
-  # Stale or missing: refresh in a detached background subshell. The render
-  # still shows the last-known cs_ind (subject to the segment's staleness ceiling).
-  (
-    body=$(http_get "$CLAUDE_STATUS_URL" 3) || body=""
-    # Write ONLY a well-formed body: a failed/garbage fetch (network blip, the
-    # status page itself down, a proxied env that can't reach it) leaves the
-    # previous cache untouched, so the bar never flashes a false "down".
-    case "$body" in *'"indicator"'*) ;; *) body="" ;; esac
-    if [ -n "$body" ]; then
-      ind="none"
-      [[ $body =~ \"indicator\"[[:space:]]*:[[:space:]]*\"([a-z]+)\" ]] && ind="${BASH_REMATCH[1]}"
-      case "$ind" in none|minor|major|critical|maintenance) ;; *) ind="none" ;; esac
-      echo "$(date +%s) $ind" > "$CLAUDE_STATUS_CACHE_FILE"
-    fi
-  ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
+  # Stale or missing: refresh in a detached background job. The render still
+  # shows the last-known cs_ind (subject to the segment's staleness ceiling).
+  # One attempt per FETCH_RETRY_SECONDS across all sessions: a failed fetch
+  # writes nothing, so without the claim every render would retry it.
+  claim_slot "${CLAUDE_STATUS_CACHE_FILE}.lock" "$FETCH_RETRY_SECONDS" || return 0
+  spawn_detached claude_status_job
+}
+
+claude_status_job() {
+  local body ind
+  body=$(http_get "$CLAUDE_STATUS_URL" 3) || body=""
+  # Write ONLY a well-formed body: a failed/garbage fetch (network blip, the
+  # status page itself down, a proxied env that can't reach it) leaves the
+  # previous cache untouched, so the bar never flashes a false "down".
+  case "$body" in *'"indicator"'*) ;; *) body="" ;; esac
+  if [ -n "$body" ]; then
+    ind="none"
+    [[ $body =~ \"indicator\"[[:space:]]*:[[:space:]]*\"([a-z]+)\" ]] && ind="${BASH_REMATCH[1]}"
+    case "$ind" in none|minor|major|critical|maintenance) ;; *) ind="none" ;; esac
+    echo "$(date +%s) $ind" > "$CLAUDE_STATUS_CACHE_FILE"
+  fi
 }
 
 # Skip the background update check for diagnostic / management flags
@@ -564,6 +631,11 @@ git_untracked=true
 # (default; no behaviour change). Where no timeout command exists (e.g. stock
 # macOS without coreutils) the raw call is used regardless.
 git_timeout=0
+# git_cache_seconds=N reuses each folder's git result for N seconds, shared by
+# every session, and refreshes it in the background after that, so most
+# renders run no git at all. A branch switch or dirty count can show up to N
+# seconds (plus one refresh) late. 0 = run git on every render (pre-2.25).
+git_cache_seconds=5
 show_duration=true
 show_worktree=true
 show_cost=true
@@ -716,6 +788,9 @@ case "${1:-}" in
       printf 'colour_theme=%s\n'           "${colour_theme}"
       printf 'context_warn_threshold=%s\n' "${context_warn_threshold}"
       printf 'enable_truncation=%s\n'      "${enable_truncation}"
+      printf 'git_cache_seconds=%s\n'      "${git_cache_seconds}"
+      printf 'git_timeout=%s\n'            "${git_timeout}"
+      printf 'git_untracked=%s\n'          "${git_untracked}"
       printf 'group_close=%s\n'            "${group_close}"
       printf 'group_open=%s\n'             "${group_open}"
       printf 'icon_set=%s\n'               "${icon_set}"
@@ -797,8 +872,10 @@ case "${1:-}" in
         for f in "${UNINSTALL_FILES[@]}"; do
           rm -f "$f"
         done
-        # Per-session activity caches (.statusline-activity-cache.<id>)
-        rm -f "${SCRIPT_DIR}"/.statusline-activity-cache.* 2>/dev/null || true
+        # Per-session activity caches (.statusline-activity-cache.<id>), per-folder
+        # git caches (.statusline-git-cache.<hash>) and the fetch claim files
+        rm -f "${SCRIPT_DIR}"/.statusline-activity-cache.* "${SCRIPT_DIR}"/.statusline-git-cache.* \
+          "${SCRIPT_DIR}"/.statusline-*.lock 2>/dev/null || true
         for d in "${UNINSTALL_DIRS[@]}"; do
           rm -rf "$d"
         done
@@ -909,7 +986,7 @@ if [ "$auto_update" = "true" ] && [ -n "$update_available" ]; then
       if [ -n "${STATUSLINE_AUTOUPDATE_SYNC:-}" ]; then
         run_auto_update "$update_available" > /dev/null 2>&1
       else
-        run_auto_update "$update_available" > /dev/null 2>&1 < /dev/null &
+        spawn_detached run_auto_update "$update_available"
       fi
       ;;
   esac
@@ -1281,14 +1358,26 @@ sl_profile "stdin+fields"
 # Detect branch, dirty count, ahead/behind, and stash count.
 # Uses -c core.fsmonitor=false to skip filesystem monitoring overhead.
 # Guard: cwd must be a real directory to avoid traversal via crafted JSON.
+#
+# Result cache (git_cache_seconds, default 5): each folder's result is cached
+# in ~/.claude/.statusline-git-cache.<hash>, shared by every session. A fresh
+# result is shown as is (no git at all). Once it is older than
+# git_cache_seconds it is still shown, and a detached background job refreshes
+# it for the next render (one job per folder at a time). The render itself only
+# runs git when it has no usable result: the first render in a folder, after a
+# settings change, or when the result is over GIT_CACHE_MAX_AGE old. This keeps
+# git out of the render's process tree, so Claude Code's tree kill of a
+# cancelled render can't leave a suspended git.exe behind on Windows (see
+# spawn_detached), and cuts git runs from two per render per session to about
+# two per folder every git_cache_seconds. The cost: a dirty count or branch
+# switch can show up to git_cache_seconds plus one refresh late.
+# git_cache_seconds=0 turns the cache off (every render runs git, as before).
 branch=""
 dirty_count=""
 ahead_count=""
 behind_count=""
 stash_count=""
-# Repo gate doubles as git-dir discovery: --git-dir for the gate itself,
-# --git-common-dir for the stash log (linked worktrees share the stash in
-# the common dir). One fork for both.
+GIT_CACHE_MAX_AGE=300
 # Optional best-effort timeout prefix (git_timeout>0) so a hung network mount
 # can't stall the render; resolved once, empty when disabled or no timeout cmd.
 git_tmo=""
@@ -1297,61 +1386,151 @@ case "${git_timeout:-0}" in
   *) if command -v timeout > /dev/null 2>&1; then git_tmo="timeout ${git_timeout}"
      elif command -v gtimeout > /dev/null 2>&1; then git_tmo="gtimeout ${git_timeout}"; fi ;;
 esac
-git_dirs=""
-if [ -n "$cwd" ] && [ -d "$cwd" ]; then
-  # shellcheck disable=SC2086  # $git_tmo is an intentional optional command prefix
-  git_dirs=$($git_tmo git -C "$cwd" --no-optional-locks -c core.fsmonitor=false rev-parse --git-dir --git-common-dir 2>/dev/null) || git_dirs=""
+# git_untracked=false skips the untracked-file scan (the only part of
+# `git status` that scales with working-tree size).
+git_uflag=""; [ "$git_untracked" = "false" ] && git_uflag="--untracked-files=no"
+git_status_wanted=false
+if [ "$show_branch" = "true" ] || [ "$show_dirty_count" = "true" ] || [ "$show_ahead_behind" = "true" ]; then
+  git_status_wanted=true
 fi
-if [ -n "$git_dirs" ]; then
-  git_common="${git_dirs##*$'\n'}"
+# The settings that change what git reports. A cached result written under
+# other settings is ignored, so a conf edit shows on the very next render.
+git_sig="${git_status_wanted}${git_uflag}"
 
-  # One `status --porcelain=v2 --branch` call provides the branch name,
-  # ahead/behind, and the dirty count — replacing three git forks plus
-  # their wc/tr/cut pipelines. Header lines are parsed in pure bash; the
-  # entry count comes from line arithmetic so huge dirty trees stay cheap.
-  if [ "$show_branch" = "true" ] || [ "$show_dirty_count" = "true" ] || [ "$show_ahead_behind" = "true" ]; then
-    # git_untracked=false skips the untracked-file scan (the only part of
-    # `git status` that scales with working-tree size).
-    git_uflag=""; [ "$git_untracked" = "false" ] && git_uflag="--untracked-files=no"
-    # shellcheck disable=SC2086  # $git_tmo / $git_uflag are intentional optional args
-    git_status=$($git_tmo git -C "$cwd" --no-optional-locks -c core.fsmonitor=false status --porcelain=v2 --branch $git_uflag 2>/dev/null) || git_status=""
-    git_oid="" git_head="" git_headers=0 git_rest="$git_status"
-    while [ -n "$git_rest" ]; do
-      git_line="${git_rest%%$'\n'*}"
-      case "$git_line" in
-        "# branch.oid "*)  git_oid="${git_line#"# branch.oid "}" ;;
-        "# branch.head "*) git_head="${git_line#"# branch.head "}" ;;
-        "# branch.ab "*)
-          if [ "$show_ahead_behind" = "true" ]; then
-            git_ab="${git_line#"# branch.ab "}"        # "+A -B"
-            ahead_count="${git_ab%% *}"; ahead_count="${ahead_count#+}"
-            behind_count="${git_ab##* }"; behind_count="${behind_count#-}"
-          fi
-          ;;
-        "#"*) ;;
-        *) break ;;
-      esac
-      git_headers=$(( git_headers + 1 ))
-      case "$git_rest" in
-        *$'\n'*) git_rest="${git_rest#*$'\n'}" ;;
-        *) git_rest="" ;;
-      esac
-    done
-    if [ "$show_dirty_count" = "true" ] && [ -n "$git_status" ]; then
-      git_nl="${git_status//[!$'\n']/}"
-      dirty_count=$(( ${#git_nl} + 1 - git_headers ))
-      [ "$dirty_count" -lt 0 ] && dirty_count=0
+# Fork-free 32-bit FNV-1a hash of $1 into REPLY (8 hex digits): a short,
+# filename-safe cache key for a folder path.
+fnv_hash() {
+  local s="$1" h=2166136261 i c
+  for (( i = 0; i < ${#s}; i++ )); do
+    printf -v c '%d' "'${s:i:1}"
+    h=$(( ((h ^ c) * 16777619) & 0xFFFFFFFF ))
+  done
+  printf -v REPLY '%08x' "$h"
+}
+
+# Run the two git calls for folder $1 and parse them into the git_c_* globals.
+# With a cache file $2, also store the result there atomically (temp file +
+# rename), so a reader in another session never sees a half-written file.
+git_probe() {
+  local dir="$1" file="$2" dirs="" st="" line rest headers=0 ab nl tmp
+  git_c_repo=false git_c_common="" git_c_oid="" git_c_head=""
+  git_c_ahead="" git_c_behind="" git_c_entries=""
+  # Repo gate doubles as git-dir discovery: --git-dir for the gate itself,
+  # --git-common-dir for the stash log (linked worktrees share the stash in
+  # the common dir). One fork for both.
+  # shellcheck disable=SC2086  # $git_tmo is an intentional optional command prefix
+  dirs=$($git_tmo git -C "$dir" --no-optional-locks -c core.fsmonitor=false rev-parse --git-dir --git-common-dir 2>/dev/null) || dirs=""
+  if [ -n "$dirs" ]; then
+    git_c_repo=true
+    git_c_common="${dirs##*$'\n'}"
+    # One `status --porcelain=v2 --branch` call provides the branch name,
+    # ahead/behind, and the dirty count — replacing three git forks plus
+    # their wc/tr/cut pipelines. Header lines are parsed in pure bash; the
+    # entry count comes from line arithmetic so huge dirty trees stay cheap.
+    if [ "$git_status_wanted" = "true" ]; then
+      # shellcheck disable=SC2086  # $git_tmo / $git_uflag are intentional optional args
+      st=$($git_tmo git -C "$dir" --no-optional-locks -c core.fsmonitor=false status --porcelain=v2 --branch $git_uflag 2>/dev/null) || st=""
+      rest="$st"
+      while [ -n "$rest" ]; do
+        line="${rest%%$'\n'*}"
+        case "$line" in
+          "# branch.oid "*)  git_c_oid="${line#"# branch.oid "}" ;;
+          "# branch.head "*) git_c_head="${line#"# branch.head "}" ;;
+          "# branch.ab "*)
+            ab="${line#"# branch.ab "}"        # "+A -B"
+            git_c_ahead="${ab%% *}"; git_c_ahead="${git_c_ahead#+}"
+            git_c_behind="${ab##* }"; git_c_behind="${git_c_behind#-}"
+            ;;
+          "#"*) ;;
+          *) break ;;
+        esac
+        headers=$(( headers + 1 ))
+        case "$rest" in
+          *$'\n'*) rest="${rest#*$'\n'}" ;;
+          *) rest="" ;;
+        esac
+      done
+      if [ -n "$st" ]; then
+        nl="${st//[!$'\n']/}"
+        git_c_entries=$(( ${#nl} + 1 - headers ))
+        [ "$git_c_entries" -lt 0 ] && git_c_entries=0
+      fi
     fi
-    if [ "$show_branch" = "true" ]; then
-      if [ "$git_head" = "(detached)" ]; then
-        branch="${git_oid:0:7}"
-      else
-        branch="$git_head"
+  fi
+  [ -n "$file" ] || return 0
+  tmp="${file}.tmp.$$.$RANDOM"
+  if printf '%s\n' "$NOW_EPOCH" "$git_sig" "$dir" "$git_c_repo" "$git_c_common" "$git_c_oid" \
+       "$git_c_head" "$git_c_ahead" "$git_c_behind" "$git_c_entries" "end" > "$tmp" 2>/dev/null; then
+    mv -f "$tmp" "$file" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
+  else
+    rm -f "$tmp" 2>/dev/null || true
+  fi
+}
+
+# Read folder $2's cached result from file $1 into git_c_ts and the git_c_*
+# globals. Fails when the file is missing or torn, belongs to another folder
+# (a hash collision) or was written under other settings.
+git_cache_read() {
+  local ts sig dir repo common oid head ahead behind entries endm
+  [ -f "$1" ] || return 1
+  { IFS= read -r ts; IFS= read -r sig; IFS= read -r dir; IFS= read -r repo
+    IFS= read -r common; IFS= read -r oid; IFS= read -r head; IFS= read -r ahead
+    IFS= read -r behind; IFS= read -r entries; IFS= read -r endm
+  } < "$1" 2>/dev/null || return 1
+  [ "$endm" = "end" ] && [ "$dir" = "$2" ] && [ "$sig" = "$git_sig" ] || return 1
+  case "$ts" in ''|*[!0-9]*) return 1 ;; esac
+  case "$repo" in true|false) ;; *) return 1 ;; esac
+  git_c_ts=$ts git_c_repo=$repo git_c_common=$common git_c_oid=$oid git_c_head=$head
+  git_c_ahead=$ahead git_c_behind=$behind git_c_entries=$entries
+}
+
+# Background job (via spawn_detached): refresh one folder's cache, then free
+# its lock. On ~1 in 37 runs it also sweeps old caches.
+git_refresh_job() {
+  git_probe "$1" "$2"
+  rm -f "${2}.lock"
+  if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then sweep_old_caches; fi
+}
+
+git_c_repo=false git_c_common="" git_c_oid="" git_c_head=""
+git_c_ahead="" git_c_behind="" git_c_entries="" git_c_ts=0
+case "${git_cache_seconds:-}" in ''|*[!0-9]*) git_cache_seconds=0 ;; esac
+if [ -n "$cwd" ] && [ -d "$cwd" ]; then
+  if [ "$git_cache_seconds" -eq 0 ]; then
+    git_probe "$cwd" ""
+  else
+    fnv_hash "$cwd"
+    GIT_CACHE_FILE="${SCRIPT_DIR}/.statusline-git-cache.${REPLY}"
+    git_age=-1
+    if git_cache_read "$GIT_CACHE_FILE" "$cwd"; then git_age=$(( NOW_EPOCH - git_c_ts )); fi
+    if [ "$git_age" -ge 0 ] && [ "$git_age" -le "$GIT_CACHE_MAX_AGE" ]; then
+      if [ "$git_age" -ge "$git_cache_seconds" ] && claim_slot "${GIT_CACHE_FILE}.lock" 60; then
+        spawn_detached git_refresh_job "$cwd" "$GIT_CACHE_FILE"
       fi
-      sanitize "$branch"; branch=$REPLY
-      if [ -n "$branch_max_length" ] && [ "${#branch}" -gt "$branch_max_length" ] 2>/dev/null; then
-        branch="${branch:0:$branch_max_length}…"
-      fi
+    else
+      git_probe "$cwd" "$GIT_CACHE_FILE"
+    fi
+  fi
+fi
+
+if [ "$git_c_repo" = "true" ]; then
+  git_common="$git_c_common"
+  if [ "$show_ahead_behind" = "true" ]; then
+    ahead_count="$git_c_ahead"
+    behind_count="$git_c_behind"
+  fi
+  if [ "$show_dirty_count" = "true" ] && [ -n "$git_c_entries" ]; then
+    dirty_count="$git_c_entries"
+  fi
+  if [ "$show_branch" = "true" ]; then
+    if [ "$git_c_head" = "(detached)" ]; then
+      branch="${git_c_oid:0:7}"
+    else
+      branch="$git_c_head"
+    fi
+    sanitize "$branch"; branch=$REPLY
+    if [ -n "$branch_max_length" ] && [ "${#branch}" -gt "$branch_max_length" ] 2>/dev/null; then
+      branch="${branch:0:$branch_max_length}…"
     fi
   fi
 
@@ -1381,6 +1560,18 @@ ACTIVITY_CACHE_FILE="${SCRIPT_DIR}/.statusline-activity-cache"
 HELPER_SCRIPT="${SCRIPT_DIR}/statusline-helper.js"
 activity_line=""
 activity_has_colour=false
+
+# Background job (via spawn_detached): run the Node helper, then free this
+# session's helper lock. On ~1 in 37 runs it also sweeps old caches.
+activity_helper_job() {
+  if [ "$activity_colour" = "true" ]; then
+    node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null || true
+  else
+    node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null || true
+  fi
+  rm -f "${ACTIVITY_CACHE_FILE}.lock"
+  if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then sweep_old_caches; fi
+}
 
 # Map the helper's zero-width colour tokens to theme colours. Tokens are
 # plain text, so they survive both sanitize layers; only fixed CLR_*
@@ -1501,21 +1692,28 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
     [ "$transcript_path" -nt "$ACTIVITY_SEEN_FILE" ] && spawn_helper=true
     if [ "$cached_act_next" -gt 0 ] 2>/dev/null && [ "$NOW_EPOCH" -ge "$cached_act_next" ]; then spawn_helper=true; fi
 
+    # One helper at a time per session. While a run is in flight (its lock is
+    # under 30s old; removed when node exits) skip the spawn and leave .seen
+    # untouched, so the next render re-checks the transcript. Also skip the
+    # idle re-stamp, which would overwrite the helper's fresh output with the
+    # old line this render read.
+    helper_busy=false
+    if [ -f "${ACTIVITY_CACHE_FILE}.lock" ]; then
+      read -r helper_lock_ts < "${ACTIVITY_CACHE_FILE}.lock" 2>/dev/null || helper_lock_ts=0
+      case "$helper_lock_ts" in ''|*[!0-9]*) helper_lock_ts=0 ;; esac
+      [ $(( NOW_EPOCH - helper_lock_ts )) -lt 30 ] && helper_busy=true
+    fi
     if [ "$spawn_helper" = "true" ]; then
-      # Spawn helper in background (non-blocking); the same subshell sweeps
-      # per-session caches (and their .seen markers) older than a day so they
-      # never accumulate. The sweep runs on ~1 in 37 refreshes, so the find fork
-      # is rare and the helper subshell stays cheap.
-      ( if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then
-          find "$SCRIPT_DIR" -maxdepth 1 -name '.statusline-activity-cache.*' -mmin +1440 -delete 2>/dev/null
-        fi
-        if [ "$activity_colour" = "true" ]; then
-          node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null
-        else
-          node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null
-        fi ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
+      if [ "$helper_busy" = "true" ] || ! claim_slot "${ACTIVITY_CACHE_FILE}.lock" 30; then
+        spawn_helper=false helper_busy=true
+      fi
+    fi
+
+    if [ "$spawn_helper" = "true" ]; then
+      # Spawn the helper detached (non-blocking, outside the kill tree).
+      spawn_detached activity_helper_job
       : > "$ACTIVITY_SEEN_FILE" 2>/dev/null || true   # mark spawn time for the -nt gate
-    elif [ -n "$cached_act_json" ]; then
+    elif [ "$helper_busy" = "false" ] && [ -n "$cached_act_json" ]; then
       # Idle: nothing to recompute. Keep the cached line "fresh" by re-stamping
       # its timestamp WITHOUT a Node spawn (fork-free redirect), so the existing
       # staleness fade / TTL behave exactly as when the helper ran every render —
@@ -1706,8 +1904,10 @@ fetch_usage_data() {
       scoped_stale=true
     fi
   fi
-  if [ "$needs_fetch" = "true" ]; then
-    ( fetch_usage_data 2>/dev/null ) >/dev/null 2>&1 </dev/null &   # fully detached: must not hold the render's stdout pipe open
+  # One attempt per FETCH_RETRY_SECONDS across all sessions (the backoff file
+  # spaces out failures; the claim stops parallel renders piling on at expiry).
+  if [ "$needs_fetch" = "true" ] && claim_slot "${USAGE_CACHE_FILE}.lock" "$FETCH_RETRY_SECONDS"; then
+    spawn_detached fetch_usage_data
   fi
 
   # Parse cached usage data (may be from previous run if fetch is in-flight)

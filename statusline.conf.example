@@ -120,6 +120,10 @@
 # use_groups=false       # bracket related segments: [model+context] [usage] [git] …
 
 # ── Git performance (large / network-mounted repos) ─────────
+# git_cache_seconds=5    # reuse each folder's git result for N seconds (shared
+#                        # by all sessions; refreshed in the background), so
+#                        # most renders run no git. A branch switch or new file
+#                        # can show a few seconds late. 0 = git on every render.
 # git_untracked=true     # false adds --untracked-files=no: skips the untracked
 #                        # scan (the part of `git status` that scales with repo
 #                        # size). Faster on huge/monorepo/network checkouts; the

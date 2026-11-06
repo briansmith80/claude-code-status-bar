@@ -887,7 +887,7 @@
       show_pr:'true', show_duration:'true', show_worktree:'true', show_vim_mode:'true',
       show_agent:'true', show_effort:'true', show_fast_mode:'true', show_tokens:'false',
       show_activity:'true', activity_colour:'true', activity_pulse:'false', activity_scanner:'false',
-      context_warn_threshold:'auto', git_untracked:'true', auto_update:'false'
+      context_warn_threshold:'auto', git_untracked:'true', git_cache_seconds:'5', auto_update:'false'
     };
 
     var SAMPLE = {
@@ -1202,6 +1202,7 @@
         '# ── Behaviour ──',
         bc('context_warn_threshold','auto | a percentage like 80'),
         b('git_untracked'),
+        bc('git_cache_seconds','seconds to reuse a git result per folder (0 = git every render)'),
         b('auto_update')
       );
       return L.join('\n')+'\n';
@@ -1319,6 +1320,7 @@
       g=grp('Behaviour','s2');
       g.appendChild(selRow('Context warning','context_warn_threshold',['auto','75','80','85','90']));
       g.appendChild(togRow('Count untracked files','git_untracked'));
+      g.appendChild(selRow('Git cache','git_cache_seconds',['0','2','5','10','30'],{'0':'off (git every render)','2':'2 s','5':'5 s (default)','10':'10 s','30':'30 s'}));
       g.appendChild(togRow('Auto-update in background','auto_update'));
       host.appendChild(g);
 

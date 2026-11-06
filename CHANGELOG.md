@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.25.0] - 2026-11-06
+
+Fixes a Windows process leak that could fill a PC with stuck `git.exe`, `curl.exe` and `node.exe` processes, and makes the bar much lighter with many sessions open.
+
+### Fixed
+
+- **Windows: no more stuck suspended processes after a cancelled render.** Claude Code cancels an in-flight status line run whenever the next one starts, and on Windows it kills the whole process tree (`taskkill /T /F`). Git Bash starts a native program (git, curl, node) suspended and resumes it a moment later; a tree kill in between left the child suspended forever, holding memory with no parent. One PC collected 416 `git.exe` (~2.5 GB) in a day with eight sessions on a 3-second refresh, plus `curl.exe` from the Claude status fetch and `node.exe` from the activity helper (~83 MB each). Every background job now starts through a double fork in its own process group (`spawn_detached`), so neither the Windows tree kill nor the Linux/macOS process-group kill can reach it, and git normally runs only in the background (below). A repro harness that cancels renders exactly like Claude Code went from 3 stuck processes per 400 cancels to 0. Details and the full audit: `docs/performance-audit-2026-11.md`.
+- **A failing background fetch is no longer retried on every render.** When the update check, the usage API or the Claude status page failed (offline, blocked), nothing was cached, so every render of every session started another `curl`. Each fetch now runs at most once per 30 seconds across all sessions (a small claim file, fork-free). In a 4-session test the Claude status fetch dropped from 22 `curl` runs a minute to 3.
+- **The parsed-transcript cache no longer grows forever.** Files for transcripts untouched for 7 days are swept (one install had 269 files from five months).
+
+### Added
+
+- **Git result cache (`git_cache_seconds`, default 5).** Each folder's branch, dirty count and ahead/behind are cached in `~/.claude/.statusline-git-cache.<hash>` and shared by every session. A fresh result is used as is; an older one is still shown while a background job refreshes it (one per folder at a time). The render itself only runs git with no usable result: the first render in a folder, after a git setting changes, or after 5 minutes with no render there. A branch switch or new file can show up a few seconds late; `git_cache_seconds=0` runs git on every render as before. A warm render now starts one outside program (`cat`) instead of four.
+- `--dump-config` now also lists `git_untracked` and `git_timeout` (they were missing).
+
+### Changed
+
+- The activity helper runs once per session at a time: while a run is in flight, a render neither starts another nor overwrites the cache with the old line.
+- `NOW_EPOCH` comes from bash's `$EPOCHSECONDS` when available (bash 5, including Git Bash), saving a `date` process per render. Stock macOS bash 3.2 still uses `date`.
+- `--uninstall` also removes the git caches and claim files.
+
+### Docs
+
+- README: config note on the git cache, troubleshooting entries (git lag, and a PowerShell one-liner to clear leftover suspended processes from older versions), updated files table, "How it works" diagram and security note. `statusline.conf.example`, the `/configure` wizard appendix and the web configurator (Behaviour panel) document `git_cache_seconds`. New `docs/performance-audit-2026-11.md`.
+
+### Internal
+
+- New `tests/git_cache.bats` (13 tests: cache write and reuse, stale-while-refresh, the 5-minute ceiling, one refresh in flight, `git_cache_seconds=0`, settings-change invalidation, non-repo folders, `--dump-config`, fetch claim and its expiry, helper in flight and a stale helper lock). Suite 214.
+
 ## [2.24.0] - 2026-07-13
 
 Makes the weekly bar honest for accounts with per-model weekly limits: it now shows whichever weekly limit will actually throttle you.

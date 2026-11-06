@@ -175,6 +175,7 @@ cover. Every key goes in `~/.claude/statusline.conf` as `key=value`.
 - The badge links to status.claude.com when `pr_link=true` (the shared hyperlink toggle).
 
 ### Git performance (large / network repos)
+- `git_cache_seconds` (default 5): each folder's git result is reused for N seconds by every session, then refreshed in the background, so most renders run no git. A branch switch or new file can show a few seconds late. `0` runs git on every render.
 - `git_untracked` (default true) — `false` skips the untracked-file scan (faster on huge/network repos; untracked then don't count as dirty).
 - `git_timeout` (default 0=off) — `N` wraps git in `timeout N` so a hung mount can't stall the render.
 
