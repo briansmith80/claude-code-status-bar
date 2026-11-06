@@ -181,10 +181,14 @@ queue_job() {
   printf -v q '%q ' "$@"
   bg_jobs+=("$q")
 }
+# Runs detached (its own process group from spawn_detached) and exits as soon
+# as the jobs are forked: job control is turned off here and nothing waits, so
+# the bash 3.2 (macOS) job-control `wait` hang can't occur; the jobs keep the
+# runner's group, which the render's kill never reaches.
 run_jobs() {
   local j
+  { set +m; } 2>/dev/null || true
   for j in "$@"; do eval "$j" & done
-  wait
 }
 flush_jobs() {
   [ "${#bg_jobs[@]}" -gt 0 ] || return 0
