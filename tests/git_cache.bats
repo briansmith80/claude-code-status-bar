@@ -292,3 +292,72 @@ wait_for_file_gone() {
   [ ! -e "$d/.statusline-activity-cache.abcd1234" ]
   [ ! -e "$d/.statusline-autoupdate.lock" ]
 }
+
+# ── v2.27.0: the cold probe runs detached too; jobs start in one spawn ──
+
+require_node() { command -v node > /dev/null 2>&1 || skip "node not available"; }
+
+# A git that sleeps before handing over to the real one, so a cold probe
+# outlasts the render's wait.
+install_slow_git() {
+  local real; real="$(command -v git)"
+  mkdir -p "${TEST_HOME}/slow"
+  printf '#!/bin/bash\nsleep %s\nexec "%s" "$@"\n' "$1" "$real" > "${TEST_HOME}/slow/git"
+  chmod +x "${TEST_HOME}/slow/git"
+}
+
+@test "a cold probe slower than the wait does not block the render; its result shows next render" {
+  require_git
+  make_repo
+  install_slow_git 3
+  start=$(date +%s)
+  run_statusline_env "$(repo_json)" "PATH=${TEST_HOME}/slow:${PATH}" "STATUSLINE_GIT_COLD_WAIT_TICKS=5"
+  [ $(( $(date +%s) - start )) -lt 3 ]     # rendered before the probe finished
+  assert_plain_not_contains "main"         # no git result yet
+  assert_plain_contains "Opus"
+  f="${TEST_HOME}/.claude/.statusline-git-cache."
+  for i in $(seq 1 100); do git_cache_file > /dev/null 2>&1 && break; sleep 0.1; done
+  wait_for_file_gone "$(git_cache_file).lock"
+  run_statusline "$(repo_json)"            # the detached probe finished meanwhile
+  assert_plain_contains "main"
+  assert_plain_contains "1 dirty"
+}
+
+@test "a cold render whose folder another render holds starts no second git and shows its result" {
+  require_git
+  make_repo
+  # Work out the folder's cache name with one real render, then start cold again.
+  run_statusline "$(repo_json)"
+  f="$(git_cache_file)"
+  rm -f "$f"
+  printf '%s held\n' "$(date +%s)" > "${f}.lock"   # another render's probe is running
+  install_git_trap
+  run_statusline_env "$(repo_json)" "PATH=${TEST_HOME}/trap:${PATH}" "STATUSLINE_GIT_COLD_WAIT_TICKS=3"
+  [ ! -f "${TEST_HOME}/git-calls.log" ]    # waited; ran no git of its own
+  assert_plain_not_contains "main"
+  rm -f "${f}.lock"
+  run_statusline "$(repo_json)"
+  assert_plain_contains "main"
+}
+
+@test "git refresh and the activity helper due in the same render both run (one spawn)" {
+  require_git
+  require_node
+  make_repo
+  cp "${REPO_ROOT}/statusline-helper.js" "${TEST_HOME}/.claude/statusline-helper.js"
+  run_statusline "$(repo_json)"
+  echo u > "${TEST_HOME}/work/u2.txt"
+  age_git_cache 10
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm test"}}]}}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" > "$tr_file"
+  json="{\"cwd\":\"${TEST_HOME}/work\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"transcript_path\":\"${tr_file}\",\"session_id\":\"onespawn\"}"
+  run_statusline "$json"
+  assert_plain_contains "1 dirty"          # stale result shown at once
+  f="$(git_cache_file)"
+  wait_for_file_gone "${f}.lock"
+  wait_for_file_gone "${TEST_HOME}/.claude/.statusline-activity-cache.onespawn.lock"
+  run_statusline "$json"
+  assert_plain_contains "2 dirty"          # the git job ran
+  assert_plain_contains "Bash npm test"    # and so did the helper
+}

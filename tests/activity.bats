@@ -297,3 +297,82 @@ live_json() {
   [[ "$activity" == *"｛T1700000000}"* ]]
   [[ "$activity" == *"｛A5}"* ]]
 }
+
+# ── v2.27.0: cold-start parse cap + atomic cache writes ────────────
+
+# A transcript with an old finished Edit, 20 padding lines, then a running
+# Read; under a small cap only the Read is inside the parsed tail.
+padded_transcript() {
+  local f="$1" i
+  printf '{"timestamp":"2026-11-06T10:00:00Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Edit","input":{"file_path":"/a/old.ts"}}]}}\n' > "$f"
+  printf '{"timestamp":"2026-11-06T10:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}\n' >> "$f"
+  for i in $(seq 1 20); do
+    printf '{"timestamp":"2026-11-06T10:00:02Z","type":"pad","pad":"%s"}\n' "$(printf 'x%.0s' $(seq 1 400))" >> "$f"
+  done
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"t2","name":"Read","input":{"file_path":"/a/new.ts"}}]}}\n' "$(iso_at "$(date +%s)")" >> "$f"
+}
+
+parsed_cache_file() {
+  local f
+  for f in "${TEST_HOME}/.claude/.statusline-transcript-cache"/*.json; do
+    case "$f" in *.tmp.json) continue ;; esac
+    [ -f "$f" ] && { echo "$f"; return 0; }
+  done
+  return 1
+}
+
+@test "cold start: only the transcript tail under the cap is parsed" {
+  require_node
+  tr_file="${TEST_HOME}/t.jsonl"
+  padded_transcript "$tr_file"
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  STATUSLINE_COLD_PARSE_BYTES=1500 node "$HELPER" "$tr_file" "$cache" --live
+  activity="$(cat "$cache")"
+  [[ "$activity" == *"Read new.ts"* ]]
+  [[ "$activity" != *"Edit 1"* ]]            # the old Edit sits before the cut
+  size=$(wc -c < "$tr_file")
+  node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1]));process.exit(c.offset===+process.argv[2]?0:1)' \
+    "$(parsed_cache_file)" "$size"           # the offset reached the end
+  # The next run is incremental from there: nothing changed, same line
+  STATUSLINE_COLD_PARSE_BYTES=1500 node "$HELPER" "$tr_file" "$cache" --live
+  [ "$(cat "$cache" | cut -d' ' -f2-)" = "$(echo "$activity" | cut -d' ' -f2-)" ]
+}
+
+@test "cold start: a transcript under the cap is parsed whole" {
+  require_node
+  tr_file="${TEST_HOME}/t.jsonl"
+  padded_transcript "$tr_file"
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  node "$HELPER" "$tr_file" "$cache" --live
+  activity="$(cat "$cache")"
+  [[ "$activity" == *"Read new.ts"* ]]
+  [[ "$activity" == *"Edit 1"* ]]
+}
+
+@test "a transcript that grew past the cap is re-parsed from its tail" {
+  require_node
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"2026-11-06T10:00:00Z","message":{"content":[{"type":"tool_use","id":"t0","name":"Glob","input":{"pattern":"*.md"}}]}}\n' > "$tr_file"
+  printf '{"timestamp":"2026-11-06T10:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t0"}]}}\n' >> "$tr_file"
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  STATUSLINE_COLD_PARSE_BYTES=1500 node "$HELPER" "$tr_file" "$cache" --live
+  [[ "$(cat "$cache")" == *"Glob 1"* ]]
+  padded_transcript "${TEST_HOME}/grow.jsonl"
+  cat "${TEST_HOME}/grow.jsonl" >> "$tr_file"   # grows by far more than the cap
+  STATUSLINE_COLD_PARSE_BYTES=1500 node "$HELPER" "$tr_file" "$cache" --live
+  activity="$(cat "$cache")"
+  [[ "$activity" == *"Read new.ts"* ]]
+  [[ "$activity" != *"Glob 1"* ]]            # state restarted at the tail
+}
+
+@test "cache files are written through a temp file and rename (no leftovers)" {
+  require_node
+  tr_file="${TEST_HOME}/t.jsonl"
+  padded_transcript "$tr_file"
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  node "$HELPER" "$tr_file" "$cache" --live
+  [ -f "$cache" ]
+  [ "$(wc -l < "$cache")" -eq 1 ]
+  [ -z "$(ls "${TEST_HOME}/.claude" | grep '\.tmp')" ]
+  [ -z "$(ls "${TEST_HOME}/.claude/.statusline-transcript-cache" | grep '\.tmp')" ]
+}

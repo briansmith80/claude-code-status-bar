@@ -168,6 +168,30 @@ spawn_detached() {
     "$@" >/dev/null 2>&1 </dev/null & ) 2>/dev/null
 }
 
+# Job queue (v2.27.0): background work decided during the render (git refresh,
+# the activity helper, the update / usage / status fetches) is queued here and
+# started by one spawn_detached in flush_jobs just before the bar prints, so a
+# render pays one fork pair however many jobs are due (git refresh and the
+# helper are both due in about half of busy renders). run_jobs starts the
+# queued jobs in parallel inside the detached subshell, so none waits on
+# another. Each entry is a %q-quoted command line.
+bg_jobs=()
+queue_job() {
+  local q
+  printf -v q '%q ' "$@"
+  bg_jobs+=("$q")
+}
+run_jobs() {
+  local j
+  for j in "$@"; do eval "$j" & done
+  wait
+}
+flush_jobs() {
+  [ "${#bg_jobs[@]}" -gt 0 ] || return 0
+  spawn_detached run_jobs "${bg_jobs[@]}"
+  bg_jobs=()
+}
+
 # Age of claim file $1 in seconds into REPLY, and its holder token into
 # CLAIM_HOLDER. A missing or malformed file, or one stamped in the future
 # (the clock stepped backwards), reads as very old, so a claim can never pin
@@ -561,7 +585,7 @@ check_for_update() {
   # The claim allows one attempt per FETCH_RETRY_SECONDS across all sessions,
   # so a failing fetch (offline, blocked) is not retried by every render.
   claim_slot "${UPDATE_CACHE_FILE}.lock" "$FETCH_RETRY_SECONDS" || return 0
-  spawn_detached update_check_job
+  queue_job update_check_job
 }
 
 update_check_job() {
@@ -608,7 +632,7 @@ check_claude_status() {
   # One attempt per FETCH_RETRY_SECONDS across all sessions: a failed fetch
   # writes nothing, so without the claim every render would retry it.
   claim_slot "${CLAUDE_STATUS_CACHE_FILE}.lock" "$FETCH_RETRY_SECONDS" || return 0
-  spawn_detached claude_status_job
+  queue_job claude_status_job
 }
 
 claude_status_job() {
@@ -1553,6 +1577,10 @@ git_refresh_job() {
 git_c_repo=false git_c_common="" git_c_oid="" git_c_head=""
 git_c_ahead="" git_c_behind="" git_c_entries="" git_c_ts=0
 case "${git_cache_seconds:-}" in ''|*[!0-9]*) git_cache_seconds=0 ;; esac
+# How long a render waits (in 0.1s ticks) for a cold probe's result before
+# rendering without git for this one refresh. Env override for tests.
+GIT_COLD_WAIT_TICKS="${STATUSLINE_GIT_COLD_WAIT_TICKS:-20}"
+case "$GIT_COLD_WAIT_TICKS" in ''|*[!0-9]*) GIT_COLD_WAIT_TICKS=20 ;; esac
 if [ -n "$cwd" ] && [ -d "$cwd" ]; then
   if [ "$git_cache_seconds" -eq 0 ]; then
     git_probe "$cwd" ""
@@ -1567,16 +1595,26 @@ if [ -n "$cwd" ] && [ -d "$cwd" ]; then
       # shows the old result.
       if { [ "$git_age" -lt 0 ] || [ "$git_age" -ge "$git_cache_seconds" ]; } \
          && claim_slot "${GIT_CACHE_FILE}.lock" 60; then
-        spawn_detached git_refresh_job "$cwd" "$GIT_CACHE_FILE" "$CLAIM_TOKEN"
+        queue_job git_refresh_job "$cwd" "$GIT_CACHE_FILE" "$CLAIM_TOKEN"
       fi
     else
       # No result for this folder yet (first render here, or a git setting
-      # changed): probe in the render so the branch shows at once, under the
-      # folder's lock. This is the one place git still runs inside the render.
-      git_claimed=false
-      claim_slot "${GIT_CACHE_FILE}.lock" 60 && git_claimed=true
-      git_probe "$cwd" "$GIT_CACHE_FILE"
-      [ "$git_claimed" = "true" ] && release_claim "${GIT_CACHE_FILE}.lock" "$CLAIM_TOKEN"
+      # changed). The probe runs detached under the folder's lock, never in
+      # the render's process tree (v2.27.0: the last in-tree git is gone), and
+      # the render waits a short while for its result so the branch still
+      # shows at once. A probe slower than the wait (huge or network repo)
+      # finishes in the background and shows on the next render instead of
+      # being cancelled and restarted every refresh. When another render
+      # already holds the lock its probe is the one waited for.
+      if claim_slot "${GIT_CACHE_FILE}.lock" 60; then
+        spawn_detached git_refresh_job "$cwd" "$GIT_CACHE_FILE" "$CLAIM_TOKEN"
+      fi
+      git_cold_i=0
+      while [ "$git_cold_i" -lt "$GIT_COLD_WAIT_TICKS" ]; do
+        if git_cache_read "$GIT_CACHE_FILE" "$cwd"; then git_have=true; break; fi
+        sleep 0.1 2>/dev/null || sleep 1
+        git_cold_i=$(( git_cold_i + 1 ))
+      done
     fi
   fi
 fi
@@ -1816,8 +1854,8 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
     fi
 
     if [ "$spawn_helper" = "true" ]; then
-      # Spawn the helper detached (non-blocking, outside the kill tree).
-      spawn_detached activity_helper_job "$CLAIM_TOKEN"
+      # Queue the helper (started detached by flush_jobs, outside the kill tree).
+      queue_job activity_helper_job "$CLAIM_TOKEN"
       : > "$ACTIVITY_SEEN_FILE" 2>/dev/null || true   # mark spawn time for the -nt gate
     elif [ "$helper_busy" = "false" ] && [ -n "$cached_act_json" ]; then
       # Idle: nothing to recompute. Keep the cached line "fresh" by re-stamping
@@ -2014,7 +2052,7 @@ fetch_usage_data() {
   # One attempt per FETCH_RETRY_SECONDS across all sessions (the backoff file
   # spaces out failures; the claim stops parallel renders piling on at expiry).
   if [ "$needs_fetch" = "true" ] && claim_slot "${USAGE_CACHE_FILE}.lock" "$FETCH_RETRY_SECONDS"; then
-    spawn_detached fetch_usage_data
+    queue_job fetch_usage_data
   fi
 
   # Parse cached usage data (may be from previous run if fetch is in-flight)
@@ -3071,6 +3109,10 @@ sl_profile "segments+render"
 # never a blank row for an empty line — preserving the pre-2.19 "line 2 only
 # when there's data" behaviour). Metric content prints with %b; the activity
 # tail is untrusted transcript text and always prints with %s.
+# Start every background job queued during this render with one detached
+# spawn, before printing so a cancelled render (killed once the next one
+# starts) has already handed its work off.
+flush_jobs
 emitted=0
 for ln in 1 2 3; do
   case "$ln" in

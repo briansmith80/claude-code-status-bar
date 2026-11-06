@@ -154,7 +154,7 @@ There are a lot of Claude Code status lines now. Here's where this one is differ
 | Checksum-verified self-update (per-release `SHA256SUMS`) | ✅ | ❌ | ❌ | ❌ |
 | Live activity (tools/subagents/todos) that degrades w/o Node | ✅ | ✅ (Node-only) | ⚠️ | ⚠️ |
 | Guided in-Claude config wizard (`/configure`) | ✅ | ⚠️ | ✅ TUI | ✅ wizard + web |
-| Automated tests + CI across macOS / Linux / Windows | ✅ 226 | ❌ | ❌ | ❌ |
+| Automated tests + CI across macOS / Linux / Windows | ✅ 233 | ❌ | ❌ | ❌ |
 
 <sub>Snapshot of public docs, June 2026; the others are good tools and evolve quickly — check their repos for the latest. ✅ yes · ⚠️ partial/caveated · ❌ no.</sub>
 
@@ -600,7 +600,7 @@ claude-code-status-bar/
 ├── .github/workflows/
 │   ├── shellcheck.yml            # lint (pushes to main, PRs)
 │   └── tests.yml                 # BATS suite on Linux, macOS, Windows (MSYS2)
-├── tests/                        # 226 BATS tests across 20 files
+├── tests/                        # 233 BATS tests across 20 files
 └── CLAUDE.md                     # project guide for working on this repo with Claude Code
 ```
 
@@ -631,6 +631,7 @@ See [`tests/README.md`](tests/README.md) for layout details.
 
 Full release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.27.0**: nothing runs inside the render any more: the first-render git probe is detached too (the render waits briefly for it), a cold start parses only the last 4 MB of a transcript, cache files are written through a temp file and rename, and all background jobs due in one render start with a single spawn.
 - **2.26.0**: the running-tool timer on the activity line is now drawn by the bash script from a small slot the helper leaves (`--live`), so the Node helper runs only when the transcript changes, not once per refresh while a tool runs. Same look, far less load with many sessions open.
 - **2.25.0**: Windows process-leak fix and a lighter bar with many sessions open. Git results are cached per folder (`git_cache_seconds=5`) and refreshed in the background, every background job runs outside the render's process tree (Claude Code's tree kill of a cancelled render could strand suspended `git.exe`/`curl.exe`/`node.exe` processes), and a failing fetch is retried once per 30 seconds instead of on every render.
 - **2.24.0**: Model-scoped weekly limits — when your plan's per-model weekly cap (the "Fable"/"Opus" row on claude.ai) is running higher than the all-models one, the weekly bar swaps to it: `wk:Fable (3d17h) ███░░ 36%`. On by default, fail-silent, `usage_scoped=false` to disable.

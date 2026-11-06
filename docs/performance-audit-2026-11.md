@@ -120,8 +120,8 @@ transcript growing every render, Claude status fetch failing (shims count):
    in flight per session. *Next:* a minimum gap per session (for example 2 s),
    or a long-lived helper process.
 5. **Cold transcript parse (P-6). Medium.** The first helper run on a long
-   session reads the whole transcript into memory. Already on the roadmap:
-   cap the cold parse to the tail of the file.
+   session reads the whole transcript into memory. *Fixed in v2.27.0:* a cold
+   start reads only the last 4 MB (`COLD_PARSE_MAX_BYTES`), aligned to a line.
 6. **Subagent panel renderer. Low to medium.** Claude Code runs
    `node statusline-subagent.js` about every 5 s per session while subagents
    run. Not part of the leak. `subagent_rows=false` turns it off.
@@ -139,12 +139,15 @@ transcript growing every render, Claude status fetch failing (shims count):
    a cold probe over 3 s was cancelled by the next tick before it wrote the
    cache and repeated every tick; that case now shows the old result and
    refreshes in the background, so in-tree git is down to the first render in
-   a folder. *Option:* do that cold probe in the background too and show no
-   branch for one render.
+   a folder. *Fixed in v2.27.0:* the cold probe runs detached too and the
+   render waits up to 2 s for its result (the branch still shows at once; a
+   slower probe shows next render). No program runs inside the render now.
 10. **Non-atomic activity cache writes. Low.** The helper writes its cache in
     place, so a render can read a half-written file and skip line 2 once.
     *Partly fixed:* the bash side no longer re-stamps the file while a helper
-    run is in flight.
+    run is in flight. *Fixed in v2.27.0:* both helper caches are written
+    through a temp file and a rename (direct-write fallback if Windows refuses
+    the rename under an open reader).
 11. **File locks. None found.** git runs with `--no-optional-locks` (it never
     takes `index.lock`), caches are opened briefly, and the git cache is written
     to a temp file then renamed.

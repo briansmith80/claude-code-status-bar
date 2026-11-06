@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.27.0] - 2026-11-06
+
+Closes the four performance items left over from the November audit: no program at all runs inside the render any more, a cold start on a long transcript is cheap, cache files can never be read half-written, and a busy render starts its background work with one spawn instead of several.
+
+### Changed
+
+- **The first render in a folder no longer runs git inside the render.** It was the last native program started in the render's process tree, so a cancelled render at the wrong instant could still strand one `git.exe` on Windows, and a cold probe slower than the refresh interval was cancelled and restarted every tick. The probe now runs detached under the folder's lock and the render waits up to two seconds for its result, so the branch still shows at once in the normal case; a slower probe (huge or network repo) finishes in the background and shows on the next render. A render that finds another render's probe already running waits for that result instead of starting a second git. `git_cache_seconds=0` keeps the old per-render git.
+- **A cold start parses only the tail of the transcript.** The first helper run on a transcript with no parse cache (or one that grew by more than the cap since the last run) reads only the last 4 MB instead of the whole file; a 68 MB transcript used to take several seconds and 363 MB. The line only ever shows the last 30 tools, running items and the last five minutes, so nothing visible is lost; a todo list begun before the cut can show short until the next TodoWrite.
+- **Background jobs due in the same render start with one spawn.** The git refresh, the activity helper and the update, usage and status fetches are queued during the render and started together, in parallel, by a single detached spawn just before the bar prints (git refresh and the helper are both due in about half of busy renders, each costing a fork pair on Windows).
+
+### Fixed
+
+- **The activity cache and the parsed-transcript cache are written through a temp file and a rename**, so a render can no longer read a half-written cache and drop line 2 for one refresh. If Windows refuses the rename (a reader holding the file open) the helper falls back to a direct write, so nothing is lost either way.
+
+### Internal
+
+- 3 new tests in `tests/git_cache.bats` (a slow cold probe does not block the render and shows next time; a cold render waits for another render's probe instead of starting git; git refresh and the helper due together both run) and 4 in `tests/activity.bats` (cold tail parse under the cap, a small transcript parsed whole, re-parse from the tail after growing past the cap, no temp leftovers). Suite 233. `STATUSLINE_GIT_COLD_WAIT_TICKS` and `STATUSLINE_COLD_PARSE_BYTES` are test-only env overrides.
+
 ## [2.26.0] - 2026-11-06
 
 The activity helper no longer restarts every refresh while a tool or subagent is running. With many sessions open that was the largest remaining load after 2.25.0.

@@ -5,7 +5,7 @@ principles we hold to, the competitive landscape, and the candidate work that
 remains. It supersedes the former `ROADMAP.md` and `SPRINTS.md` (both retired —
 everything they planned shipped). **Shipped history lives in
 [CHANGELOG.md](../CHANGELOG.md)**; the project ships feature-based,
-**feedback-driven** releases (latest **v2.26.0**) — promote items from here on
+**feedback-driven** releases (latest **v2.27.0**) — promote items from here on
 demand, not in list order.
 
 ---
@@ -151,10 +151,10 @@ Still open, in order of impact:
 | ID | Idea | Status | Notes |
 |----|------|--------|-------|
 | PF1 | **Stop the helper's per-second tick** | ✅ v2.26.0 | The helper emits `{T<start>}`/`{A<start>}` slots under `--live` and bash fills them each render; the helper now runs only on transcript change. Skew-safe both ways. |
-| PF2 | **Cold-start transcript parse cap (P-6)** | ⬜ | The first helper run reads the whole transcript into one Buffer (68 MB transcript: 363 MB RSS, 2.4 to 6.5 s); parse only the tail on a cold start. |
-| PF3 | **Cold git probe in the background** | ⬜ | Narrowed in v2.25.0: only the first render in a folder (or after a git setting change) still runs git in the render; an old result is now always shown and refreshed in the background. Option: background that too and show no branch for one render. A cold probe over 3 s on a 3 s refresh is cancelled before it writes the cache and repeats every tick (`git_timeout` caps it; `git_untracked=false` avoids it). |
-| PF4 | **Atomic activity-cache write in the helper** | ⬜ | Both `writeFileSync` calls are in place, so a render can read a half-written cache once. Temp file + rename; check Windows rename-over-open-file behaviour first. |
-| PF5 | **One spawn for git refresh + helper** | ⬜ | When both are due in one render (about half of busy renders) they cost two `spawn_detached` (20 to 30 ms on Windows, 50 to 100 under load). Coalesce into one job. |
+| PF2 | **Cold-start transcript parse cap (P-6)** | ✅ v2.27.0 | A cold start (no parse cache, or growth past the cap) reads only the last 4 MB (`COLD_PARSE_MAX_BYTES`), aligned to a line; nothing visible is lost (the line shows the last 30 tools and 5 minutes). |
+| PF3 | **Cold git probe in the background** | ✅ v2.27.0 | Narrowed in v2.25.0: only the first render in a folder (or after a git setting change) still runs git in the render; an old result is now always shown and refreshed in the background. Done: the probe runs detached under the folder's lock and the render waits up to 2 s for it, so the branch still shows at once; a slower probe shows next render instead of being cancelled every tick. No program runs inside the render any more. |
+| PF4 | **Atomic activity-cache write in the helper** | ✅ v2.27.0 | `writeAtomic`: temp + `renameSync` for both caches. Checked on Windows: the rename succeeds while bash holds the file open (MSYS opens with share-delete) and fails with EPERM only under a Node reader, so a direct-write fallback covers that. |
+| PF5 | **One spawn for git refresh + helper** | ✅ v2.27.0 | `queue_job`/`flush_jobs`: every background job due in a render (git refresh, helper, the three fetches) starts in parallel through one detached spawn just before the bar prints. |
 
 ---
 

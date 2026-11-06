@@ -18,6 +18,8 @@
 //
 // Parsing is incremental: a per-transcript cache stores the parse state plus
 // a byte offset, so each run only parses lines appended since the last one.
+// A cold start (no cache) parses only the last few MB (COLD_PARSE_MAX_BYTES).
+// Both output files are written through a temp file + rename.
 //
 // Security: all output is sanitized — no ANSI escapes, no control characters.
 
@@ -36,6 +38,15 @@ const FLASH_MS = 5 * 1000;
 // Elapsed-time heat tiers (seconds): below first = ok, below second = warn
 const HEAT_WARN_S = 30;
 const HEAT_HIGH_S = 120;
+// Cold-start parse cap (v2.27.0): with no parse cache for a transcript (or one
+// that grew by more than this since the last run) only the last N bytes are
+// read and parsed. The line only ever shows the last 30 tools, running items
+// and the last 5 minutes, so the rest of a long transcript buys nothing and a
+// 68 MB one cost 363 MB and several seconds. Env override is for tests.
+const COLD_PARSE_MAX_BYTES = (() => {
+  const v = parseInt(process.env.STATUSLINE_COLD_PARSE_BYTES || '', 10);
+  return v > 0 ? v : 4 * 1024 * 1024;
+})();
 
 // ── CLI args ────────────────────────────────────────────────
 const transcriptPath = process.argv[2];
@@ -75,18 +86,37 @@ function readParsedCache(transcriptPath) {
   return null;
 }
 
+// Write `text` to `file` through a temp file and a rename, so a reader (the
+// bash render, another session's helper) never sees a half-written file. If
+// the rename is refused (Windows, when a reader holds the target open) fall
+// back to a direct write, so the data is never lost; the temp file is removed
+// either way. The temp name is passed in so each caller's sweep glob covers it.
+function writeAtomic(file, tmp, text) {
+  try {
+    fs.writeFileSync(tmp, text, { mode: 0o600 });
+    try {
+      fs.renameSync(tmp, file);
+    } catch {
+      fs.writeFileSync(file, text, { mode: 0o600 });
+      try { fs.unlinkSync(tmp); } catch { /* already gone */ }
+    }
+  } catch { /* non-fatal */ }
+}
+
 function writeParsedCache(transcriptPath, stat, offset, state) {
   try {
     if (!fs.existsSync(PARSED_CACHE_DIR)) {
       fs.mkdirSync(PARSED_CACHE_DIR, { recursive: true, mode: 0o700 });
     }
-    const cacheFile = path.join(PARSED_CACHE_DIR, getCacheKey(transcriptPath) + '.json');
-    fs.writeFileSync(cacheFile, JSON.stringify({
+    const key = getCacheKey(transcriptPath);
+    const cacheFile = path.join(PARSED_CACHE_DIR, key + '.json');
+    const tmpFile = path.join(PARSED_CACHE_DIR, key + '.' + process.pid + '.tmp.json');
+    writeAtomic(cacheFile, tmpFile, JSON.stringify({
       mtimeMs: stat.mtimeMs,
       size: stat.size,
       offset,
       state: serializeState(state)
-    }), { mode: 0o600 });
+    }));
   } catch { /* non-fatal */ }
 }
 
@@ -162,7 +192,10 @@ function pruneMap(map, keep) {
 // (through the last newline). A trailing line with no newline is included
 // only when it parses as standalone JSON (a complete entry that just lacks
 // its terminator); a genuinely partial write is left for the next run.
-function readChunk(filePath, start, end) {
+// With alignStart (a capped cold start, where `start` may land mid-line) the
+// bytes up to and including the first newline are skipped; `consumed` still
+// counts them, so the next offset is start + consumed either way.
+function readChunk(filePath, start, end, alignStart) {
   const len = end - start;
   if (len <= 0) return { text: '', consumed: 0 };
   const fd = fs.openSync(filePath, 'r');
@@ -173,6 +206,12 @@ function readChunk(filePath, start, end) {
   } finally {
     fs.closeSync(fd);
   }
+  let from = 0;
+  if (alignStart && start > 0) {
+    const nl = buf.indexOf(0x0a);
+    if (nl < 0) return { text: '', consumed: len };   // one giant line: nothing whole
+    from = nl + 1;
+  }
   let cut = buf.lastIndexOf(0x0a) + 1;
   if (cut < len) {
     const tail = buf.slice(cut).toString('utf8').trim();
@@ -182,7 +221,8 @@ function readChunk(filePath, start, end) {
       try { JSON.parse(tail); cut = len; } catch { /* partial write — wait */ }
     }
   }
-  return { text: buf.slice(0, cut).toString('utf8'), consumed: cut };
+  if (cut < from) cut = from;
+  return { text: buf.slice(from, cut).toString('utf8'), consumed: cut };
 }
 
 // ── Parse transcript lines into the state ───────────────────
@@ -580,18 +620,23 @@ function main() {
       // Unchanged file — reuse the parsed state as-is
       state = reviveState(cached.state);
     } else if (cached && cached.state && typeof cached.offset === 'number' &&
-               cached.offset > 0 && cached.offset <= stat.size && stat.size > cached.size) {
+               cached.offset > 0 && cached.offset <= stat.size && stat.size > cached.size &&
+               stat.size - cached.offset <= COLD_PARSE_MAX_BYTES) {
       // File grew — parse only the appended bytes
       state = reviveState(cached.state);
       const { text, consumed } = readChunk(transcriptPath, cached.offset, stat.size);
       parseChunk(state, text);
       writeParsedCache(transcriptPath, stat, cached.offset + consumed, state);
     } else {
-      // New, truncated, or rewritten file — full parse
+      // New, truncated, rewritten, or grown past the cap — fresh parse of the
+      // tail only (the whole file when it fits under COLD_PARSE_MAX_BYTES).
+      // Anything older is off-screen anyway; a todo list begun before the
+      // cut may show short until the next TodoWrite.
       state = newState();
-      const { text, consumed } = readChunk(transcriptPath, 0, stat.size);
+      const start = stat.size > COLD_PARSE_MAX_BYTES ? stat.size - COLD_PARSE_MAX_BYTES : 0;
+      const { text, consumed } = readChunk(transcriptPath, start, stat.size, start > 0);
       parseChunk(state, text);
-      writeParsedCache(transcriptPath, stat, consumed, state);
+      writeParsedCache(transcriptPath, stat, start + consumed, state);
     }
 
     const data = {
@@ -615,7 +660,9 @@ function main() {
     const epoch = Math.floor(nowMs / 1000);
     const next = computeNext(data, nowMs);
     const json = JSON.stringify({ activity, next });
-    fs.writeFileSync(cachePath, `${epoch} ${json}\n`, { mode: 0o600 });
+    // Temp + rename (v2.27.0): the bash side reads this file on every render
+    // and must never catch it half-written.
+    writeAtomic(cachePath, `${cachePath}.${process.pid}.tmp`, `${epoch} ${json}\n`);
   } catch {
     // Non-fatal — status bar works without activity line
     process.exit(0);
