@@ -200,3 +200,100 @@ mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
   [[ "$activity" == *"0/1"* ]]
   [[ "$activity" == *"do thing"* ]]
 }
+
+# ── Live elapsed slots (v2.26.0) ────────────────────────────
+# With --live the helper leaves {T<epoch>}/{A<epoch>} slots and the bash side
+# fills them from its own clock, so a running tool's timer advances without a
+# helper run per refresh (next is 0 while nothing else is time-sensitive).
+
+run_helper_live() {
+  local cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  node "$HELPER" "$1" "$cache" --live --colour
+  activity="$(cat "$cache")"
+}
+
+live_json() {
+  echo "{\"cwd\":\"/tmp\",\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":40},\"transcript_path\":\"$1\"}"
+}
+
+@test "live: helper emits an elapsed slot for a running tool and no per-second next" {
+  require_node
+  start_iso="$(iso_at "$(( $(date +%s) - 60 ))")"
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm run build"}}]}}\n' "$start_iso" > "$tr_file"
+  run_helper_live "$tr_file"
+  [[ "$activity" =~ \{T[0-9]+\} ]]
+  [[ "$activity" != *"1m0s"* ]]          # no fixed number from the helper
+  [[ "$activity" == *'"next":0'* ]]
+}
+
+@test "live: without --live the helper output is unchanged (old bash stays correct)" {
+  require_node
+  start_iso="$(iso_at "$(( $(date +%s) - 60 ))")"
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm run build"}}]}}\n' "$start_iso" > "$tr_file"
+  run_helper "$tr_file"
+  [[ "$activity" != *"{T"* ]]
+  [[ "$activity" == *"▶ Bash npm run build 1m"* ]]
+}
+
+@test "live: the bash side fills the slot with the elapsed time (and ... under 5s)" {
+  require_node
+  cp "${REPO_ROOT}/statusline-helper.js" "${TEST_HOME}/.claude/statusline-helper.js"
+  tr_file="${TEST_HOME}/t.jsonl"; printf '{"x":1}\n' > "$tr_file"
+  sleep 1
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  now=$(date +%s)
+  printf '%s {"activity":"{s} {w}Bash{d} build{T%s}, {w}Read{d} a.ts{T%s}  │  ⚒ reviewer{d}{A%s}","next":0}\n' \
+    "$now" "$(( now - 75 ))" "$now" "$(( now - 3700 ))" > "$cache"
+  : > "${cache}.seen"
+  run_statusline "$(live_json "$tr_file")"
+  # A few seconds may pass before the render on a slow runner, so allow drift
+  plain="$(strip_ansi <<< "$output")"
+  [[ "$plain" =~ Bash\ build\ 1m1[5-9]s ]]
+  [[ "$plain" == *"Read a.ts..."* ]]      # under 5s: still "..."
+  [[ "$plain" == *"reviewer 1h1m"* ]]
+}
+
+@test "live: a running tool no longer re-spawns the helper every render" {
+  require_node
+  cp "${REPO_ROOT}/statusline-helper.js" "${TEST_HOME}/.claude/statusline-helper.js"
+  start_iso="$(iso_at "$(( $(date +%s) - 60 ))")"
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm run build"}}]}}\n' "$start_iso" > "$tr_file"
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  run_statusline "$(live_json "$tr_file")"          # first render spawns the helper
+  for _ in $(seq 1 100); do [ -f "$cache" ] && grep -q '"next":0' "$cache" && break; sleep 0.1; done
+  grep -q '"next":0' "$cache"
+  sleep 1
+  before="$(mtime "${cache}.seen")"
+  run_statusline "$(live_json "$tr_file")"
+  after="$(mtime "${cache}.seen")"
+  [ "$before" = "$after" ]                           # no re-spawn
+  [[ "$(strip_ansi <<< "$output")" =~ Bash\ npm\ run\ build\ 1m[0-9]+s ]]   # timer still advances
+}
+
+@test "live: heat colours follow the elapsed time the bash side computes" {
+  require_node
+  cp "${REPO_ROOT}/statusline-helper.js" "${TEST_HOME}/.claude/statusline-helper.js"
+  tr_file="${TEST_HOME}/t.jsonl"; printf '{"x":1}\n' > "$tr_file"
+  sleep 1
+  cache="${TEST_HOME}/.claude/.statusline-activity-cache"
+  now=$(date +%s)
+  printf '%s {"activity":"{s} {w}Bash{d} slow{T%s}","next":0}\n' "$now" "$(( now - 200 ))" > "$cache"
+  : > "${cache}.seen"
+  run_statusline_env "$(live_json "$tr_file")" "STATUSLINE_TRUECOLOR=0"
+  # 200s is in the {h3} tier: the duration carries the high-heat colour (red).
+  # A second or two passes before the render, so match 3m2Xs.
+  [[ "$output" == *$'\033[0;31m3m2'* ]]
+}
+
+@test "live: a slot lookalike in untrusted text is defused" {
+  require_node
+  start_iso="$(iso_at "$(( $(date +%s) - 60 ))")"
+  tr_file="${TEST_HOME}/t.jsonl"
+  printf '{"timestamp":"%s","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"echo {T1700000000} {A5}"}}]}}\n' "$start_iso" > "$tr_file"
+  run_helper_live "$tr_file"
+  [[ "$activity" == *"｛T1700000000}"* ]]
+  [[ "$activity" == *"｛A5}"* ]]
+}

@@ -67,3 +67,12 @@ load test_helper
   [ "$status" -eq 0 ]
   assert_plain_not_contains "200k+"
 }
+
+@test "tokens segment shows small output counts exactly, not as 0k (v2.26.0)" {
+  write_conf "show_tokens=true"
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40,"total_input_tokens":348210,"total_output_tokens":820}}'
+  [ "$status" -eq 0 ]
+  assert_plain_contains "348k in 820 out"
+  run_statusline '{"cwd":"/tmp","model":{"display_name":"Opus"},"context_window":{"used_percentage":40,"total_input_tokens":84000,"total_output_tokens":1234}}'
+  assert_plain_contains "84k in 1.2k out"
+}

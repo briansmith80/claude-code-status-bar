@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.26.0] - 2026-11-06
+
+The activity helper no longer restarts every refresh while a tool or subagent is running. With many sessions open that was the largest remaining load after 2.25.0.
+
+### Changed
+
+- **Live elapsed timers are now rendered by the bash script, not the helper.** The helper used to write a fixed "12s" into the activity line and ask to be re-run one second later, so while anything was running every render of every session started Node (100 to 350 ms of CPU and about 100 MB each). The bash script now passes `--live`, the helper leaves a small slot (`{T<start>}` for a tool, `{A<start>}` for a subagent) and the script fills it from its own clock on every render: the timer, its heat colour and the "..." to "12s" switch all advance with no helper run. The helper now runs only when the transcript changes. The line looks the same; the only visible difference is that two tools both under 5 seconds each get their own "..." instead of one at the end. An older helper ignores the flag and ticks itself as before; an older script never passes it, so the helper's output is unchanged for it.
+- Slot lookalikes in untrusted text (a command containing `{T123}`) are defused like the colour tokens.
+
+### Fixed
+
+- **The token segment no longer reads `0k out` all day.** Claude Code fills `total_output_tokens` from the most recent API response (the size of one reply, typically a few hundred tokens), and the segment rounded to whole thousands. Counts under 1k are now shown exactly and 1k to 9.9k with one decimal (`348k in 820 out`, `1.2k out`); the README says what the two numbers mean.
+
+### Internal
+
+- 6 new tests in `tests/activity.bats` (slot emitted, old output unchanged without the flag, the bash fill with "..." under 5 s, no re-spawn while a tool runs, heat colour from the computed elapsed, defused lookalike) and 1 in `tests/segments.bats` (token formatting). Suite 226.
+
 ## [2.25.0] - 2026-11-06
 
 Fixes a Windows process leak that could fill a PC with stuck `git.exe`, `curl.exe` and `node.exe` processes, and makes the bar much lighter with many sessions open.

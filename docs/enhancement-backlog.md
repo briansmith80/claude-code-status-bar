@@ -5,7 +5,7 @@ principles we hold to, the competitive landscape, and the candidate work that
 remains. It supersedes the former `ROADMAP.md` and `SPRINTS.md` (both retired —
 everything they planned shipped). **Shipped history lives in
 [CHANGELOG.md](../CHANGELOG.md)**; the project ships feature-based,
-**feedback-driven** releases (latest **v2.25.0**) — promote items from here on
+**feedback-driven** releases (latest **v2.26.0**) — promote items from here on
 demand, not in list order.
 
 ---
@@ -150,7 +150,7 @@ Still open, in order of impact:
 
 | ID | Idea | Status | Notes |
 |----|------|--------|-------|
-| PF1 | **Stop the helper's per-second tick** | ⬜ | The largest remaining load with many sessions: while any tool or subagent is running, `computeNext` returns `now+1`, so every render spawns node (100 to 350 ms CPU, ~107 MB) just to advance the elapsed counter. Have the helper emit the running item's start epoch in a token and let bash format the elapsed time (it already drives the spinner from `NOW_EPOCH`). Old helper + new bash must degrade to today's behaviour. |
+| PF1 | **Stop the helper's per-second tick** | ✅ v2.26.0 | The helper emits `{T<start>}`/`{A<start>}` slots under `--live` and bash fills them each render; the helper now runs only on transcript change. Skew-safe both ways. |
 | PF2 | **Cold-start transcript parse cap (P-6)** | ⬜ | The first helper run reads the whole transcript into one Buffer (68 MB transcript: 363 MB RSS, 2.4 to 6.5 s); parse only the tail on a cold start. |
 | PF3 | **Cold git probe in the background** | ⬜ | Narrowed in v2.25.0: only the first render in a folder (or after a git setting change) still runs git in the render; an old result is now always shown and refreshed in the background. Option: background that too and show no branch for one render. A cold probe over 3 s on a 3 s refresh is cancelled before it writes the cache and repeats every tick (`git_timeout` caps it; `git_untracked=false` avoids it). |
 | PF4 | **Atomic activity-cache write in the helper** | ⬜ | Both `writeFileSync` calls are in place, so a render can read a half-written cache once. Temp file + rename; check Windows rename-over-open-file behaviour first. |

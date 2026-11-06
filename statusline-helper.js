@@ -41,6 +41,15 @@ const HEAT_HIGH_S = 120;
 const transcriptPath = process.argv[2];
 const cachePath = process.argv[3];
 const colourMode = process.argv.includes('--colour');
+// --live (v2.26.0): running tools and agents get an elapsed SLOT ({T<start
+// epoch>} / {A<start epoch>}) instead of a fixed "12s", and the bash side
+// fills it from its own clock on every render. The line then only changes
+// when the transcript does, so `next` never asks for a per-second re-run:
+// the helper is no longer started every refresh while a tool runs. Tokens
+// stay plain text (same rules as the colour tokens). Without the flag the
+// output is byte-identical to earlier releases.
+const liveMode = process.argv.includes('--live');
+const tokenMode = colourMode || liveMode;
 
 if (!transcriptPath || !cachePath) {
   process.exit(1);
@@ -342,14 +351,21 @@ function heatTk(elapsedS) {
 // becomes $｛a}), looping to a fixed point so nested lookalikes like {h{x}1}
 // cannot reassemble into a live token.
 function defuse(str) {
-  if (!colourMode || !str) return str;
+  if (!tokenMode || !str) return str;
   let s = String(str);
   let prev;
   do {
     prev = s;
-    s = s.replace(/\{(?=[A-Za-z][0-9]?\})/g, '｛');
+    // Colour tokens ({w}, {h1}, ...) and live elapsed slots ({T123}, {A123})
+    s = s.replace(/\{(?=([A-Za-z][0-9]?|[TA][0-9]+)\})/g, '｛');
   } while (s !== prev);
   return s;
+}
+
+// Live elapsed slot for a start time (ms): the bash side turns {T<epoch>} /
+// {A<epoch>} into the elapsed duration (with heat) on every render.
+function liveSlot(kind, startedMs) {
+  return `{${kind}${Math.floor(startedMs / 1000)}}`;
 }
 
 function formatActivity(data) {
@@ -383,7 +399,11 @@ function formatActivity(data) {
       if (t.target) label += ` ${defuse(t.target)}`;
       const started = t.startTime ? new Date(t.startTime).getTime() : NaN;
       const elapsed = isNaN(started) ? 0 : Math.round((now - started) / 1000);
-      if (elapsed >= TOOL_ELAPSED_MIN_S) {
+      if (liveMode && !isNaN(started)) {
+        // The bash side renders "..." under TOOL_ELAPSED_MIN_S, then the time
+        label += liveSlot('T', started);
+        anyElapsed = true;
+      } else if (elapsed >= TOOL_ELAPSED_MIN_S) {
         label += ` ${heatTk(elapsed)}${formatDuration(elapsed)}${tk('{d}')}`;
         anyElapsed = true;
       }
@@ -441,7 +461,9 @@ function formatActivity(data) {
     for (const a of runningAgents.slice(-2)) {
       const started = a.startTime ? new Date(a.startTime).getTime() : NaN;
       const elapsed = isNaN(started) ? 0 : Math.round((now - started) / 1000);
-      const time = elapsed > 0 ? ` ${heatTk(elapsed)}${formatDuration(elapsed)}${tk('{d}')}` : '';
+      let time = '';
+      if (liveMode && !isNaN(started)) time = liveSlot('A', started);
+      else if (elapsed > 0) time = ` ${heatTk(elapsed)}${formatDuration(elapsed)}${tk('{d}')}`;
       const desc = defuse(a.description) || defuse(a.type);
       parts.push(`${tk('{w}')}⚒ ${desc}${tk('{d}')}${time}`);
     }
@@ -519,7 +541,8 @@ function computeNext(data, nowMs) {
     if (t.status === 'running') {
       anyRunning = true;
       const s = t.startTime ? new Date(t.startTime).getTime() : NaN;
-      if (!isNaN(s)) consider(s + TOOL_ELAPSED_MIN_S * 1000); // "..." -> elapsed
+      // Live mode: the bash side owns the "..." -> elapsed switch and the ticks
+      if (!liveMode && !isNaN(s)) consider(s + TOOL_ELAPSED_MIN_S * 1000);
     } else if (t.endTime) {
       const e = new Date(t.endTime).getTime();
       if (!isNaN(e)) {
@@ -536,7 +559,8 @@ function computeNext(data, nowMs) {
       if (!isNaN(e)) consider(e + RECENT_MS);
     }
   }
-  if (anyRunning) consider(nowMs + 1000); // elapsed ticks every whole second
+  // Elapsed ticks every whole second, unless the bash side renders them (--live)
+  if (anyRunning && !liveMode) consider(nowMs + 1000);
   // The todo bar ages out RECENT_MS after the last todo activity — refresh then.
   if (data.todos && data.todos.length && data.todosUpdatedAt) {
     const u = new Date(data.todosUpdatedAt).getTime();
@@ -580,10 +604,10 @@ function main() {
     // Zero-width colour tokens eat into the cap, so allow extra headroom in
     // colour mode; the bash side trims to the terminal width regardless.
     const nowMs = Date.now();
-    let activity = sanitize(formatActivity(data), colourMode ? 320 : 200);
-    // The hard cap can land inside a colour token; drop a dangling fragment
-    // like '{', '{w' or '{r2' so it never renders as literal text
-    if (colourMode) activity = activity.replace(/\{[A-Za-z]?[0-9]?$/, '');
+    let activity = sanitize(formatActivity(data), tokenMode ? 320 : 200);
+    // The hard cap can land inside a token; drop a dangling fragment like
+    // '{', '{w', '{r2' or '{T17624' so it never renders as literal text
+    if (tokenMode) activity = activity.replace(/\{[A-Za-z]?[0-9]*$/, '');
 
     // Write cache: "epoch json". `next` is the earliest epoch (seconds) the line
     // could change with no further transcript activity; the bash side reads it to

@@ -1633,13 +1633,53 @@ activity_has_colour=false
 # session's helper lock (held under token $1). On ~1 in 37 runs it also sweeps
 # old caches.
 activity_helper_job() {
+  # --live (v2.26.0): the helper leaves elapsed slots ({T<epoch>}/{A<epoch>})
+  # that expand_live_tokens fills on every render, so a running tool's timer
+  # no longer needs a helper run per refresh. An older helper ignores the flag
+  # (it then ticks itself, as before).
   if [ "$activity_colour" = "true" ]; then
-    node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --colour 2>/dev/null || true
+    node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --live --colour 2>/dev/null || true
   else
-    node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" 2>/dev/null || true
+    node "$HELPER_SCRIPT" "$transcript_path" "$ACTIVITY_CACHE_FILE" --live 2>/dev/null || true
   fi
   release_claim "${ACTIVITY_CACHE_FILE}.lock" "$1"
   if [ $(( NOW_EPOCH % 37 )) -eq 0 ]; then sweep_old_caches; fi
+}
+
+# Short duration into REPLY, matching the helper's formatDuration (1h5m,
+# 2m30s, 12s). Pure bash.
+format_elapsed() {
+  local s=$1
+  if [ "$s" -ge 3600 ]; then REPLY="$(( s / 3600 ))h$(( (s % 3600) / 60 ))m"
+  elif [ "$s" -ge 60 ]; then REPLY="$(( s / 60 ))m$(( s % 60 ))s"
+  else REPLY="${s}s"
+  fi
+}
+
+# Fill the helper's live elapsed slots from this render's clock (v2.26.0):
+# {T<epoch>} is a running tool (shows "..." under 5s, then the duration),
+# {A<epoch>} a running agent (the duration from 1s). The timer and its heat
+# tier advance on every refresh without re-running the helper. Heat tokens
+# are inserted here and mapped, or stripped, with the other tokens by
+# apply_activity_tokens. Each slot is replaced once; the loop is bounded.
+expand_live_tokens() {
+  local kind start el heat repl n=0
+  while [ "$n" -lt 8 ] && [[ $activity_line =~ \{([TA])([0-9]+)\} ]]; do
+    n=$(( n + 1 ))
+    kind=${BASH_REMATCH[1]} start=${BASH_REMATCH[2]}
+    el=$(( NOW_EPOCH - start ))
+    [ "$el" -lt 0 ] && el=0
+    if [ "$kind" = "T" ] && [ "$el" -lt 5 ]; then
+      repl="..."
+    elif [ "$kind" = "A" ] && [ "$el" -lt 1 ]; then
+      repl=""
+    else
+      format_elapsed "$el"
+      if [ "$el" -lt 30 ]; then heat="{h1}"; elif [ "$el" -lt 120 ]; then heat="{h2}"; else heat="{h3}"; fi
+      repl=" ${heat}${REPLY}{d}"
+    fi
+    activity_line="${activity_line/"${BASH_REMATCH[0]}"/$repl}"
+  done
 }
 
 # Map the helper's zero-width colour tokens to theme colours. Tokens are
@@ -1805,6 +1845,7 @@ if [ "$show_activity" = "true" ] && [ -n "$transcript_path" ] && [ -f "$transcri
         activity_line="${activity_line//\\\"/\"}"
         activity_line="${activity_line//\\\\/\\}"
         sanitize "$activity_line"; activity_line=$REPLY
+        expand_live_tokens
         apply_activity_tokens
       fi
     fi
@@ -2451,15 +2492,29 @@ if [ "$show_context_bar" = "true" ]; then
   add_seg "${warn_prefix}${progress_bar} ${bar_clr}${pct_int}%${ctx_suffix}${CLR_RESET}" 2 "ctx" "context"
 fi
 
+# Compact token count into REPLY: 820 → "820", 1234 → "1.2k", 348000 → "348k".
+fmt_tokens() {
+  local n=$1
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  if [ "$n" -lt 1000 ]; then REPLY="$n"
+  elif [ "$n" -lt 10000 ]; then REPLY="$(( n / 1000 )).$(( (n % 1000) / 100 ))k"
+  else REPLY="$(( n / 1000 ))k"
+  fi
+}
+
 # Token counts (priority 5) — reuses $cw_block from context window extraction above
 if [ "$show_tokens" = "true" ]; then
   if [ -n "$cw_block" ]; then
     extract_num_from "$cw_block" "total_input_tokens"; tok_in=$REPLY
     extract_num_from "$cw_block" "total_output_tokens"; tok_out=$REPLY
-    tok_in_k=$(( ${tok_in:-0} / 1000 ))
-    tok_out_k=$(( ${tok_out:-0} / 1000 ))
-    if [ "$auto_hide" != "true" ] || [ "$tok_in_k" -gt 0 ] || [ "$tok_out_k" -gt 0 ]; then
-      add_seg "${CLR_INFO}${tok_in_k}k in ${tok_out_k}k out${CLR_RESET}" 5 "" "tokens"
+    # Claude Code reports both from the MOST RECENT API response: "in" is the
+    # context it carried, "out" the size of that one reply (a few hundred
+    # tokens is normal), so a whole-thousands rounding read as a permanent
+    # "0k out". Show small counts exactly and 1.0k-9.9k with one decimal.
+    fmt_tokens "${tok_in:-0}"; tok_in_s=$REPLY
+    fmt_tokens "${tok_out:-0}"; tok_out_s=$REPLY
+    if [ "$auto_hide" != "true" ] || [ "${tok_in:-0}" -gt 0 ] || [ "${tok_out:-0}" -gt 0 ]; then
+      add_seg "${CLR_INFO}${tok_in_s} in ${tok_out_s} out${CLR_RESET}" 5 "" "tokens"
     fi
   fi
 fi

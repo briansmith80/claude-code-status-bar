@@ -154,7 +154,7 @@ There are a lot of Claude Code status lines now. Here's where this one is differ
 | Checksum-verified self-update (per-release `SHA256SUMS`) | ✅ | ❌ | ❌ | ❌ |
 | Live activity (tools/subagents/todos) that degrades w/o Node | ✅ | ✅ (Node-only) | ⚠️ | ⚠️ |
 | Guided in-Claude config wizard (`/configure`) | ✅ | ⚠️ | ✅ TUI | ✅ wizard + web |
-| Automated tests + CI across macOS / Linux / Windows | ✅ 219 | ❌ | ❌ | ❌ |
+| Automated tests + CI across macOS / Linux / Windows | ✅ 226 | ❌ | ❌ | ❌ |
 
 <sub>Snapshot of public docs, June 2026; the others are good tools and evolve quickly — check their repos for the latest. ✅ yes · ⚠️ partial/caveated · ❌ no.</sub>
 
@@ -424,7 +424,7 @@ All segments are on by default except token counts, cost rate, and the Claude AP
 | Effort level | `eff:xhigh` | `show_effort` | Reasoning effort, when Claude Code sends `effort.level` (CC 2.1.133+) |
 | Fast mode | `⚡ fast` | `show_fast_mode` | Only when fast mode is on; yellow because it bills at a higher rate |
 | Context bar | `███████░│░ 78% of 200k` | `show_context_bar` | Green under 50%, yellow 50-79%, red 80%+. The `│` marker sits at the auto-compact point; `▲` appears within 20k tokens of it |
-| Token counts | `45k in 12k out` | `show_tokens` *(off)* | Tokens in the current context (cumulative session totals before CC 2.1.132) |
+| Token counts | `348k in 820 out` | `show_tokens` *(off)* | From the most recent API response: `in` is the context it carried, `out` the size of that one reply (a few hundred tokens is normal, so it's shown exactly under 1k and as `1.2k` under 10k). Cumulative session totals before CC 2.1.132. |
 | 5-hour usage | `5hr (2h20m) ███│░░░░░░ 37%` | `show_usage_5h` | Rolling 5-hour window with countdown to reset and pacing marker |
 | Weekly usage | `wk (3d4h) ███████│░░ 72%` | `show_usage_7d` | Rolling 7-day window with countdown to reset and pacing marker. Swaps to a per-model weekly cap (`wk:Fable … 36%`) when that cap is the binding one; `usage_scoped=false` disables |
 | Lines changed | `+42 -7` | `show_lines_changed` | Session lines added (green) and removed (red) |
@@ -600,7 +600,7 @@ claude-code-status-bar/
 ├── .github/workflows/
 │   ├── shellcheck.yml            # lint (pushes to main, PRs)
 │   └── tests.yml                 # BATS suite on Linux, macOS, Windows (MSYS2)
-├── tests/                        # 219 BATS tests across 20 files
+├── tests/                        # 226 BATS tests across 20 files
 └── CLAUDE.md                     # project guide for working on this repo with Claude Code
 ```
 
@@ -631,6 +631,7 @@ See [`tests/README.md`](tests/README.md) for layout details.
 
 Full release history lives in [CHANGELOG.md](CHANGELOG.md). Recent highlights:
 
+- **2.26.0**: the running-tool timer on the activity line is now drawn by the bash script from a small slot the helper leaves (`--live`), so the Node helper runs only when the transcript changes, not once per refresh while a tool runs. Same look, far less load with many sessions open.
 - **2.25.0**: Windows process-leak fix and a lighter bar with many sessions open. Git results are cached per folder (`git_cache_seconds=5`) and refreshed in the background, every background job runs outside the render's process tree (Claude Code's tree kill of a cancelled render could strand suspended `git.exe`/`curl.exe`/`node.exe` processes), and a failing fetch is retried once per 30 seconds instead of on every render.
 - **2.24.0**: Model-scoped weekly limits — when your plan's per-model weekly cap (the "Fable"/"Opus" row on claude.ai) is running higher than the all-models one, the weekly bar swaps to it: `wk:Fable (3d17h) ███░░ 36%`. On by default, fail-silent, `usage_scoped=false` to disable.
 - **2.23.0–2.23.2**: Opt-in Claude API status badge (degraded-only early warning fed by status.claude.com), plus a fix for doubled backslashes in Windows paths.
