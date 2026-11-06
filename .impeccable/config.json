@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "docs/index.html"
+        ],
+        "createdAt": "2026-11-06T18:04:55.277Z",
+        "reason": "11px terminal mock-up bar text (monospace, in a scrollable terminal frame); the rule exempts terminal contexts. 12px overflows the 1080px hero frame. All other body text on the page is 13px or larger."
+      }
+    ]
+  }
+}
