@@ -50,10 +50,11 @@ teardown() {
     # A detached job (git probe, Node helper) may still be writing its cache
     # under the sandbox for a moment after the render returns; on Windows the
     # delete fails while a file is open, so retry briefly before giving up.
-    local i
-    for i in 1 2 3 4 5 6 7 8 9 10; do
+    local tries=10
+    while [ "$tries" -gt 0 ]; do
       rm -rf "${TEST_HOME}" 2>/dev/null && break
       sleep 0.3
+      tries=$(( tries - 1 ))
     done
     rm -rf "${TEST_HOME}" 2>/dev/null || true
   fi
