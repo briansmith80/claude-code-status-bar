@@ -9,7 +9,7 @@
 import type { Look } from './theme'
 import { fillFor } from './theme'
 
-let seq = 0
+const HALO = 0.5
 
 export type GaugeSize = 'full' | 'mini'
 
@@ -20,10 +20,12 @@ export function gaugeSvg(look: Look, used: number, marker: number | null, size: 
   const Y = full ? 16 : 5
   const H = full ? 28 : 16
   const r = BAR / 2
-  const id = `g${++seq}`
-  const u = Math.max(0, Math.min(100, used))
+  const u = Number.isFinite(used) ? Math.max(0, Math.min(100, used)) : 0
   const fillW = (u / 100) * W
-  const colours = fillFor(look, used)
+  const colours = fillFor(look, u)
+  // The id follows what the gradient is, not a counter: the same inputs give
+  // the same image, so a redraw with nothing changed is nothing new to paint.
+  const id = `g${size}${colours.join('').replace(/#/g, '')}`
   const paint = colours.length > 1 ? `url(#${id})` : colours[0]!
   const defs = colours.length > 1
     ? `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${W}" y2="0">` +
@@ -34,13 +36,18 @@ export function gaugeSvg(look: Look, used: number, marker: number | null, size: 
   if (marker !== null && marker >= 0 && marker <= 100) {
     const px = Math.max(1.5, Math.min(W - 1.5, (marker / 100) * W))
     const pc = look.theme.pace
-    tick =
-      `<line x1="${px}" y1="${Y - 4}" x2="${px}" y2="${Y + BAR + 3}" stroke="${pc}" stroke-width="2" stroke-linecap="round"/>`
+    // A dark halo under the marker: unseen on a dark background, it keeps a
+    // pale theme's marker (matrix, catppuccin) readable on a light one, and
+    // lifts a grey marker off a grey fill (mono). The label is a mid-grey that
+    // reads on both, like the track.
+    const line = (stroke: string, width: number, extra = '') =>
+      `<line x1="${px}" y1="${Y - 4}" x2="${px}" y2="${Y + BAR + 3}" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round"${extra}/>`
+    tick = line('#000', 4, ` stroke-opacity="${HALO}"`) + line(pc, 2)
     if (full) {
       const lx = Math.max(12, Math.min(W - 12, px))
       tick +=
         `<text x="${lx}" y="9" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" ` +
-        `font-size="10" font-weight="600" fill="${pc}">${Math.round(marker)}%</text>`
+        `font-size="10" font-weight="600" fill="#8a919c">${Math.round(marker)}%</text>`
     }
   }
   const fill = fillW > 0

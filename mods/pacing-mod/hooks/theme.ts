@@ -48,13 +48,14 @@ export function parseConf(text: string): Look {
     if (m[1] === 'colour_theme') themeName = m[2]!
     else if (m[2] === 'true' || m[2] === 'false' || m[2] === 'heat') gradient = m[2]
   }
-  return { theme: THEMES[themeName] ?? THEMES.default!, gradient }
+  // Own names only: `constructor` and the like are on every object.
+  return { theme: THEME_NAMES.includes(themeName) ? THEMES[themeName]! : THEMES.default!, gradient }
 }
 
 // The conf's look, with the plugin's own theme option pinned over it when set.
 export function resolveLook(confText: string | null, override: string): Look {
   const base = confText === null ? DEFAULT_LOOK : parseConf(confText)
-  const pinned = override === FOLLOW_BAR ? null : THEMES[override]
+  const pinned = THEME_NAMES.includes(override) ? THEMES[override] : null
   return pinned ? { ...base, theme: pinned } : base
 }
 

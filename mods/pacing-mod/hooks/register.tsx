@@ -106,8 +106,9 @@ async function scopedWeekly($: any, now: number): Promise<{ model: string; perce
     if (!Number.isFinite(stamp) || now - stamp > SCOPED_MAX_AGE) return null
     const body = JSON.parse(raw.slice(space + 1))
     const hit = (body.limits ?? []).find((l: any) => l?.kind === 'weekly_scoped')
-    const model = String(hit?.scope?.model?.display_name ?? '').slice(0, 12)
-    if (!hit || !model || typeof hit.percent !== 'number') return null
+    // Cleaned and capped as the bar's sanitize() does: it is drawn as text.
+    const model = String(hit?.scope?.model?.display_name ?? '').replace(/[^\w .-]/g, '').slice(0, 12)
+    if (!hit || !model || !Number.isFinite(hit.percent)) return null
     return { model, percent: hit.percent, resetsAt: hit.resets_at }
   } catch {
     return null
@@ -194,7 +195,8 @@ async function rows($: any, list: Limit[], now: number): Promise<Row[]> {
 
 async function currentRows($: any, list: Limit[]): Promise<Row[]> {
   const now = Math.floor((await $.clock.now()) / 1000)
-  return rows($, demo ? demoLimits(now) : list, now)
+  // A limit with no usable percent is left out, never drawn as "NaN%".
+  return rows($, demo ? demoLimits(now) : list.filter(l => Number.isFinite(l.percentUsed)), now)
 }
 
 function tone(r: Row): 'error' | 'warning' | 'success' {
@@ -298,6 +300,7 @@ async function pickTheme($: any, value: string): Promise<void> {
 // channel (their preferredNotifChannel), so they reach them when the window
 // is not in front. Fail-silent: a surface with no channel just drops it.
 let alerts: { toasts: boolean; notify: boolean } = { toasts: true, notify: false }
+let tick: { cancel: () => void } | undefined
 function alert($: any, text: string): void {
   if (alerts.toasts) $.ui.toast(text)
   if (alerts.notify) void $.ui.notify(text, { title: TITLE }).catch(() => undefined)
@@ -334,7 +337,9 @@ export const register: Register = (on, options) => {
     if (e.surface !== 'terminal' && !(await read($, isClosed))) void $.ui.open({ id: PANE, title: TITLE })
     // Countdowns and the pace marker move with the clock, not just with
     // replies; the auto-compact threshold (breakdown-only) is re-read here too.
-    $.clock.every(60_000, async () => {
+    // One timer, however often a session starts.
+    tick?.cancel()
+    tick = $.clock.every(60_000, async () => {
       await loadLook($, await $.clock.now())
       await refreshContext()
       $.ui.invalidate('ui.render')

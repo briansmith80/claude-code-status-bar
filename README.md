@@ -500,6 +500,16 @@ The installer wires this into `settings.json` when Node.js is present, leaving a
 
 </details>
 
+## Desktop app and VS Code: the pacing mod
+
+The `statusLine` setting only runs in a terminal. In the Desktop app's Code tab and the VS Code panel, the companion [pacing mod](mods/pacing-mod/) shows the same 5-hour and weekly pacing, burn-rate forecast and context window as a pane beside the chat, plus a one-line band above the prompt, in the status bar's themes.
+
+```
+/plugin install pacing-mod --marketplace briansmith80/claude-code-status-bar
+```
+
+It runs inside Claude Code sessions only, so it does not appear in the Desktop app's Chat or Cowork tabs. See [mods/pacing-mod/README.md](mods/pacing-mod/README.md) for options and commands.
+
 ## Troubleshooting
 
 - **The bar doesn't appear at all.** Check that `~/.claude/settings.json` has the `statusLine` entry (the installer skips this step if any `statusLine` entry already exists, including one from a different status line). Then wait for the next Claude Code response; the bar renders after responses, not on launch.

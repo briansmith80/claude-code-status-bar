@@ -6,6 +6,7 @@ A usage pacing pane for Claude Code. It shows the 5-hour and weekly limits with 
 |---|---|---|---|
 | Desktop Code tab | Yes | Yes | Band button, chat row, `/pacing` |
 | VS Code panel (extension 2.1.299+) | Yes | Yes, under VS Code's own "From the pacing-mod plugin" caption | Band button, chat row, `/pacing` |
+| Desktop Chat and Cowork tabs | No. Mods run in Claude Code sessions only (tested 10 Nov 2026: the plugin installs but never loads) | No | None |
 | Terminal | Only on `/pacing` (text version). It never opens by itself, the status line already shows this | No, the status line already shows this | `/pacing` |
 
 ## What it shows
@@ -18,7 +19,7 @@ The context card shows the fill, tokens used, how many tokens are left before au
 
 `/pacing demo` fills the pane with sample data in every state (over pace, past 90%, the per-model weekly swap, near auto-compact) so you can review the look; `/pacing` returns to live.
 
-Bars are drawn as images, so they cannot follow the app's light or dark mode. The track is a translucent grey and the fills are saturated, so both modes read. The text around them follows the app.
+Bars are drawn as images, so they cannot follow the app's light or dark mode. The track is a translucent grey, the fills are saturated, and the marker carries a thin dark edge, so both modes read. The text around them follows the app.
 
 The maths is the status bar's (`calc_pacing_target`, `calc_forecast`) ported to TypeScript. `tests/vectors.ts` holds shared cases that both the mod's tests and the repo's `tests/pacing_mod.bats` run, so the two cannot drift.
 
