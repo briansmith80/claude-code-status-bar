@@ -330,7 +330,8 @@ export const register: Register = (on, options) => {
     }
     await refreshContext()
     await loadLook($, await $.clock.now())
-    if (!(await read($, isClosed))) void $.ui.open({ id: PANE, title: TITLE })
+    // The terminal has the status line, so the pane opens there only on `/pacing`.
+    if (e.surface !== 'terminal' && !(await read($, isClosed))) void $.ui.open({ id: PANE, title: TITLE })
     // Countdowns and the pace marker move with the clock, not just with
     // replies; the auto-compact threshold (breakdown-only) is re-read here too.
     $.clock.every(60_000, async () => {

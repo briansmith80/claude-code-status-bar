@@ -302,6 +302,18 @@ test('/pacing status answers one line without opening the pane', async ($, on) =
   expect(opened).toEqual([])
 })
 
+test('the pane opens by itself on desktop, and only on /pacing in the terminal', async ($, on) => {
+  const opened: string[] = []
+  engine(on, LIMITS, opened)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(opened).toEqual([])
+  await $.command.run({ command: 'pacing', args: '' } as any)
+  expect(opened).toEqual(['pacing'])
+  opened.length = 0
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual(['pacing'])
+})
+
 test('the session row shows duration and cost, and cost follows measure', async ($, on) => {
   engine(on, LIMITS)
   on('session.measure', () => ({ changed: ['cost'] }))

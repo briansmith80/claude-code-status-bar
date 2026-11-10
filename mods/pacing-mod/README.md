@@ -6,7 +6,7 @@ A usage pacing pane for Claude Code. It shows the 5-hour and weekly limits with 
 |---|---|---|---|
 | Desktop Code tab | Yes | Yes | Band button, chat row, `/pacing` |
 | VS Code panel (extension 2.1.299+) | Yes | Yes, under VS Code's own "From the pacing-mod plugin" caption | Band button, chat row, `/pacing` |
-| Terminal | Yes, text version (opens by itself at 144 columns or wider) | No, the status line already shows this | `/pacing` |
+| Terminal | Only on `/pacing` (text version). It never opens by itself, the status line already shows this | No, the status line already shows this | `/pacing` |
 
 ## What it shows
 
